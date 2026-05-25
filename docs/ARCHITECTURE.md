@@ -15,12 +15,15 @@ docs/ ----------------------------> repository contracts
 
 `core/dsp` must not depend on mobile UI code, file-system fixture loading, platform microphone APIs, or demo data. Adapters may feed audio into the DSP core, but they must not calculate BPM themselves.
 
+The production source of truth is the Rust crate in `core/dsp`. The current Python/Node offline analyzer remains as a Phase 1 deterministic lab and regression reference until the Rust streaming engine reaches parity.
+
 ## Module Boundaries
 
 ### `core/dsp`
 
 Owns:
 
+- Rust `DspEngine` contract
 - sample format normalization
 - ring buffer and streaming state
 - preprocessing
@@ -47,7 +50,11 @@ Owns deterministic DSP regression tests and expected-result fixtures. Every DSP 
 
 ### `tools/offline-lab`
 
-Owns the offline analyzer, synthetic fixture generator, and report runner. It must call the same DSP API as mobile code.
+Owns the Python offline analyzer, synthetic fixture generator, and report runner. During Phase 1 it may call the Python prototype under `core/dsp`; after Rust parity it must call the Rust DSP API through the same boundary as mobile.
+
+### `core/ffi`
+
+Owns the native C ABI handle boundary used by Flutter/native code. It may manage engine lifetimes and pass PCM frames into Rust DSP, but it must not score or rank BPM itself.
 
 ### `datasets`
 
@@ -67,7 +74,7 @@ Future mobile app boundary. It owns microphone permissions, native audio bridge 
 
 ## Public DSP API Shape
 
-The implementation language is still open, but the stable conceptual API is:
+The Rust DSP crate exposes the stable conceptual API:
 
 ```text
 DspEngine(config)
@@ -97,6 +104,13 @@ stable_min_seconds
 - Preserve raw and normalized tempo candidates.
 - Expose confidence and candidate lists in debug output.
 - Treat mobile audio as an input adapter, not a second DSP implementation.
+
+## Codex Infrastructure
+
+- `.codex/config.toml` sets the project model, sandbox, and max agent concurrency.
+- `.codex/agents/*.toml` defines ARCHMAN, DSPMAN, MOBILEMAN, QAMAN, PERFMAN, REVIEWMAN, and DOCMAN.
+- `.codex/plans/PLANS.md` is the required planning template for non-trivial work.
+- `.agents/skills/*/SKILL.md` stores reusable local skills for bootstrap, DSP, mobile audio, QA datasets, and review gates.
 
 ## Primary Risks
 

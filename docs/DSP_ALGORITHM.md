@@ -150,4 +150,10 @@ Silence and noise-only input must never become `STABLE`.
 
 The streaming core processes small chunks, maintains ring buffers, and emits periodic snapshots. It must support session reset.
 
-The offline analyzer feeds decoded audio into the same engine in deterministic chunks. It may produce richer reports, but it must not use a separate tempo algorithm.
+The offline analyzer feeds decoded audio into the same engine in deterministic chunks. It may produce richer reports, but it must not use a separate tempo algorithm after Rust parity.
+
+Current implementation state:
+
+- Python/Node offline lab contains the Phase 1 deterministic prototype and regression tests.
+- Rust `core/dsp` contains the typed contract, hitech candidate normalization, lock-state gates, and engine boundary.
+- The next DSP patch should port onset extraction and autocorrelation tempo estimation from the offline prototype into Rust.

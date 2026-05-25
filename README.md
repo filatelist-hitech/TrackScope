@@ -21,19 +21,22 @@ Production logic must never hardcode demo BPM values or invent a tempo for silen
 ## Repository Map
 
 ```text
-apps/mobile/       Future mobile app shell, microphone permission flow, audio bridge, and result rendering.
-core/dsp/          Pure DSP contract and implementation boundary.
+apps/mobile/       Flutter shell, future microphone permission flow, audio bridge, and result rendering.
+core/dsp/          Rust DSP contract plus current Python/Node offline prototype used by Phase 1 tests.
+core/ffi/          Native bridge boundary for Flutter/mobile integration.
 core/tests/        Synthetic fixtures, regression tests, and DSP acceptance coverage.
-tools/offline-lab/ Offline analyzer, fixture generator, and algorithm comparison reports.
+tools/offline-lab/ Python offline analyzer, fixture generator, and algorithm comparison reports.
 datasets/          Synthetic and real-world audio fixture storage.
-docs/              Architecture, DSP algorithm, QA matrix, and roadmap.
+docs/              Architecture, DSP algorithm, QA matrix, roadmap, mobile notes, and release checklist.
+.codex/            Codex config, role agents, and plan template.
+.agents/skills/    Reusable project skills for local agent workflows.
 ```
 
 ## Current Phase
 
-Phase 1: Offline DSP Lab.
+Phase 0/1: Infrastructure and Offline DSP Lab.
 
-The next implementation work is to add the `core/dsp` contract stub, synthetic fixture generator, and deterministic tests for clean hitech click tracks before building any mobile UI.
+The repository now has the Codex-driven project infrastructure, a Rust workspace for the DSP/FFI boundary, and an existing deterministic Python/Node offline lab. The next implementation work is to move the tested offline algorithm into the Rust DSP engine and keep the synthetic test suite green.
 
 ## Acceptance Targets
 
@@ -50,3 +53,5 @@ The next implementation work is to add the `core/dsp` contract stub, synthetic f
 - [DSP Algorithm](docs/DSP_ALGORITHM.md)
 - [QA Matrix](docs/QA_MATRIX.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Mobile Audio Notes](docs/MOBILE_AUDIO.md)
+- [Release Checklist](docs/RELEASE_CHECKLIST.md)

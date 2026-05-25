@@ -15,3 +15,5 @@ Required first tests:
 - noise-only
 - clipped input
 - breakdown / no-kick section
+- dense hitech bassline simulation
+- unstable club recording simulation

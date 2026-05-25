@@ -33,6 +33,7 @@
 | Clipped 200 | hard-clipped 200 BPM | `196-204` if recoverable | `CLIPPED_MIC` or low confidence | clipping flag true |
 | Breakdown | valid BPM then low/no onset section | prior BPM may decay | `BREAKDOWN` or `UNSTABLE` | confidence decay |
 | Dense hitech bassline | simulated 190-210 rolling bass | +/-2 clean, +/-4 noisy | `STABLE` if periodic | avoid sub-pulse double lock |
+| Unstable club simulation | noisy pulse with changing level/onset clarity | low-confidence or `UNSTABLE` unless consistent | `UNSTABLE` or `LOCKING` | uncertainty remains visible |
 
 ## Dataset Layout
 
@@ -62,3 +63,13 @@ Each offline-lab report row should include:
 ## Regression Policy
 
 Every DSP algorithm change must add or update tests. Clean synthetic tests are the first gate, but they are not enough for production confidence; noisy, clipped, and breakdown cases are required before mobile integration is considered ready.
+
+## Validation Commands
+
+```sh
+python3 -m unittest discover core/tests
+node --test core/dsp/index.test.js
+cargo test --workspace
+```
+
+Flutter validation becomes required once platform files and the microphone bridge are implemented.

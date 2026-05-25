@@ -16,7 +16,9 @@ Desktop.ini
 
 # Codex / OMX local runtime state
 .omx/
-.agents/
+.agents/*
+!.agents/skills/
+!.agents/skills/**
 
 # Dependency directories
 node_modules/
@@ -61,4 +63,3 @@ datasets/**/*.m4a
 datasets/**/*.caf
 !datasets/**/.gitkeep
 !datasets/**/README.md
-
