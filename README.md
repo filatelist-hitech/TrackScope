@@ -55,3 +55,27 @@ The repository now has the Codex-driven project infrastructure, a Rust workspace
 - [Roadmap](docs/ROADMAP.md)
 - [Mobile Audio Notes](docs/MOBILE_AUDIO.md)
 - [Release Checklist](docs/RELEASE_CHECKLIST.md)
+
+## Working with Claude Code
+
+The repository is configured for native Claude Code in parallel to the legacy Codex setup.
+
+Where to look:
+
+- `CLAUDE.md` — project memory: DSP contract, hitech normalization rules, anti-fake rules, workflow, build/test commands.
+- `.claude/agents/` — 7 subagents (`archman`, `dspman`, `mobileman`, `qaman`, `perfman`, `reviewman`, `docman`) mirroring the Codex `.codex/agents/*.toml` roles.
+- `.claude/skills/` — 5 skills (`project-bootstrap`, `dsp-tempo-analysis`, `mobile-audio-input`, `qa-audio-dataset`, `review-gate`) mirroring `.agents/skills/*/SKILL.md`.
+- `.claude/commands/` — slash commands: `/plan`, `/qa-report`, `/parity`, `/review-gate`, `/bootstrap-task`.
+- `.claude/settings.json` — project permissions and hooks. Personal overrides go in `.claude/settings.local.json` (gitignored).
+
+Typical workflows:
+
+- Start any non-trivial task with `/bootstrap-task <description>` — it reads `AGENTS.md` + `CLAUDE.md`, classifies complexity, picks the relevant subagents and skills, and scaffolds a plan for medium/high tasks.
+- `/plan <task-title>` produces a full execution plan from the `.codex/plans/PLANS.md` template.
+- `/qa-report` runs `python3 tools/offline-lab/offline_lab.py report` and summarizes regressions and lock-state violations.
+- `/parity` runs Rust + Python parity tests and reports drift in `primary_bpm` or `confidence`.
+- `/review-gate` invokes the `reviewman` subagent against the staged + unstaged diff before merging.
+
+Subagents and skills are description-matched and activate automatically when their triggers fire; you can also invoke them explicitly via `@agent-name` or by referencing the skill.
+
+> `.codex/` and `.agents/` are preserved as legacy reference from the original OpenAI Codex environment. Do not delete or modify them. The Codex agent → Claude Code subagent mapping is documented at the bottom of `CLAUDE.md`.

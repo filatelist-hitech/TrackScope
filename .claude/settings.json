@@ -1,0 +1,75 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo test:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(/opt/homebrew/opt/rust/bin/cargo test:*)",
+      "Bash(/opt/homebrew/opt/rust/bin/cargo build:*)",
+      "Bash(/opt/homebrew/opt/rust/bin/cargo fmt:*)",
+      "Bash(/opt/homebrew/opt/rust/bin/cargo clippy:*)",
+      "Bash(pytest:*)",
+      "Bash(python3:*)",
+      "Bash(node --test:*)",
+      "Bash(/opt/homebrew/opt/nodejs/bin/node --test:*)",
+      "Bash(flutter test:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Read",
+      "Grep",
+      "Glob"
+    ],
+    "ask": [
+      "Bash(git commit:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf ~:*)",
+      "Bash(rm -rf ..:*)",
+      "Write(.codex/**)",
+      "Write(.agents/**)"
+    ],
+    "defaultMode": "default",
+    "additionalDirectories": []
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"hitech-bpm-radar — anti-fake rules in effect; current phase: see docs/ROADMAP.md\"}}'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Reminder: no hardcoded BPM, no random BPM, no timer-based fake pulse; do not hide half/double candidates; never return STABLE without evidence.\"}}'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'f=\"$CLAUDE_TOOL_INPUT_FILE_PATH\"; case \"$f\" in *.rs) /opt/homebrew/opt/rust/bin/cargo fmt --check -- \"$f\" || true ;; *.py) python3 -m py_compile \"$f\" 2>&1 || true ;; esac'"
+          }
+        ]
+      }
+    ]
+  },
+  "includeCoAuthoredBy": false
+}
