@@ -34,7 +34,9 @@ class OfflineDspContractTests(unittest.TestCase):
         self.assertEqual(result["lock_state"], "STABLE")
         self._assert_has_candidate_near(result, 100.0, tolerance=1.0)
         self._assert_has_candidate_near(result, 200.0, tolerance=1.0)
+        self._assert_candidate_relation(result, 100.0, {"raw"})
         self._assert_candidate_relation(result, 200.0, {"main", "normalized_from_half"})
+        self._assert_candidate_relation(result, 200.0, {"normalized_from_half"}, source_bpm=100.0)
 
     def test_double_time_trap_preserves_400_and_200_candidates_and_prefers_200(self) -> None:
         fixture, result = self._analyze_fixture("double_time_trap_400")
@@ -43,7 +45,9 @@ class OfflineDspContractTests(unittest.TestCase):
         self.assertEqual(result["lock_state"], "STABLE")
         self._assert_has_candidate_near(result, 400.0, tolerance=1.0)
         self._assert_has_candidate_near(result, 200.0, tolerance=1.0)
+        self._assert_candidate_relation(result, 400.0, {"raw"})
         self._assert_candidate_relation(result, 200.0, {"main", "normalized_from_double"})
+        self._assert_candidate_relation(result, 200.0, {"normalized_from_double"}, source_bpm=400.0)
 
     def test_silence_white_noise_and_pink_noise_never_return_stable(self) -> None:
         for name in ("silence", "white_noise", "pink_noise"):
@@ -63,6 +67,17 @@ class OfflineDspContractTests(unittest.TestCase):
         self.assertTrue(result["signal_quality"]["clipping"])
         self.assertGreater(result["signal_quality"]["clipped_frame_ratio"], 0.05)
         self.assertLess(result["confidence"], 0.6)
+
+    def test_recoverable_clipped_microphone_keeps_candidates_and_can_lock(self) -> None:
+        fixture, result = self._analyze_fixture("recoverable_clipped_mic")
+        self._assert_contract_shape(result)
+        self.assertIn(result["lock_state"], fixture.expectation.allowed_lock_states)
+        self.assertTrue(result["signal_quality"]["clipping"])
+        self.assertLess(result["signal_quality"]["clipped_frame_ratio"], 0.05)
+        self._assert_primary_bpm(result, fixture)
+        self._assert_has_candidate_near(result, 200.0, tolerance=2.0)
+        self._assert_has_candidate_near(result, 100.0, tolerance=2.0)
+        self.assertGreaterEqual(result["confidence"], 0.45)
 
     def test_breakdown_without_kick_finishes_unlocked(self) -> None:
         fixture, result = self._analyze_fixture("breakdown_without_kick")
@@ -154,6 +169,8 @@ class OfflineDspContractTests(unittest.TestCase):
         result: dict[str, Any],
         bpm: float,
         allowed_relations: set[str],
+        *,
+        source_bpm: float | None = None,
     ) -> None:
         matches = [
             candidate
@@ -163,6 +180,14 @@ class OfflineDspContractTests(unittest.TestCase):
             and abs(float(candidate["bpm"]) - bpm) <= 1.0
         ]
         self.assertTrue(matches, f"missing candidate near {bpm} BPM")
+        if source_bpm is not None:
+            matches = [
+                candidate
+                for candidate in matches
+                if isinstance(candidate.get("source_bpm"), (int, float))
+                and abs(float(candidate["source_bpm"]) - source_bpm) <= 1.0
+            ]
+            self.assertTrue(matches, f"candidate near {bpm} BPM must preserve source {source_bpm} BPM")
         self.assertTrue(
             any(candidate.get("relation") in allowed_relations for candidate in matches),
             f"candidate near {bpm} BPM must have one of {allowed_relations}, got {matches!r}",

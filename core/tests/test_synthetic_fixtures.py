@@ -27,6 +27,7 @@ class SyntheticFixtureTests(unittest.TestCase):
                 "silence",
                 "white_noise",
                 "pink_noise",
+                "recoverable_clipped_mic",
                 "severely_clipped_mic",
                 "breakdown_without_kick",
                 "dense_hitech_bassline",
