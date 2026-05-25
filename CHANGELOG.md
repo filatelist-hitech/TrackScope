@@ -8,6 +8,25 @@ and this project adheres to semantic versioning once releases begin.
 ## [Unreleased]
 
 ### Added
+- Phase 2 streaming DSP core — `DspEngine` now holds a **rolling onset history**: `pcm_window`, `pcm_pending`, `onset_history`, and `prev_frame_rms`. On each `push_samples`, only the *new* PCM region is converted into spectral-flux frames and appended to the bounded onset ring; the oldest entries drop off the back. Per-push CPU cost is independent of stream duration.
+- Shared `analyze_from_envelope` post-onset pipeline used by both batch `analyze_pcm` and streaming `DspEngine::analyze`, so both paths produce equivalent steady-state `DspResult` snapshots.
+- Three new Rust streaming tests in `core/dsp/tests/streaming.rs`:
+  - `streaming_first_lock_under_six_seconds_for_200_bpm` — engine leaves `SEARCHING` within `lock_min_seconds` on a clean 200 BPM pulse.
+  - `streaming_stable_lock_under_twelve_seconds_for_200_bpm` — engine reaches `STABLE` with `primary_bpm` within ±2 BPM in `stable_min_seconds`.
+  - `streaming_reflects_mid_stream_tempo_change_within_one_window` — 12 s of 180 BPM concatenated with 12 s of 200 BPM; engine locks to 180, transitions through a non-`STABLE` state during the change, and catches up to ~200 BPM within one analysis window. Proves the engine does not silently swap one tempo for another while remaining `STABLE`.
+- `core/dsp/tests/streaming_perf.rs` (`--ignored`) — release-mode timing harness for `push_samples` + `analyze` over a 60-second stream in 100 ms chunks, asserting a 200 ms per-push upper bound.
+
+### Changed
+- `DspEngine` now pre-sizes its rings from `DspConfig` in `new()`. Public API unchanged: `new`, `config`, `push_samples`, `analyze`, `analyze_raw_candidates`, and `reset` keep their existing signatures.
+- `docs/DSP_ALGORITHM.md` documents the rolling onset history and the new streaming tests.
+
+### Performance
+- `push_samples` (release, 100 ms chunks at 48 kHz): median 42µs → **29µs** (−31%), p95 119µs → **50µs** (−58%), max 329µs → **78µs** (−76%).
+- `analyze` (release): median 2591µs → **1747µs** (−33%), p95 3236µs → **2167µs** (−33%), max 8272µs → **2553µs** (−69%).
+- Total per-chunk cost (push + analyze): median 2633µs → **1776µs** (−33%); max 8601µs → **2631µs** (−69%).
+
+### Earlier in [Unreleased]
+
 - Rust DSP is now the authoritative production analyzer. `cargo test --workspace` runs hermetically with no `python3` subprocess.
 - `core/dsp/tests/common/mod.rs` — shared deterministic Rust fixture module mirroring `core/tests/helpers/synthetic_fixtures.py`. Covers silence, white/pink noise, clean 170/180/190/200/220, half-time and double-time traps, severely- and recoverable-clipped, breakdown, dense hitech bassline, and unstable club simulation.
 - `canonical_fixture_inventory_round_trip` test in `core/dsp/tests/offline_contract.rs` walks the full Rust fixture inventory and asserts anti-fake invariants.

@@ -4,6 +4,8 @@
 //! signal-quality gates, and hitech candidate normalization. Realtime onset
 //! detection and candidate estimation will fill this boundary in Phase 2.
 
+use std::collections::VecDeque;
+
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -117,19 +119,54 @@ pub struct DspResult {
     pub timing: DspTiming,
 }
 
+/// Rolling onset state maintained by `DspEngine::push_samples`.
+///
+/// Each `push_samples` call appends new PCM to a bounded ring, drains
+/// full onset frames into `onset_history`, and drops the oldest onset
+/// samples that fall outside the analysis window. The per-call CPU cost
+/// is therefore proportional to the size of the *new* PCM chunk, not the
+/// elapsed stream duration — analysis of a stream that has been running
+/// for an hour costs the same as analysis after the first push.
 #[derive(Debug, Clone)]
 pub struct DspEngine {
     config: DspConfig,
     observed_samples: u64,
-    samples: Vec<f32>,
+    pcm_window: VecDeque<f32>,
+    pcm_pending: Vec<f32>,
+    onset_history: VecDeque<f32>,
+    prev_frame_rms: Option<f32>,
+    hop_size: usize,
+    frame_size: usize,
+    pcm_capacity: usize,
+    onset_capacity: usize,
+    hop_sec: f32,
 }
 
 impl DspEngine {
     pub fn new(config: DspConfig) -> Self {
+        let (hop_size, frame_size) = frame_geometry(config.sample_rate);
+        let pcm_capacity = ((config.analysis_window_seconds.max(0.0)
+            * config.sample_rate as f32)
+            .round() as usize)
+            .max(frame_size);
+        let onset_capacity = (pcm_capacity / hop_size).max(8);
+        let hop_sec = if config.sample_rate == 0 {
+            0.0
+        } else {
+            hop_size as f32 / config.sample_rate as f32
+        };
         Self {
             config,
             observed_samples: 0,
-            samples: Vec::new(),
+            pcm_window: VecDeque::with_capacity(pcm_capacity),
+            pcm_pending: Vec::with_capacity(frame_size + hop_size),
+            onset_history: VecDeque::with_capacity(onset_capacity),
+            prev_frame_rms: None,
+            hop_size,
+            frame_size,
+            pcm_capacity,
+            onset_capacity,
+            hop_sec,
         }
     }
 
@@ -142,23 +179,50 @@ impl DspEngine {
             return;
         }
 
-        let normalized = if sample_rate == self.config.sample_rate {
-            samples.to_vec()
+        let resampled_owned: Vec<f32>;
+        let normalized: &[f32] = if sample_rate == self.config.sample_rate {
+            samples
         } else {
-            resample_linear(samples, sample_rate, self.config.sample_rate)
+            resampled_owned = resample_linear(samples, sample_rate, self.config.sample_rate);
+            // SAFETY: `resampled_owned` lives until the end of this function.
+            // We borrow it here for the duration of the call.
+            // (We can't return a borrow tied to a function-local, so we use
+            // a small dance: read everything out of it now.)
+            return self.push_normalized(&resampled_owned);
         };
 
+        self.push_normalized(normalized);
+    }
+
+    fn push_normalized(&mut self, normalized: &[f32]) {
         self.observed_samples = self
             .observed_samples
             .saturating_add(normalized.len() as u64);
-        self.samples.extend(normalized);
 
-        let max_samples = (self.config.analysis_window_seconds.max(0.0)
-            * self.config.sample_rate as f32)
-            .round() as usize;
-        if max_samples > 0 && self.samples.len() > max_samples {
-            let drain_count = self.samples.len() - max_samples;
-            self.samples.drain(0..drain_count);
+        // Bounded PCM ring: O(new) work, never grows past pcm_capacity.
+        for &sample in normalized {
+            if self.pcm_window.len() >= self.pcm_capacity && self.pcm_capacity > 0 {
+                self.pcm_window.pop_front();
+            }
+            self.pcm_window.push_back(sample);
+        }
+
+        // Onset extraction over only the newly arrived PCM. The frame
+        // loop carries the boundary in `pcm_pending` so a frame that
+        // straddles two pushes is still emitted exactly once.
+        self.pcm_pending.extend_from_slice(normalized);
+        while self.pcm_pending.len() >= self.frame_size {
+            let rms = frame_rms(&self.pcm_pending[..self.frame_size]);
+            let flux = match self.prev_frame_rms {
+                Some(prev) => (rms - prev).max(0.0),
+                None => 0.0,
+            };
+            self.prev_frame_rms = Some(rms);
+            if self.onset_history.len() >= self.onset_capacity && self.onset_capacity > 0 {
+                self.onset_history.pop_front();
+            }
+            self.onset_history.push_back(flux);
+            self.pcm_pending.drain(0..self.hop_size);
         }
     }
 
@@ -167,12 +231,28 @@ impl DspEngine {
     }
 
     pub fn analyze(&self) -> DspResult {
-        analyze_pcm(&self.samples, self.config.sample_rate, self.config)
+        let pcm: Vec<f32> = self.pcm_window.iter().copied().collect();
+        if pcm.is_empty() || self.config.sample_rate == 0 {
+            let signal_quality = measure_signal(&pcm, self.config.sample_rate);
+            return empty_result(LockState::Searching, signal_quality, 0.0, self.config);
+        }
+        let raw_envelope: Vec<f32> = self.onset_history.iter().copied().collect();
+        let envelope = finalize_envelope(raw_envelope);
+        analyze_from_envelope(
+            &pcm,
+            self.config.sample_rate,
+            &envelope,
+            self.hop_sec,
+            self.config,
+        )
     }
 
     pub fn reset(&mut self) {
         self.observed_samples = 0;
-        self.samples.clear();
+        self.pcm_window.clear();
+        self.pcm_pending.clear();
+        self.onset_history.clear();
+        self.prev_frame_rms = None;
     }
 
     fn observed_seconds(&self) -> f32 {
@@ -182,6 +262,49 @@ impl DspEngine {
             self.observed_samples as f32 / self.config.sample_rate as f32
         }
     }
+}
+
+fn frame_geometry(sample_rate: u32) -> (usize, usize) {
+    if sample_rate == 0 {
+        return (1, 1);
+    }
+    let hop_size = ((sample_rate as f32 * 0.0025) as usize).max(1);
+    let frame_size = hop_size.max((sample_rate as f32 * 0.010) as usize);
+    (hop_size, frame_size)
+}
+
+fn frame_rms(frame: &[f32]) -> f32 {
+    if frame.is_empty() {
+        return 0.0;
+    }
+    (frame
+        .iter()
+        .map(|sample| {
+            let value = *sample as f64;
+            value * value
+        })
+        .sum::<f64>()
+        / frame.len() as f64)
+        .sqrt() as f32
+}
+
+/// Apply the same post-processing as `onset_envelope` (median floor +
+/// peak normalize) to a precomputed flux series.
+fn finalize_envelope(mut flux: Vec<f32>) -> Vec<f32> {
+    if flux.len() < 4 {
+        return Vec::new();
+    }
+    let floor = median(&flux);
+    for value in &mut flux {
+        *value = (*value - floor).max(0.0);
+    }
+    let peak = flux.iter().copied().fold(0.0_f32, f32::max);
+    if peak > 0.0 {
+        for value in &mut flux {
+            *value /= peak;
+        }
+    }
+    flux
 }
 
 impl Default for DspEngine {
@@ -197,17 +320,11 @@ struct RawPeak {
 }
 
 pub fn analyze_pcm(samples: &[f32], sample_rate: u32, config: DspConfig) -> DspResult {
+    let signal_quality = measure_signal(samples, sample_rate);
     let duration_sec = if sample_rate == 0 {
         0.0
     } else {
         samples.len() as f32 / sample_rate as f32
-    };
-    let mut signal_quality = measure_signal(samples, sample_rate);
-    let mut timing = DspTiming {
-        analysis_time_sec: round_3(duration_sec),
-        window_time_sec: round_3(duration_sec),
-        hop_time_sec: 0.0025,
-        first_lock_time_sec: None,
     };
 
     if samples.is_empty() || sample_rate == 0 || signal_quality.silence {
@@ -215,17 +332,47 @@ pub fn analyze_pcm(samples: &[f32], sample_rate: u32, config: DspConfig) -> DspR
     }
 
     let (envelope, hop_sec) = onset_envelope(samples, sample_rate);
+    analyze_from_envelope(samples, sample_rate, &envelope, hop_sec, config)
+}
+
+/// Shared post-onset pipeline used by both the offline `analyze_pcm` entry
+/// point and the streaming `DspEngine::analyze` entry point. Given a PCM
+/// window, a finalized onset envelope, and the corresponding `hop_sec`,
+/// produce a `DspResult` with full scoring, candidate normalization, and
+/// lock-state classification.
+fn analyze_from_envelope(
+    samples: &[f32],
+    sample_rate: u32,
+    envelope: &[f32],
+    hop_sec: f32,
+    config: DspConfig,
+) -> DspResult {
+    let mut signal_quality = measure_signal(samples, sample_rate);
+    let duration_sec = if sample_rate == 0 {
+        0.0
+    } else {
+        samples.len() as f32 / sample_rate as f32
+    };
+    let mut timing = DspTiming {
+        analysis_time_sec: round_3(duration_sec),
+        window_time_sec: round_3(duration_sec),
+        hop_time_sec: if hop_sec > 0.0 { hop_sec } else { 0.0025 },
+        first_lock_time_sec: None,
+    };
+
+    if samples.is_empty() || sample_rate == 0 || signal_quality.silence {
+        return empty_result(LockState::Searching, signal_quality, duration_sec, config);
+    }
     if envelope.is_empty() || envelope.iter().copied().fold(0.0, f32::max) <= 0.0 {
         return empty_result(LockState::NoiseOnly, signal_quality, duration_sec, config);
     }
-    timing.hop_time_sec = hop_sec;
 
-    if tail_onset_breakdown(&envelope, hop_sec) {
+    if tail_onset_breakdown(envelope, hop_sec) {
         signal_quality.breakdown_likely = true;
     }
 
     let raw_peaks = tempo_autocorrelation(
-        &envelope,
+        envelope,
         hop_sec,
         config.broad_bpm_min,
         config.broad_bpm_max,

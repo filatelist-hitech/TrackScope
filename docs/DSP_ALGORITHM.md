@@ -152,6 +152,29 @@ The streaming core processes small chunks, maintains ring buffers, and emits per
 
 The offline analyzer feeds decoded audio into the same engine in deterministic chunks. It may produce richer reports, but it must not use a separate tempo algorithm after Rust parity.
 
+### Rolling Onset History (Phase 2)
+
+`DspEngine` does **not** re-run onset extraction over the full PCM window on every `push_samples` call. It holds three pieces of streaming state:
+
+- `pcm_window: VecDeque<f32>` — bounded by `analysis_window_seconds * sample_rate`. Used by `measure_signal` and not for onset extraction.
+- `pcm_pending: Vec<f32>` — buffers the trailing PCM at the frame boundary so a frame that straddles two pushes is emitted exactly once.
+- `onset_history: VecDeque<f32>` — bounded ring of raw spectral-flux samples (one per onset frame), capacity `analysis_window_seconds / hop_sec`. Default hop is 2.5 ms, so the default capacity is ~4800 samples.
+- `prev_frame_rms: Option<f32>` — last frame RMS, used to continue the spectral-flux differencing across pushes.
+
+On each `push_samples`, the engine drains full onset frames from `pcm_pending` into `onset_history`, evicting the oldest entries when the bound is reached. The per-call CPU cost is proportional to the *new* PCM region, not the elapsed stream duration — running the engine for an hour does not slow `push_samples` down.
+
+On `analyze`, the engine clones the bounded onset history, applies the median-floor + peak-normalize pass (`finalize_envelope`), and runs `analyze_from_envelope` — the shared post-onset pipeline used by both `analyze_pcm` (offline batch) and `DspEngine::analyze` (streaming). Tempo autocorrelation runs over the bounded envelope, so its cost is also independent of stream length.
+
+Steady-state output is equivalent to the offline `analyze_pcm` path within parity tolerance: the `streaming_engine_matches_batch_analysis` test in `core/dsp/tests/offline_contract.rs` enforces this. Tail/transient behavior differs slightly because streaming carries `prev_frame_rms` across pushes rather than re-zeroing it at the window boundary; this is the *desired* behavior because it preserves continuity of the spectral-flux signal as old PCM falls off the front.
+
+### Streaming Tests (Phase 2)
+
+`core/dsp/tests/streaming.rs` exercises the streaming path with 100 ms chunks:
+
+- `streaming_first_lock_under_six_seconds_for_200_bpm` — engine leaves `SEARCHING` within `lock_min_seconds` (default 6 s) on a clean 200 BPM pulse.
+- `streaming_stable_lock_under_twelve_seconds_for_200_bpm` — engine reaches `STABLE` with `primary_bpm` within ±2 BPM within `stable_min_seconds` (default 12 s).
+- `streaming_reflects_mid_stream_tempo_change_within_one_window` — concatenated 180 BPM (12 s) + 200 BPM (12 s) stream. Engine locks to 180 BPM in segment 1; after the transition, `primary_bpm` reaches ~200 BPM within one analysis window; the lock state passes through a non-`STABLE` state during the change rather than silently swapping numbers.
+
 Current implementation state:
 
 - Rust `core/dsp` is the production source of truth: it contains the typed contract, signal-quality measurement, multiband onset envelope, autocorrelation tempo estimation, hitech candidate normalization, confidence scoring, and lock-state gates as native code (no FFI, no subprocess).
