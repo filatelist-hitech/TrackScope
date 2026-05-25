@@ -15,7 +15,7 @@ pub enum LockState {
     NoiseOnly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TempoRelation {
     Raw,
     Main,
@@ -116,6 +116,7 @@ pub struct DspResult {
 pub struct DspEngine {
     config: DspConfig,
     observed_samples: u64,
+    samples: Vec<f32>,
 }
 
 impl DspEngine {
@@ -123,6 +124,7 @@ impl DspEngine {
         Self {
             config,
             observed_samples: 0,
+            samples: Vec::new(),
         }
     }
 
@@ -134,22 +136,38 @@ impl DspEngine {
         if sample_rate == 0 || samples.is_empty() {
             return;
         }
-        let normalized_count = if sample_rate == self.config.sample_rate {
-            samples.len() as u64
+
+        let normalized = if sample_rate == self.config.sample_rate {
+            samples.to_vec()
         } else {
-            ((samples.len() as f64 * self.config.sample_rate as f64) / sample_rate as f64)
-                .round()
-                .max(0.0) as u64
+            resample_linear(samples, sample_rate, self.config.sample_rate)
         };
-        self.observed_samples = self.observed_samples.saturating_add(normalized_count);
+
+        self.observed_samples = self
+            .observed_samples
+            .saturating_add(normalized.len() as u64);
+        self.samples.extend(normalized);
+
+        let max_samples = (self.config.analysis_window_seconds.max(0.0)
+            * self.config.sample_rate as f32)
+            .round() as usize;
+        if max_samples > 0 && self.samples.len() > max_samples {
+            let drain_count = self.samples.len() - max_samples;
+            self.samples.drain(0..drain_count);
+        }
     }
 
     pub fn analyze_raw_candidates(&self, raw_candidates: &[(f32, f32)]) -> DspResult {
         analyze_candidates(raw_candidates, self.observed_seconds(), self.config)
     }
 
+    pub fn analyze(&self) -> DspResult {
+        analyze_pcm(&self.samples, self.config.sample_rate, self.config)
+    }
+
     pub fn reset(&mut self) {
         self.observed_samples = 0;
+        self.samples.clear();
     }
 
     fn observed_seconds(&self) -> f32 {
@@ -167,24 +185,130 @@ impl Default for DspEngine {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RawPeak {
+    bpm: f32,
+    score: f32,
+}
+
+pub fn analyze_pcm(samples: &[f32], sample_rate: u32, config: DspConfig) -> DspResult {
+    let duration_sec = if sample_rate == 0 {
+        0.0
+    } else {
+        samples.len() as f32 / sample_rate as f32
+    };
+    let mut signal_quality = measure_signal(samples, sample_rate);
+    let mut timing = DspTiming {
+        analysis_time_sec: round_3(duration_sec),
+        window_time_sec: round_3(duration_sec),
+        hop_time_sec: 0.0025,
+        first_lock_time_sec: None,
+    };
+
+    if samples.is_empty() || sample_rate == 0 || signal_quality.silence {
+        return empty_result(LockState::Searching, signal_quality, duration_sec, config);
+    }
+
+    let (envelope, hop_sec) = onset_envelope(samples, sample_rate);
+    if envelope.is_empty() || envelope.iter().copied().fold(0.0, f32::max) <= 0.0 {
+        return empty_result(LockState::NoiseOnly, signal_quality, duration_sec, config);
+    }
+    timing.hop_time_sec = hop_sec;
+
+    if tail_onset_breakdown(&envelope, hop_sec) {
+        signal_quality.breakdown_likely = true;
+    }
+
+    let raw_peaks = tempo_autocorrelation(
+        &envelope,
+        hop_sec,
+        config.broad_bpm_min,
+        config.broad_bpm_max,
+    );
+    let mut candidates = build_candidates(&raw_peaks, config);
+    candidates = dedupe_candidates(candidates);
+    candidates = mark_primary_candidate(candidates, config);
+
+    let onset_strength = envelope.iter().sum::<f32>() / envelope.len() as f32;
+    let prominence = peak_prominence(&raw_peaks);
+    let periodicity = raw_peaks.first().map(|peak| peak.score).unwrap_or(0.0);
+
+    if candidates.is_empty() {
+        return empty_result(LockState::NoiseOnly, signal_quality, duration_sec, config);
+    }
+
+    let primary = candidates[0].clone();
+    let signal_factor = signal_factor(&signal_quality);
+    let duration_factor = (duration_sec / 6.0).clamp(0.0, 1.0);
+    let clarity_factor = ((periodicity - 0.08) / 0.42).clamp(0.0, 1.0);
+    let prominence_factor = (prominence / 0.45).clamp(0.0, 1.0);
+    let mut confidence = primary.score
+        * (0.38
+            + 0.22 * signal_factor
+            + 0.18 * duration_factor
+            + 0.12 * clarity_factor
+            + 0.10 * prominence_factor);
+    confidence = confidence.clamp(0.0, 1.0);
+
+    let mut lock_state = LockState::Locking;
+    let mut primary_bpm = Some(round_1(primary.bpm));
+
+    if signal_quality.clipping {
+        lock_state = LockState::ClippedMic;
+        confidence = confidence.min(0.34);
+        primary_bpm = None;
+    } else if signal_quality.breakdown_likely {
+        lock_state = LockState::Breakdown;
+        confidence = confidence.min(0.42);
+        primary_bpm = None;
+    } else if periodicity < 0.24 || prominence < 0.10 || onset_strength < 0.002 {
+        lock_state = LockState::NoiseOnly;
+        confidence = confidence.min(0.28);
+        primary_bpm = None;
+    } else if confidence >= 0.72 && duration_sec >= config.lock_min_seconds {
+        lock_state = LockState::Stable;
+        timing.first_lock_time_sec = Some(config.lock_min_seconds.min(round_3(duration_sec)));
+    } else if confidence < 0.45 {
+        lock_state = LockState::Unstable;
+    }
+
+    candidates.truncate(10);
+    DspResult {
+        primary_bpm,
+        confidence: round_3(confidence),
+        lock_state,
+        signal_quality,
+        candidates,
+        timing,
+    }
+}
+
 pub fn analyze_candidates(
     raw_candidates: &[(f32, f32)],
     analysis_time_sec: f32,
     config: DspConfig,
 ) -> DspResult {
-    let mut candidates = normalize_candidates(raw_candidates, config);
+    let raw_peaks: Vec<RawPeak> = raw_candidates
+        .iter()
+        .filter_map(|&(bpm, score)| {
+            if bpm.is_finite() && score.is_finite() && bpm > 0.0 {
+                Some(RawPeak {
+                    bpm,
+                    score: score.clamp(0.0, 1.0),
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+    let mut candidates = build_candidates(&raw_peaks, config);
+    candidates = dedupe_candidates(candidates);
+    candidates = mark_primary_candidate(candidates, config);
     let signal_quality = default_signal_quality(raw_candidates.is_empty());
 
     if raw_candidates.is_empty() {
         return empty_result(LockState::Searching, signal_quality, analysis_time_sec, config);
     }
-
-    candidates.sort_by(|left, right| {
-        right
-            .score
-            .partial_cmp(&left.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
 
     let primary = candidates.first().cloned();
     let confidence = primary.as_ref().map(|item| item.score).unwrap_or(0.0).clamp(0.0, 1.0);
@@ -200,16 +324,6 @@ pub fn analyze_candidates(
     } else {
         None
     };
-
-    if let Some(primary) = primary {
-        candidates.insert(
-            0,
-            TempoCandidate {
-                relation: TempoRelation::Main,
-                ..primary
-            },
-        );
-    }
 
     DspResult {
         primary_bpm,
@@ -227,14 +341,28 @@ pub fn analyze_candidates(
 }
 
 pub fn normalize_candidates(raw_candidates: &[(f32, f32)], config: DspConfig) -> Vec<TempoCandidate> {
+    let raw_peaks: Vec<RawPeak> = raw_candidates
+        .iter()
+        .filter_map(|&(bpm, score)| {
+            if bpm.is_finite() && score.is_finite() && bpm > 0.0 {
+                Some(RawPeak {
+                    bpm,
+                    score: score.clamp(0.0, 1.0),
+                })
+            } else {
+                None
+            }
+        })
+        .collect();
+    mark_primary_candidate(dedupe_candidates(build_candidates(&raw_peaks, config)), config)
+}
+
+fn build_candidates(raw_peaks: &[RawPeak], config: DspConfig) -> Vec<TempoCandidate> {
     let mut candidates = Vec::new();
-    for &(bpm, score) in raw_candidates {
-        if !bpm.is_finite() || !score.is_finite() || bpm <= 0.0 {
-            continue;
-        }
-        let raw_score = score.clamp(0.0, 1.0);
+    for peak in raw_peaks {
+        let raw_score = peak.score.clamp(0.0, 1.0);
         candidates.push(candidate(
-            bpm,
+            peak.bpm,
             TempoRelation::Raw,
             raw_score,
             raw_score,
@@ -242,29 +370,100 @@ pub fn normalize_candidates(raw_candidates: &[(f32, f32)], config: DspConfig) ->
             config,
         ));
 
-        if bpm < 130.0 {
+        if peak.bpm < 130.0 {
             candidates.push(candidate(
-                bpm * 2.0,
+                peak.bpm * 2.0,
                 TempoRelation::NormalizedFromHalf,
                 (raw_score * 1.08).clamp(0.0, 1.0),
                 raw_score,
-                Some(bpm),
+                Some(peak.bpm),
                 config,
             ));
         }
 
-        if bpm > 260.0 {
+        if peak.bpm > 260.0 {
             candidates.push(candidate(
-                bpm / 2.0,
+                peak.bpm / 2.0,
                 TempoRelation::NormalizedFromDouble,
                 (raw_score * 1.08).clamp(0.0, 1.0),
                 raw_score,
-                Some(bpm),
+                Some(peak.bpm),
                 config,
             ));
         }
     }
+
+    candidates.sort_by(|left, right| {
+        right
+            .score
+            .partial_cmp(&left.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    if let Some(primary) = candidates.first().cloned() {
+        candidates.push(candidate(
+            primary.bpm / 2.0,
+            TempoRelation::HalfTime,
+            primary.raw_score * 0.62,
+            primary.raw_score,
+            Some(primary.bpm),
+            config,
+        ));
+        candidates.push(candidate(
+            primary.bpm * 2.0,
+            TempoRelation::DoubleTime,
+            primary.raw_score * 0.48,
+            primary.raw_score,
+            Some(primary.bpm),
+            config,
+        ));
+    }
+
     candidates
+}
+
+fn dedupe_candidates(mut candidates: Vec<TempoCandidate>) -> Vec<TempoCandidate> {
+    candidates.sort_by(|left, right| {
+        right
+            .score
+            .partial_cmp(&left.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut deduped = Vec::new();
+    let mut seen: Vec<(i32, TempoRelation)> = Vec::new();
+    for candidate in candidates {
+        let key = (candidate.bpm.round() as i32, candidate.relation);
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        deduped.push(candidate);
+    }
+    deduped
+}
+
+fn mark_primary_candidate(candidates: Vec<TempoCandidate>, config: DspConfig) -> Vec<TempoCandidate> {
+    let Some(primary) = candidates.first() else {
+        return Vec::new();
+    };
+    let mut main = candidate(
+        primary.bpm,
+        TempoRelation::Main,
+        primary.score,
+        primary.raw_score,
+        primary.source_bpm,
+        config,
+    );
+    main.score = primary.score;
+    main.raw_score = primary.raw_score;
+    main.stability_score = primary.stability_score;
+    main.range_score = primary.range_score;
+    main.confidence_factors = primary.confidence_factors.clone();
+
+    let mut marked = Vec::with_capacity(candidates.len() + 1);
+    marked.push(main);
+    marked.extend(candidates);
+    marked
 }
 
 fn candidate(
@@ -280,16 +479,16 @@ fn candidate(
     TempoCandidate {
         bpm: round_3(bpm),
         relation,
-        score: round_3(score),
-        raw_score: round_3(raw_score),
-        stability_score: round_3(raw_score.clamp(0.0, 1.0)),
-        range_score: round_3(range_score),
+        score: round_6(score),
+        raw_score: round_6(raw_score),
+        stability_score: round_6(raw_score.clamp(0.0, 1.0)),
+        range_score: round_6(range_score),
         source_bpm: source_bpm.map(round_3),
         confidence_factors: ConfidenceFactors {
-            onset_clarity: round_3(raw_score),
-            peak_prominence: round_3(evidence_score),
+            onset_clarity: round_6(raw_score),
+            peak_prominence: round_6(evidence_score),
             harmonic_support: if source_bpm.is_some() { 0.82 } else { 0.68 },
-            recent_stability: round_3(raw_score),
+            recent_stability: round_6(raw_score),
             signal_quality: 1.0,
         },
     }
@@ -311,6 +510,269 @@ fn range_score(bpm: f32, config: DspConfig) -> f32 {
         return 0.26;
     }
     0.1
+}
+
+fn measure_signal(samples: &[f32], sample_rate: u32) -> SignalQuality {
+    let count = samples.len();
+    let peak = samples
+        .iter()
+        .map(|sample| sample.abs())
+        .fold(0.0_f32, f32::max);
+    let rms = if count == 0 {
+        0.0
+    } else {
+        (samples
+            .iter()
+            .map(|sample| {
+                let value = *sample as f64;
+                value * value
+            })
+            .sum::<f64>()
+            / count as f64)
+            .sqrt() as f32
+    };
+    let full_scale_ratio = if count == 0 {
+        0.0
+    } else {
+        samples
+            .iter()
+            .filter(|sample| (**sample).abs() >= 0.985)
+            .count() as f32
+            / count as f32
+    };
+    let flat_top_sample_ratio = if count == 0 {
+        0.0
+    } else {
+        samples
+            .iter()
+            .filter(|sample| peak > 0.7 && (**sample).abs() >= peak * 0.995)
+            .count() as f32
+            / count as f32
+    };
+    let flat_top_frame_ratio = flat_top_frame_ratio(samples, sample_rate, peak);
+    let clipping = full_scale_ratio > 0.01 || flat_top_sample_ratio > 0.015;
+    let clipped_frame_ratio = if full_scale_ratio > 0.01 {
+        full_scale_ratio.max(flat_top_frame_ratio)
+    } else if flat_top_sample_ratio > 0.015 {
+        flat_top_sample_ratio.max(flat_top_frame_ratio)
+    } else {
+        full_scale_ratio.max(flat_top_sample_ratio)
+    };
+    let silence = rms < 0.0002 || peak < 0.001;
+    let tail_samples = (sample_rate as usize).saturating_mul(3);
+    let tail_start = count.saturating_sub(tail_samples);
+    let tail = &samples[tail_start..];
+    let tail_rms = if tail.is_empty() {
+        0.0
+    } else {
+        (tail
+            .iter()
+            .map(|sample| {
+                let value = *sample as f64;
+                value * value
+            })
+            .sum::<f64>()
+            / tail.len() as f64)
+            .sqrt() as f32
+    };
+    let breakdown_likely =
+        !silence && sample_rate > 0 && count >= sample_rate as usize * 6 && tail_rms < 0.004_f32.max(rms * 0.18);
+    let noise_level = if silence {
+        NoiseLevel::Low
+    } else if rms > 0.14 && peak < 0.6 {
+        NoiseLevel::NoiseOnly
+    } else if rms < 0.035 {
+        NoiseLevel::Low
+    } else if rms < 0.18 {
+        NoiseLevel::Medium
+    } else {
+        NoiseLevel::High
+    };
+
+    SignalQuality {
+        input_level_dbfs: dbfs(rms),
+        peak_dbfs: dbfs(peak),
+        clipping,
+        clipped_frame_ratio: round_6(clipped_frame_ratio),
+        noise_level,
+        snr_estimate_db: None,
+        silence,
+        breakdown_likely,
+    }
+}
+
+fn flat_top_frame_ratio(samples: &[f32], sample_rate: u32, peak: f32) -> f32 {
+    if samples.is_empty() || sample_rate == 0 || peak < 0.7 {
+        return 0.0;
+    }
+    let frame_size = ((sample_rate as f32 * 0.010) as usize).max(1);
+    let mut frames = 0;
+    let mut clipped_frames = 0;
+    for frame in samples.chunks(frame_size) {
+        if frame.is_empty() {
+            continue;
+        }
+        frames += 1;
+        if frame.iter().any(|sample| sample.abs() >= peak * 0.995) {
+            clipped_frames += 1;
+        }
+    }
+    if frames == 0 {
+        0.0
+    } else {
+        clipped_frames as f32 / frames as f32
+    }
+}
+
+fn onset_envelope(samples: &[f32], sample_rate: u32) -> (Vec<f32>, f32) {
+    if sample_rate == 0 {
+        return (Vec::new(), 0.0);
+    }
+    let hop_size = ((sample_rate as f32 * 0.0025) as usize).max(1);
+    let frame_size = hop_size.max((sample_rate as f32 * 0.010) as usize);
+    let mut frame_rms = Vec::new();
+    let mut start = 0;
+    let end = samples.len().saturating_sub(frame_size);
+    while start < end {
+        let frame = &samples[start..start + frame_size];
+        let rms = (frame
+            .iter()
+            .map(|sample| {
+                let value = *sample as f64;
+                value * value
+            })
+            .sum::<f64>()
+            / frame.len() as f64)
+            .sqrt() as f32;
+        frame_rms.push(rms);
+        start += hop_size;
+    }
+
+    if frame_rms.len() < 4 {
+        return (Vec::new(), hop_size as f32 / sample_rate as f32);
+    }
+
+    let mut flux = Vec::with_capacity(frame_rms.len());
+    flux.push(0.0);
+    for idx in 1..frame_rms.len() {
+        flux.push((frame_rms[idx] - frame_rms[idx - 1]).max(0.0));
+    }
+
+    let floor = median(&flux);
+    let mut envelope: Vec<f32> = flux.into_iter().map(|value| (value - floor).max(0.0)).collect();
+    let peak = envelope.iter().copied().fold(0.0_f32, f32::max);
+    if peak > 0.0 {
+        for value in &mut envelope {
+            *value /= peak;
+        }
+    }
+    (envelope, hop_size as f32 / sample_rate as f32)
+}
+
+fn tail_onset_breakdown(envelope: &[f32], hop_sec: f32) -> bool {
+    if hop_sec <= 0.0 {
+        return false;
+    }
+    let tail_frames = ((3.0 / hop_sec) as usize).max(1);
+    if envelope.len() < tail_frames * 2 {
+        return false;
+    }
+    let split = envelope.len() - tail_frames;
+    let history = &envelope[..split];
+    let tail = &envelope[split..];
+    if history.is_empty() {
+        return false;
+    }
+    let history_mean = history.iter().sum::<f32>() / history.len() as f32;
+    let tail_mean = tail.iter().sum::<f32>() / tail.len() as f32;
+    let history_peak = history.iter().copied().fold(0.0_f32, f32::max);
+    let tail_peak = tail.iter().copied().fold(0.0_f32, f32::max);
+    history_peak > 0.45 && tail_peak < 0.20 && tail_mean < 0.003_f32.max(history_mean * 0.95)
+}
+
+fn tempo_autocorrelation(envelope: &[f32], hop_sec: f32, min_bpm: f32, max_bpm: f32) -> Vec<RawPeak> {
+    if envelope.len() < 4 || hop_sec <= 0.0 || min_bpm <= 0.0 || max_bpm <= 0.0 {
+        return Vec::new();
+    }
+    let min_lag = ((60.0 / max_bpm / hop_sec).floor() as usize).max(1);
+    let max_lag = (envelope.len() - 2).min((60.0 / min_bpm / hop_sec).ceil() as usize);
+    if max_lag <= min_lag {
+        return Vec::new();
+    }
+
+    let mut scores = Vec::with_capacity(max_lag - min_lag + 1);
+    for lag in min_lag..=max_lag {
+        let mut current_energy = 0.0_f64;
+        let mut shifted_energy = 0.0_f64;
+        let mut numerator = 0.0_f64;
+        for idx in lag..envelope.len() {
+            let current = envelope[idx] as f64;
+            let shifted = envelope[idx - lag] as f64;
+            numerator += current * shifted;
+            current_energy += current * current;
+            shifted_energy += shifted * shifted;
+        }
+        let denom = (current_energy * shifted_energy).sqrt();
+        let score = if denom > 0.0 { numerator / denom } else { 0.0 };
+        scores.push((lag, score as f32));
+    }
+
+    let mut peaks = Vec::new();
+    for idx in 1..scores.len().saturating_sub(1) {
+        let (lag, score) = scores[idx];
+        if score >= scores[idx - 1].1 && score >= scores[idx + 1].1 {
+            peaks.push(RawPeak {
+                bpm: 60.0 / (lag as f32 * hop_sec),
+                score,
+            });
+        }
+    }
+    peaks.sort_by(|left, right| {
+        right
+            .score
+            .partial_cmp(&left.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    peaks.truncate(16);
+    peaks
+}
+
+fn peak_prominence(raw_peaks: &[RawPeak]) -> f32 {
+    if raw_peaks.is_empty() {
+        return 0.0;
+    }
+    let scores: Vec<f32> = raw_peaks.iter().map(|peak| peak.score).collect();
+    (scores[0] - median(&scores)).clamp(0.0, 1.0)
+}
+
+fn signal_factor(signal_quality: &SignalQuality) -> f32 {
+    if signal_quality.silence || signal_quality.clipping || signal_quality.breakdown_likely {
+        return 0.0;
+    }
+    match signal_quality.noise_level {
+        NoiseLevel::NoiseOnly => 0.4,
+        NoiseLevel::High => 0.72,
+        _ => 1.0,
+    }
+}
+
+fn resample_linear(samples: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {
+    if samples.is_empty() || source_rate == 0 || target_rate == 0 || source_rate == target_rate {
+        return samples.to_vec();
+    }
+    let output_len = ((samples.len() as f64 * target_rate as f64) / source_rate as f64)
+        .round()
+        .max(1.0) as usize;
+    let ratio = source_rate as f64 / target_rate as f64;
+    let mut output = Vec::with_capacity(output_len);
+    for idx in 0..output_len {
+        let source_index = idx as f64 * ratio;
+        let left = source_index.floor() as usize;
+        let right = (left + 1).min(samples.len() - 1);
+        let frac = (source_index - left as f64) as f32;
+        output.push(samples[left] * (1.0 - frac) + samples[right] * frac);
+    }
+    output
 }
 
 fn default_signal_quality(empty: bool) -> SignalQuality {
@@ -349,6 +811,39 @@ fn empty_result(
 
 fn round_3(value: f32) -> f32 {
     (value * 1000.0).round() / 1000.0
+}
+
+fn round_1(value: f32) -> f32 {
+    (value * 10.0).round() / 10.0
+}
+
+fn round_6(value: f32) -> f32 {
+    (value * 1_000_000.0).round() / 1_000_000.0
+}
+
+fn dbfs(value: f32) -> Option<f32> {
+    if value <= 0.0 {
+        None
+    } else {
+        Some(round_3(20.0 * value.min(1.0).log10()))
+    }
+}
+
+fn median(values: &[f32]) -> f32 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|left, right| {
+        left.partial_cmp(right)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let middle = sorted.len() / 2;
+    if sorted.len() % 2 == 0 {
+        (sorted[middle - 1] + sorted[middle]) / 2.0
+    } else {
+        sorted[middle]
+    }
 }
 
 #[cfg(test)]
