@@ -19,6 +19,9 @@ Desktop.ini
 .agents/*
 !.agents/skills/
 !.agents/skills/**
+.codex/agents_guide
+.codex/base_prompt
+.codex/skills_guide
 
 # Dependency directories
 node_modules/
