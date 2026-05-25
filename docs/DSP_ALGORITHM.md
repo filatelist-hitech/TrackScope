@@ -155,5 +155,6 @@ The offline analyzer feeds decoded audio into the same engine in deterministic c
 Current implementation state:
 
 - Python/Node offline lab contains the Phase 1 deterministic prototype and regression tests.
+- Python signal quality emits `snr_estimate_db: null` until a real noise-floor estimator exists; current noise gating uses level, clipping, crest, and onset-periodicity evidence instead of a fake SNR value.
 - Rust `core/dsp` contains the typed contract, hitech candidate normalization, lock-state gates, and engine boundary.
 - The next DSP patch should port onset extraction and autocorrelation tempo estimation from the offline prototype into Rust.

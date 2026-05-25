@@ -99,6 +99,8 @@ def analyze_pcm(
     candidates = _build_candidates(raw_peaks, hitech_min_bpm, hitech_max_bpm)
     candidates = _dedupe_candidates(candidates)
     candidates = _mark_primary_candidate(candidates, hitech_min_bpm, hitech_max_bpm)
+    signal_factor = _signal_factor(signal)
+    candidates = _apply_signal_quality_factor(candidates, signal_factor)
 
     onset_strength = sum(envelope) / len(envelope)
     prominence = _peak_prominence(raw_peaks)
@@ -115,13 +117,13 @@ def analyze_pcm(
         return _empty_result("NOISE_ONLY", signal, timing, ["no tempo candidates"])
 
     primary = candidates[0]
-    signal_factor = _signal_factor(signal)
     duration_factor = _clamp(duration_sec / 6.0, 0.0, 1.0)
     clarity_factor = _clamp((periodicity - 0.08) / 0.42, 0.0, 1.0)
     prominence_factor = _clamp(prominence / 0.45, 0.0, 1.0)
+    ambiguity_factor = 1.0 - (0.16 * harmonic_ambiguity)
     confidence = primary.score * (
         0.38 + 0.22 * signal_factor + 0.18 * duration_factor + 0.12 * clarity_factor + 0.10 * prominence_factor
-    )
+    ) * ambiguity_factor
     confidence = _clamp(confidence, 0.0, 1.0)
 
     lock_state = "LOCKING"
@@ -185,6 +187,7 @@ def _measure_signal(samples: list[float], sample_rate: int) -> SignalQuality:
     full_scale_ratio = sum(1 for sample in samples if abs(sample) >= 0.985) / count if count else 0.0
     flat_top_sample_ratio = sum(1 for sample in samples if peak > 0.7 and abs(sample) >= peak * 0.995) / count if count else 0.0
     flat_top_frame_ratio = _flat_top_frame_ratio(samples, sample_rate, peak)
+    crest_db = 20.0 * math.log10(max(peak, 1e-12) / rms) if rms > 0.0 and peak > 0.0 else None
     clipping = full_scale_ratio > 0.01 or flat_top_sample_ratio > 0.015
     if full_scale_ratio > 0.01:
         clipped_ratio = max(full_scale_ratio, flat_top_frame_ratio)
@@ -199,8 +202,12 @@ def _measure_signal(samples: list[float], sample_rate: int) -> SignalQuality:
     noise_level = "unknown"
     if silence:
         noise_level = "low"
+    elif crest_db is not None and crest_db < 8.0 and rms > 0.03:
+        noise_level = "noise_only"
     elif rms > 0.14 and peak < 0.6:
         noise_level = "noise_only"
+    elif crest_db is not None and crest_db < 10.0:
+        noise_level = "high"
     elif rms < 0.035:
         noise_level = "low"
     elif rms < 0.18:
@@ -325,7 +332,7 @@ def _build_candidates(
                 _candidate(
                     normalized,
                     "normalized_from_half",
-                    raw_score * 1.08,
+                    raw_score * 0.98,
                     raw_score,
                     bpm,
                     hitech_min_bpm,
@@ -338,7 +345,7 @@ def _build_candidates(
                 _candidate(
                     normalized,
                     "normalized_from_double",
-                    raw_score * 1.08,
+                    raw_score * 0.98,
                     raw_score,
                     bpm,
                     hitech_min_bpm,
@@ -418,6 +425,15 @@ def _dedupe_candidates(candidates: list[TempoCandidate]) -> list[TempoCandidate]
     return deduped
 
 
+def _apply_signal_quality_factor(candidates: list[TempoCandidate], signal_factor: float) -> list[TempoCandidate]:
+    updated: list[TempoCandidate] = []
+    for candidate in candidates:
+        factors = dict(candidate.confidence_factors)
+        factors["signal_quality"] = round(signal_factor, 6)
+        updated.append(replace(candidate, confidence_factors=factors))
+    return updated
+
+
 def _mark_primary_candidate(
     candidates: list[TempoCandidate],
     hitech_min_bpm: float,
@@ -471,7 +487,14 @@ def _peak_prominence(raw_peaks: list[dict[str, float]]) -> float:
 def _harmonic_ambiguity(candidates: list[TempoCandidate]) -> float:
     if len(candidates) < 2:
         return 0.0
-    return _clamp(candidates[1].score / max(candidates[0].score, 0.0001), 0.0, 1.0)
+    primary = candidates[0]
+    for candidate in candidates[1:]:
+        if primary.bpm <= 0.0:
+            continue
+        relative_distance = abs(candidate.bpm - primary.bpm) / primary.bpm
+        if relative_distance > 0.015:
+            return _clamp(candidate.score / max(primary.score, 0.0001), 0.0, 1.0)
+    return 0.0
 
 
 def _onset_rate(envelope: list[float], hop_sec: float) -> float:
@@ -488,9 +511,11 @@ def _signal_factor(signal: SignalQuality) -> float:
     if signal.silence or signal.clipping or signal.breakdown_likely:
         return 0.0
     if signal.noise_level == "noise_only":
-        return 0.4
+        return 0.28
     if signal.noise_level == "high":
-        return 0.72
+        return 0.68
+    if signal.noise_level == "medium":
+        return 0.92
     return 1.0
 
 

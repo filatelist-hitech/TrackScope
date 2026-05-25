@@ -88,11 +88,103 @@ class OfflineDspLabTest(unittest.TestCase):
         self.assertIn("signal_quality", payload)
         self.assertIn("candidates", payload)
 
+    def test_offline_cli_report_runs_required_fixture_matrix(self) -> None:
+        cli = Path(__file__).resolve().parents[2] / "tools" / "offline-lab" / "offline_lab.py"
+        completed = subprocess.run(
+            [sys.executable, str(cli), "report"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        rows = json.loads(completed.stdout)
+        by_fixture = {row["fixture"]: row for row in rows}
+
+        self.assertTrue(all(row["pass"] for row in rows), rows)
+        self.assertTrue(all(row["signal_quality"]["snr_estimate_db"] is None for row in rows), rows)
+        for fixture_name in (
+            "clean_170",
+            "clean_180",
+            "clean_190",
+            "clean_200",
+            "clean_220",
+            "half_time_trap_100",
+            "double_time_trap_400",
+            "silence",
+            "white_noise",
+            "pink_noise",
+            "clipped_200",
+            "breakdown_200",
+            "dense_hitech_bassline_200",
+            "unstable_club_simulation",
+        ):
+            self.assertIn(fixture_name, by_fixture)
+
+        self.assertAlmostEqual(by_fixture["half_time_trap_100"]["detected_bpm"], 200.0, delta=1.0)
+        self.assertAlmostEqual(by_fixture["double_time_trap_400"]["detected_bpm"], 200.0, delta=1.0)
+        self.assert_has_candidate(by_fixture["half_time_trap_100"], 100.0, relation="raw")
+        self.assert_has_candidate(
+            by_fixture["half_time_trap_100"],
+            200.0,
+            relation="normalized_from_half",
+            source_bpm=100.0,
+        )
+        self.assert_has_candidate(by_fixture["double_time_trap_400"], 400.0, relation="raw", tolerance=2.0)
+        self.assert_has_candidate(
+            by_fixture["double_time_trap_400"],
+            200.0,
+            relation="normalized_from_double",
+            source_bpm=400.0,
+            tolerance=2.0,
+        )
+        self.assertIsNone(by_fixture["silence"]["detected_bpm"])
+        self.assertNotEqual(by_fixture["white_noise"]["lock_state"], "STABLE")
+
+    def test_offline_cli_report_returns_nonzero_when_fixture_matrix_fails(self) -> None:
+        cli = Path(__file__).resolve().parents[2] / "tools" / "offline-lab" / "offline_lab.py"
+        completed = subprocess.run(
+            [sys.executable, str(cli), "report", "--duration", "1"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        rows = json.loads(completed.stdout)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertTrue(any(not row["pass"] for row in rows), rows)
+
     def assert_result_contract(self, payload: dict[str, object]) -> None:
         for key in ("primary_bpm", "confidence", "lock_state", "signal_quality", "candidates"):
             self.assertIn(key, payload)
         self.assertIsInstance(payload["candidates"], list)
         self.assertGreater(len(payload["candidates"]), 0)
+
+    def assert_has_candidate(
+        self,
+        row: dict[str, object],
+        bpm: float,
+        *,
+        relation: str,
+        source_bpm: float | None = None,
+        tolerance: float = 1.0,
+    ) -> None:
+        candidates = row["candidates"]
+        self.assertIsInstance(candidates, list)
+        matches = [
+            candidate
+            for candidate in candidates
+            if isinstance(candidate, dict)
+            and abs(float(candidate["bpm"]) - bpm) <= tolerance
+            and candidate.get("relation") == relation
+            and (
+                source_bpm is None
+                or (
+                    isinstance(candidate.get("source_bpm"), (int, float))
+                    and abs(float(candidate["source_bpm"]) - source_bpm) <= tolerance
+                )
+            )
+        ]
+        self.assertTrue(matches, f"missing {relation} candidate near {bpm} BPM in {candidates!r}")
 
 
 if __name__ == "__main__":
