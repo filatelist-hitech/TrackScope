@@ -8,6 +8,8 @@ and this project adheres to semantic versioning once releases begin.
 ## [Unreleased]
 
 ### Added
+- FFI `analyze` boundary: `hitech_bpm_engine_analyze_json` returns the current rolling `DspResult` as a heap-owned UTF-8 JSON C string; `hitech_bpm_string_free` releases it. Flutter / native consumers can now read tempo, confidence, lock state, signal quality, and the full candidate list without owning a parallel BPM implementation. JSON crosses the boundary at UI poll rate (~10–30 Hz); the audio thread continues to call only `push_samples`, which stays allocation-light.
+- `core/ffi/tests/ffi_contract.rs` drives `push_samples` + `analyze_json` end-to-end through the C ABI on a clean 200 BPM pulse, on silence, and on a null handle. Verifies JSON shape, `STABLE` lock on 13 s of clean signal, primary_bpm within ±2 BPM, half-time candidate visibility, and the anti-fake gate that silence never reaches `STABLE`.
 - Phase 2 streaming DSP core — `DspEngine` now holds a **rolling onset history**: `pcm_window`, `pcm_pending`, `onset_history`, and `prev_frame_rms`. On each `push_samples`, only the *new* PCM region is converted into spectral-flux frames and appended to the bounded onset ring; the oldest entries drop off the back. Per-push CPU cost is independent of stream duration.
 - Shared `analyze_from_envelope` post-onset pipeline used by both batch `analyze_pcm` and streaming `DspEngine::analyze`, so both paths produce equivalent steady-state `DspResult` snapshots.
 - Three new Rust streaming tests in `core/dsp/tests/streaming.rs`:

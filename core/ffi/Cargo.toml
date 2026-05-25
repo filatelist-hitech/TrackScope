@@ -13,3 +13,7 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 hitech-bpm-dsp = { path = "../dsp" }
+serde_json = "1"
+
+[dev-dependencies]
+serde_json = "1"
