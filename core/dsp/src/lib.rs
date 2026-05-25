@@ -4,7 +4,10 @@
 //! signal-quality gates, and hitech candidate normalization. Realtime onset
 //! detection and candidate estimation will fill this boundary in Phase 2.
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use serde::Serialize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum LockState {
     Searching,
     Locking,
@@ -15,7 +18,8 @@ pub enum LockState {
     NoiseOnly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TempoRelation {
     Raw,
     Main,
@@ -52,7 +56,7 @@ impl Default for DspConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SignalQuality {
     pub input_level_dbfs: Option<f32>,
     pub peak_dbfs: Option<f32>,
@@ -64,7 +68,8 @@ pub struct SignalQuality {
     pub breakdown_likely: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum NoiseLevel {
     Low,
     Medium,
@@ -73,7 +78,7 @@ pub enum NoiseLevel {
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ConfidenceFactors {
     pub onset_clarity: f32,
     pub peak_prominence: f32,
@@ -82,7 +87,7 @@ pub struct ConfidenceFactors {
     pub signal_quality: f32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct TempoCandidate {
     pub bpm: f32,
     pub relation: TempoRelation,
@@ -94,7 +99,7 @@ pub struct TempoCandidate {
     pub confidence_factors: ConfidenceFactors,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct DspTiming {
     pub analysis_time_sec: f32,
     pub window_time_sec: f32,
@@ -102,7 +107,7 @@ pub struct DspTiming {
     pub first_lock_time_sec: Option<f32>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct DspResult {
     pub primary_bpm: Option<f32>,
     pub confidence: f32,

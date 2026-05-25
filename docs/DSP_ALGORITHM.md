@@ -154,8 +154,9 @@ The offline analyzer feeds decoded audio into the same engine in deterministic c
 
 Current implementation state:
 
-- Python/Node offline lab contains the Phase 1 deterministic prototype and regression tests.
+- Rust `core/dsp` is the production source of truth: it contains the typed contract, signal-quality measurement, multiband onset envelope, autocorrelation tempo estimation, hitech candidate normalization, confidence scoring, and lock-state gates as native code (no FFI, no subprocess).
+- `core/dsp/tempo.py` and `core/dsp/synthetic.py` remain as the readable algorithmic reference and are exercised by the Python suite and the offline-lab report; they are no longer a runtime dependency of `cargo test`.
+- `cargo test --workspace` is hermetic: Rust DSP regression coverage lives in `core/dsp/tests/offline_contract.rs` (using the shared deterministic fixture module `core/dsp/tests/common/mod.rs`) and asserts the contract directly, without invoking Python.
+- Cross-language parity is an opt-in tool: `python3 tools/offline-lab/parity.py` generates the canonical fixture inventory, runs both the Python analyzer and the Rust `analyze_wav` binary on the same WAV bytes, and reports per-fixture drift. It is not part of `cargo test`.
 - Python signal quality emits `snr_estimate_db: null` until a real noise-floor estimator exists; current noise gating uses level, clipping, crest, and onset-periodicity evidence instead of a fake SNR value.
 - Clipping is graded by clipped-frame ratio: mild clipping caps confidence below `STABLE` while keeping candidates visible; severe clipping (>= 5% of frames) forces `CLIPPED_MIC` and suppresses `primary_bpm`.
-- Rust `core/dsp` contains the typed contract, hitech candidate normalization, lock-state gates, and engine boundary; Rust ↔ Python parity is exercised by `core/dsp/tests/python_parity.rs`.
-- The next DSP patch should port onset extraction and autocorrelation tempo estimation from the offline prototype into Rust.

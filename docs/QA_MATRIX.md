@@ -101,8 +101,33 @@ Every DSP algorithm change must add or update tests. Clean synthetic tests are t
 ```sh
 python3 -m unittest discover core/tests
 node --test core/dsp/index.test.js
-cargo test --workspace
+cargo test --workspace                       # hermetic: does not invoke python3
 python3 tools/offline-lab/offline_lab.py report
+python3 tools/offline-lab/parity.py          # optional cross-language Python ↔ Rust check
 ```
 
 Flutter validation becomes required once platform files and the microphone bridge are implemented.
+
+## Rust Fixture Inventory
+
+The Rust DSP regression suite (`core/dsp/tests/offline_contract.rs`) consumes the deterministic generators in `core/dsp/tests/common/mod.rs`, which mirror `core/tests/helpers/synthetic_fixtures.py`. The canonical inventory is:
+
+| Fixture | Generator | Expected lock state | Expected primary BPM |
+| --- | --- | --- | --- |
+| `clean_170` | `pulse_track(170.0, …)` | `STABLE` | 170 ±1 |
+| `clean_180` | `pulse_track(180.0, …)` | `STABLE` | 180 ±1 |
+| `clean_190` | `pulse_track(190.0, …)` | `STABLE` | 190 ±1 |
+| `clean_200` | `pulse_track(200.0, …)` | `STABLE` | 200 ±1 |
+| `clean_220` | `pulse_track(220.0, …)` | `STABLE` | 220 ±1 |
+| `half_time_trap_100` | `pulse_track(100.0, …)` | `STABLE` | 200 ±1 (raw 100 visible) |
+| `double_time_trap_400` | `pulse_track(400.0, …)` | `STABLE` | 200 ±1 (raw 400 visible) |
+| `silence` | `silence(…)` | `SEARCHING` / `NOISE_ONLY` | `null` |
+| `white_noise` | `white_noise(170170, 0.28, …)` | `NOISE_ONLY` / `UNSTABLE` | `null` |
+| `pink_noise` | `pink_noise(220220, 0.32, …)` | `NOISE_ONLY` / `UNSTABLE` | `null` |
+| `recoverable_clipped_mic` | `recoverable_clipped_pulse(200.0, …)` | `LOCKING` / `STABLE` | 200 ±2 |
+| `severely_clipped_mic` | `severely_clipped_pulse(200.0, …)` | `CLIPPED_MIC` | `null` |
+| `breakdown_without_kick` | `breakdown_without_kick(200.0, 6.0, 8.0, …)` | `BREAKDOWN` / `UNSTABLE` / `LOCKING` / `SEARCHING` | `null` |
+| `dense_hitech_bassline` | `dense_hitech_bassline(200.0, …)` | `STABLE` | 200 ±2 |
+| `unstable_club_simulation` | `unstable_club_simulation(…)` | `NOISE_ONLY` / `UNSTABLE` / `LOCKING` / `SEARCHING` | `null` |
+
+`canonical_fixture_inventory_round_trip` in `offline_contract.rs` walks the full inventory and asserts the anti-fake invariants (no `STABLE` on silence/noise/severe clipping, half/double relations preserved on traps).

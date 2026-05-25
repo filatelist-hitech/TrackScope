@@ -36,7 +36,15 @@ docs/              Architecture, DSP algorithm, QA matrix, roadmap, mobile notes
 
 Phase 0/1: Infrastructure and Offline DSP Lab.
 
-The repository now has the Codex-driven project infrastructure, a Rust workspace for the DSP/FFI boundary, and an existing deterministic Python/Node offline lab. The next implementation work is to move the tested offline algorithm into the Rust DSP engine and keep the synthetic test suite green.
+The Rust crate in `core/dsp/` is now the production source of truth: it owns onset extraction, autocorrelation tempo estimation, hitech candidate normalization, confidence scoring, and lock-state classification in native Rust. `core/dsp/tempo.py` and `core/dsp/synthetic.py` remain as the readable algorithmic reference and continue to back the Python offline-lab report.
+
+### Test workflow
+
+- `cargo test --workspace` is **hermetic**: it does not invoke `python3`. Rust regression coverage lives in `core/dsp/tests/offline_contract.rs` using the shared fixture module `core/dsp/tests/common/mod.rs`.
+- `python3 -m unittest discover core/tests` runs the Python reference suite.
+- `node --test core/dsp/index.test.js` runs the Node offline analyzer.
+- `python3 tools/offline-lab/offline_lab.py report` runs the deterministic offline QA report.
+- `python3 tools/offline-lab/parity.py` is the optional cross-language Python ↔ Rust drift check (invokes the Rust `analyze_wav` binary; not part of `cargo test`).
 
 ## Acceptance Targets
 
