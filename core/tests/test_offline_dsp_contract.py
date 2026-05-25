@@ -68,6 +68,17 @@ class OfflineDspContractTests(unittest.TestCase):
         self.assertGreater(result["signal_quality"]["clipped_frame_ratio"], 0.05)
         self.assertLess(result["confidence"], 0.6)
 
+    def test_recoverable_clipped_microphone_keeps_candidates_and_can_lock(self) -> None:
+        fixture, result = self._analyze_fixture("recoverable_clipped_mic")
+        self._assert_contract_shape(result)
+        self.assertIn(result["lock_state"], fixture.expectation.allowed_lock_states)
+        self.assertTrue(result["signal_quality"]["clipping"])
+        self.assertLess(result["signal_quality"]["clipped_frame_ratio"], 0.05)
+        self._assert_primary_bpm(result, fixture)
+        self._assert_has_candidate_near(result, 200.0, tolerance=2.0)
+        self._assert_has_candidate_near(result, 100.0, tolerance=2.0)
+        self.assertGreaterEqual(result["confidence"], 0.45)
+
     def test_breakdown_without_kick_finishes_unlocked(self) -> None:
         fixture, result = self._analyze_fixture("breakdown_without_kick")
         self._assert_contract_shape(result)

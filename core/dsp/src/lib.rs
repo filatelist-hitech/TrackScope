@@ -228,9 +228,12 @@ pub fn analyze_pcm(samples: &[f32], sample_rate: u32, config: DspConfig) -> DspR
     let mut candidates = build_candidates(&raw_peaks, config);
     candidates = dedupe_candidates(candidates);
     candidates = mark_primary_candidate(candidates, config);
+    let signal_factor = signal_factor(&signal_quality);
+    candidates = apply_signal_quality_factor(candidates, signal_factor);
 
     let onset_strength = envelope.iter().sum::<f32>() / envelope.len() as f32;
     let prominence = peak_prominence(&raw_peaks);
+    let harmonic_ambiguity = harmonic_ambiguity(&candidates);
     let periodicity = raw_peaks.first().map(|peak| peak.score).unwrap_or(0.0);
 
     if candidates.is_empty() {
@@ -238,25 +241,32 @@ pub fn analyze_pcm(samples: &[f32], sample_rate: u32, config: DspConfig) -> DspR
     }
 
     let primary = candidates[0].clone();
-    let signal_factor = signal_factor(&signal_quality);
     let duration_factor = (duration_sec / 6.0).clamp(0.0, 1.0);
     let clarity_factor = ((periodicity - 0.08) / 0.42).clamp(0.0, 1.0);
     let prominence_factor = (prominence / 0.45).clamp(0.0, 1.0);
+    let ambiguity_factor = 1.0 - (0.16 * harmonic_ambiguity);
     let mut confidence = primary.score
         * (0.38
             + 0.22 * signal_factor
             + 0.18 * duration_factor
             + 0.12 * clarity_factor
-            + 0.10 * prominence_factor);
+            + 0.10 * prominence_factor)
+        * ambiguity_factor;
     confidence = confidence.clamp(0.0, 1.0);
 
     let mut lock_state = LockState::Locking;
     let mut primary_bpm = Some(round_1(primary.bpm));
+    let severe_clipping = severe_clipping(&signal_quality);
 
-    if signal_quality.clipping {
+    if severe_clipping {
         lock_state = LockState::ClippedMic;
         confidence = confidence.min(0.34);
         primary_bpm = None;
+    } else if signal_quality.clipping {
+        confidence = confidence.min(0.69);
+        if matches!(lock_state, LockState::Stable) {
+            lock_state = LockState::Locking;
+        }
     } else if signal_quality.breakdown_likely {
         lock_state = LockState::Breakdown;
         confidence = confidence.min(0.42);
@@ -374,7 +384,7 @@ fn build_candidates(raw_peaks: &[RawPeak], config: DspConfig) -> Vec<TempoCandid
             candidates.push(candidate(
                 peak.bpm * 2.0,
                 TempoRelation::NormalizedFromHalf,
-                (raw_score * 1.08).clamp(0.0, 1.0),
+                (raw_score * 0.98).clamp(0.0, 1.0),
                 raw_score,
                 Some(peak.bpm),
                 config,
@@ -385,7 +395,7 @@ fn build_candidates(raw_peaks: &[RawPeak], config: DspConfig) -> Vec<TempoCandid
             candidates.push(candidate(
                 peak.bpm / 2.0,
                 TempoRelation::NormalizedFromDouble,
-                (raw_score * 1.08).clamp(0.0, 1.0),
+                (raw_score * 0.98).clamp(0.0, 1.0),
                 raw_score,
                 Some(peak.bpm),
                 config,
@@ -464,6 +474,16 @@ fn mark_primary_candidate(candidates: Vec<TempoCandidate>, config: DspConfig) ->
     marked.push(main);
     marked.extend(candidates);
     marked
+}
+
+fn apply_signal_quality_factor(
+    mut candidates: Vec<TempoCandidate>,
+    signal_factor_value: f32,
+) -> Vec<TempoCandidate> {
+    for candidate in &mut candidates {
+        candidate.confidence_factors.signal_quality = round_6(signal_factor_value);
+    }
+    candidates
 }
 
 fn candidate(
@@ -577,10 +597,19 @@ fn measure_signal(samples: &[f32], sample_rate: u32) -> SignalQuality {
     };
     let breakdown_likely =
         !silence && sample_rate > 0 && count >= sample_rate as usize * 6 && tail_rms < 0.004_f32.max(rms * 0.18);
+    let crest_db = if rms > 0.0 && peak > 0.0 {
+        Some(20.0 * (peak.max(1e-12) / rms).log10())
+    } else {
+        None
+    };
     let noise_level = if silence {
         NoiseLevel::Low
+    } else if crest_db.is_some_and(|value| value < 8.0) && rms > 0.03 {
+        NoiseLevel::NoiseOnly
     } else if rms > 0.14 && peak < 0.6 {
         NoiseLevel::NoiseOnly
+    } else if crest_db.is_some_and(|value| value < 10.0) {
+        NoiseLevel::High
     } else if rms < 0.035 {
         NoiseLevel::Low
     } else if rms < 0.18 {
@@ -745,15 +774,43 @@ fn peak_prominence(raw_peaks: &[RawPeak]) -> f32 {
     (scores[0] - median(&scores)).clamp(0.0, 1.0)
 }
 
-fn signal_factor(signal_quality: &SignalQuality) -> f32 {
-    if signal_quality.silence || signal_quality.clipping || signal_quality.breakdown_likely {
+fn harmonic_ambiguity(candidates: &[TempoCandidate]) -> f32 {
+    if candidates.len() < 2 {
         return 0.0;
     }
+    let primary = &candidates[0];
+    if primary.bpm <= 0.0 {
+        return 0.0;
+    }
+    for candidate in &candidates[1..] {
+        let relative_distance = (candidate.bpm - primary.bpm).abs() / primary.bpm;
+        if relative_distance > 0.015 {
+            return (candidate.score / primary.score.max(0.0001)).clamp(0.0, 1.0);
+        }
+    }
+    0.0
+}
+
+fn signal_factor(signal_quality: &SignalQuality) -> f32 {
+    if signal_quality.silence || signal_quality.breakdown_likely {
+        return 0.0;
+    }
+    if signal_quality.clipping && severe_clipping(signal_quality) {
+        return 0.0;
+    }
+    if signal_quality.clipping {
+        return 0.62;
+    }
     match signal_quality.noise_level {
-        NoiseLevel::NoiseOnly => 0.4,
-        NoiseLevel::High => 0.72,
+        NoiseLevel::NoiseOnly => 0.28,
+        NoiseLevel::High => 0.68,
+        NoiseLevel::Medium => 0.92,
         _ => 1.0,
     }
+}
+
+fn severe_clipping(signal_quality: &SignalQuality) -> bool {
+    signal_quality.clipped_frame_ratio >= 0.05
 }
 
 fn resample_linear(samples: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {

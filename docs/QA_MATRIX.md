@@ -51,7 +51,8 @@ Verified on 2026-05-25 with deterministic generated PCM fixtures through `python
 | `silence` | `null` | `null` | n/a | 0.0 | `SEARCHING` | silence, no clipping | none | PASS | No false `STABLE` lock. |
 | `white_noise` | `null` | `null` | n/a | 0.203 | `NOISE_ONLY` | no clipping | low-score candidates only | PASS | No false `STABLE` lock on deterministic broadband noise. |
 | `pink_noise` | `null` | `null` | n/a | 0.219 | `NOISE_ONLY` | no clipping | low-score candidates only | PASS | No false `STABLE` lock on deterministic low-frequency-biased noise. |
-| `clipped_200` | `null` | `null` | n/a | 0.34 | `CLIPPED_MIC` | clipping flagged | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Candidate evidence remains visible, but primary BPM is suppressed. |
+| `clipped_200` | `null` | `null` | n/a | 0.34 | `CLIPPED_MIC` | severe clipping flagged | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Candidate evidence remains visible, but primary BPM is suppressed when clipped-frame ratio reaches the severe threshold. |
+| `recoverable_clipped_200` | 200.0 | 200.0 | 0.0 | 0.690 | `LOCKING` | mild clipping flagged | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Mild clipping caps confidence below `STABLE` while tempo candidates stay usable. |
 | `breakdown_200` | `null` | `null` | n/a | 0.42 | `BREAKDOWN` | breakdown likely, no clipping | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Prior tempo candidate remains visible, but final lock is rejected. |
 | `dense_hitech_bassline_200` | 200.0 | 200.0 | 0.0 | 0.874 | `STABLE` | no clipping | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Rolling bassline does not promote sub-pulses over the beat. |
 | `unstable_club_simulation` | `null` | `null` | n/a | 0.182 | `NOISE_ONLY` | noisy, no clipping | low-score candidates only | PASS | Tempo drift, dropouts, rumble, and broadband noise keep uncertainty visible. |
@@ -87,7 +88,7 @@ The first deterministic offline-lab report is produced with:
 python3 tools/offline-lab/offline_lab.py report
 ```
 
-The report analyzes generated PCM fixtures directly, including clean 170/180/190/200/220 BPM pulses, half-time and double-time traps, silence, white noise, pink noise, severe clipped microphone input, no-kick breakdown, dense hitech bassline simulation, and unstable club simulation. It exits non-zero if any row fails.
+The report analyzes generated PCM fixtures directly, including clean 170/180/190/200/220 BPM pulses, half-time and double-time traps, silence, white noise, pink noise, severe and recoverable clipped microphone input, no-kick breakdown, dense hitech bassline simulation, and unstable club simulation. It exits non-zero if any row fails.
 
 Half-time and double-time trap rows validate both the visible raw candidate and the normalized candidate relation/source pair, not only the numeric BPM.
 

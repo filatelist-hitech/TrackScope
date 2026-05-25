@@ -9,3 +9,6 @@ description = "Realtime DSP contract and tempo candidate normalization for hitec
 [lib]
 name = "hitech_bpm_dsp"
 path = "src/lib.rs"
+
+[dev-dependencies]
+serde_json = "1"

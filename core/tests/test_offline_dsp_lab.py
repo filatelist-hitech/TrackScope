@@ -14,6 +14,7 @@ from core.dsp.synthetic import (
     generate_clipped_pulse_track,
     generate_noise,
     generate_pulse_track,
+    generate_recoverable_clipped_pulse_track,
     generate_silence,
 )
 
@@ -50,11 +51,10 @@ class OfflineDspLabTest(unittest.TestCase):
         self.assertTrue(any(abs(bpm - 200.0) <= 1.0 for bpm in candidate_bpms))
         self.assertTrue(any(candidate.relation == "normalized_from_double" for candidate in result.candidates))
 
-    def test_silence_noise_clipping_and_breakdown_do_not_return_stable(self) -> None:
+    def test_silence_noise_and_breakdown_do_not_return_stable(self) -> None:
         fixtures = {
             "silence": generate_silence(),
             "noise": generate_noise(),
-            "clipped": generate_clipped_pulse_track(200),
             "breakdown": generate_breakdown_track(200),
         }
         for name, samples in fixtures.items():
@@ -64,6 +64,21 @@ class OfflineDspLabTest(unittest.TestCase):
                 self.assertIsNone(result.primary_bpm)
                 self.assertNotEqual(result.lock_state, "STABLE")
                 self.assertLess(result.confidence, 0.72)
+
+    def test_severe_clipping_suppresses_final_bpm(self) -> None:
+        result = analyze_pcm(generate_clipped_pulse_track(200), DEFAULT_SAMPLE_RATE)
+        self.assertIsNone(result.primary_bpm)
+        self.assertEqual(result.lock_state, "CLIPPED_MIC")
+        self.assertTrue(result.signal_quality.clipping)
+        self.assertGreaterEqual(result.signal_quality.clipped_frame_ratio, 0.05)
+
+    def test_recoverable_clipping_can_keep_bpm_locking(self) -> None:
+        result = analyze_pcm(generate_recoverable_clipped_pulse_track(200), DEFAULT_SAMPLE_RATE)
+        self.assertIsNotNone(result.primary_bpm)
+        self.assertIn(result.lock_state, {"LOCKING", "STABLE"})
+        self.assertTrue(result.signal_quality.clipping)
+        self.assertLess(result.signal_quality.clipped_frame_ratio, 0.05)
+        self.assertAlmostEqual(result.primary_bpm or 0.0, 200.0, delta=2.0)
 
     def test_offline_cli_generates_and_analyzes_pcm_fixture(self) -> None:
         cli = Path(__file__).resolve().parents[2] / "tools" / "offline-lab" / "offline_lab.py"
@@ -114,6 +129,7 @@ class OfflineDspLabTest(unittest.TestCase):
             "white_noise",
             "pink_noise",
             "clipped_200",
+            "recoverable_clipped_200",
             "breakdown_200",
             "dense_hitech_bassline_200",
             "unstable_club_simulation",

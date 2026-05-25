@@ -108,6 +108,8 @@ def analyze_pcm(
     periodicity = raw_peaks[0]["score"] if raw_peaks else 0.0
     warnings: list[str] = []
 
+    severe_clipping = _severe_clipping(signal)
+
     if signal.clipping:
         warnings.append("clipped microphone input")
     if signal.breakdown_likely:
@@ -129,10 +131,14 @@ def analyze_pcm(
     lock_state = "LOCKING"
     primary_bpm: float | None = round(primary.bpm, 1)
 
-    if signal.clipping:
+    if severe_clipping:
         lock_state = "CLIPPED_MIC"
         confidence = min(confidence, 0.34)
         primary_bpm = None
+    elif signal.clipping:
+        confidence = min(confidence, 0.69)
+        if lock_state == "STABLE":
+            lock_state = "LOCKING"
     elif signal.breakdown_likely:
         lock_state = "BREAKDOWN"
         confidence = min(confidence, 0.42)
@@ -508,8 +514,12 @@ def _onset_rate(envelope: list[float], hop_sec: float) -> float:
 
 
 def _signal_factor(signal: SignalQuality) -> float:
-    if signal.silence or signal.clipping or signal.breakdown_likely:
+    if signal.silence or signal.breakdown_likely:
         return 0.0
+    if signal.clipping and _severe_clipping(signal):
+        return 0.0
+    if signal.clipping:
+        return 0.62
     if signal.noise_level == "noise_only":
         return 0.28
     if signal.noise_level == "high":
@@ -546,3 +556,7 @@ def _dbfs(value: float) -> float | None:
 
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
+
+
+def _severe_clipping(signal: SignalQuality) -> bool:
+    return signal.clipped_frame_ratio >= 0.05

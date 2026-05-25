@@ -95,6 +95,26 @@ fn clipped_microphone_suppresses_final_bpm() {
 }
 
 #[test]
+fn recoverable_clipping_keeps_bpm_candidates_and_can_lock() {
+    let samples: Vec<f32> = pulse_samples(200.0, DURATION_SEC, 1.12)
+        .into_iter()
+        .map(|sample| (sample * 1.55).clamp(-0.93, 0.93))
+        .collect();
+    let result = analyze_pcm(&samples, SAMPLE_RATE, DspConfig::default());
+
+    assert!(result.signal_quality.clipping);
+    assert!(result.signal_quality.clipped_frame_ratio < 0.05);
+    assert!(matches!(
+        result.lock_state,
+        LockState::Locking | LockState::Stable
+    ));
+    assert_bpm(result.primary_bpm, 200.0, 2.0);
+    assert!(result.confidence >= 0.45, "confidence {}", result.confidence);
+    assert_candidate_near(&result.candidates, 200.0, 2.0, None);
+    assert_candidate_near(&result.candidates, 100.0, 2.0, None);
+}
+
+#[test]
 fn breakdown_without_kick_does_not_finish_stable() {
     let mut samples = pulse_samples(200.0, 6.0, 0.9);
     samples.extend(low_rumble(8.0, 0xBEEFDA, 0.08));

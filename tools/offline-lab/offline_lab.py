@@ -25,6 +25,7 @@ from core.dsp.synthetic import (
     generate_pulse_track,
     generate_silence,
     generate_unstable_club_simulation,
+    generate_recoverable_clipped_pulse_track,
     read_wav,
     write_wav,
 )
@@ -38,7 +39,18 @@ def main() -> int:
     generate.add_argument("--bpm", type=float, default=None)
     generate.add_argument(
         "--kind",
-        choices=["pulse", "silence", "noise", "white-noise", "pink-noise", "clipped", "breakdown", "dense", "unstable"],
+        choices=[
+            "pulse",
+            "silence",
+            "noise",
+            "white-noise",
+            "pink-noise",
+            "clipped",
+            "recoverable-clipped",
+            "breakdown",
+            "dense",
+            "unstable",
+        ],
         default="pulse",
     )
     generate.add_argument("--duration", type=float, default=12.0)
@@ -73,6 +85,11 @@ def main() -> int:
         write_wav(output / "white_noise.wav", generate_noise(args.duration, args.sample_rate), args.sample_rate)
         write_wav(output / "pink_noise.wav", generate_pink_noise(args.duration, args.sample_rate), args.sample_rate)
         write_wav(output / "clipped_200bpm.wav", generate_clipped_pulse_track(200, args.duration, args.sample_rate), args.sample_rate)
+        write_wav(
+            output / "recoverable_clipped_200bpm.wav",
+            generate_recoverable_clipped_pulse_track(200, args.duration, args.sample_rate),
+            args.sample_rate,
+        )
         write_wav(output / "breakdown_200bpm.wav", generate_breakdown_track(200, args.duration, sample_rate=args.sample_rate), args.sample_rate)
         write_wav(output / "dense_hitech_bassline_200bpm.wav", generate_dense_hitech_bassline(200, args.duration, args.sample_rate), args.sample_rate)
         write_wav(output / "unstable_club_simulation.wav", generate_unstable_club_simulation(args.duration, args.sample_rate), args.sample_rate)
@@ -102,6 +119,8 @@ def _fixture_samples(kind: str, bpm: float | None, duration: float, sample_rate:
         raise SystemExit("--bpm is required for pulse, clipped, breakdown, and dense fixtures")
     if kind == "clipped":
         return generate_clipped_pulse_track(bpm, duration, sample_rate)
+    if kind == "recoverable-clipped":
+        return generate_recoverable_clipped_pulse_track(bpm, duration, sample_rate)
     if kind == "breakdown":
         return generate_breakdown_track(bpm, duration, sample_rate=sample_rate)
     if kind == "dense":
@@ -240,6 +259,20 @@ def _report_specs() -> tuple[dict[str, Any], ...]:
             "candidate_tolerance_bpm": 2.0,
             "allowed_lock_states": ("CLIPPED_MIC", "UNSTABLE", "SEARCHING"),
             "notes": "Clipped microphone input must suppress final lock while preserving candidates.",
+        },
+        {
+            "name": "recoverable_clipped_200",
+            "kind": "recoverable-clipped",
+            "bpm": 200.0,
+            "expected_bpm": 200.0,
+            "tolerance_bpm": 2.0,
+            "required_candidates": (
+                {"bpm": 200.0, "relations": ("main", "raw", "normalized_from_half")},
+                {"bpm": 100.0},
+            ),
+            "candidate_tolerance_bpm": 2.0,
+            "allowed_lock_states": ("LOCKING", "STABLE"),
+            "notes": "Recoverable clipping keeps clipping visible while tempo remains usable.",
         },
         {
             "name": "breakdown_200",

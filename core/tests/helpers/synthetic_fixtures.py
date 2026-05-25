@@ -46,6 +46,7 @@ def fixture_names() -> tuple[str, ...]:
         "silence",
         "white_noise",
         "pink_noise",
+        "recoverable_clipped_mic",
         "severely_clipped_mic",
         "breakdown_without_kick",
         "dense_hitech_bassline",
@@ -144,6 +145,23 @@ def make_fixture(name: str) -> FixtureAudio:
                 allowed_lock_states=("CLIPPED_MIC", "UNSTABLE", "SEARCHING"),
             ),
             notes="Hard-limited microphone overload should flag clipping and suppress final lock.",
+        )
+
+    if name == "recoverable_clipped_mic":
+        samples = _pulse_samples(200.0, amplitude=1.12)
+        clipped = [_clip(sample * 1.55, ceiling=0.93) for sample in samples]
+        return FixtureAudio(
+            name=name,
+            samples=tuple(clipped),
+            sample_rate=SAMPLE_RATE,
+            expectation=FixtureExpectation(
+                primary_bpm=200.0,
+                tolerance_bpm=2.0,
+                stable_allowed=True,
+                required_candidate_bpms=(200.0, 100.0),
+                allowed_lock_states=("LOCKING", "STABLE"),
+            ),
+            notes="Moderate clipping should keep clipping visible but still allow recoverable tempo detection.",
         )
 
     if name == "breakdown_without_kick":

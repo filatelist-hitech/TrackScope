@@ -81,7 +81,16 @@ def generate_clipped_pulse_track(
     sample_rate: int = DEFAULT_SAMPLE_RATE,
 ) -> list[float]:
     samples = generate_pulse_track(bpm, duration_sec, sample_rate, amplitude=1.8)
-    return [max(-1.0, min(1.0, sample * 2.0)) for sample in samples]
+    return [max(-0.78, min(0.78, sample * 2.8)) for sample in samples]
+
+
+def generate_recoverable_clipped_pulse_track(
+    bpm: float,
+    duration_sec: float = 12.0,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+) -> list[float]:
+    samples = generate_pulse_track(bpm, duration_sec, sample_rate, amplitude=1.12)
+    return [max(-0.93, min(0.93, sample * 1.55)) for sample in samples]
 
 
 def generate_breakdown_track(
