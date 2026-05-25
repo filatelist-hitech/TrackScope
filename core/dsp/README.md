@@ -6,7 +6,7 @@ This module owns the engine contract, preprocessing, onset detection, tempo cand
 
 Current state:
 
-- Rust crate defines `DspResult`, `TempoCandidate`, `SignalQuality`, lock states, hitech normalization, and the streaming engine boundary.
-- Python/Node code provides the current deterministic offline analyzer used by tests.
+- Rust crate defines `DspResult`, `TempoCandidate`, `SignalQuality`, lock states, hitech normalization, PCM onset analysis, autocorrelation tempo estimation, confidence gates, and a streaming engine boundary.
+- Python/Node code remains as deterministic offline prototype coverage while Rust parity is verified.
 
 Do not add UI code, microphone permission code, file decoding, or demo BPM values here.
