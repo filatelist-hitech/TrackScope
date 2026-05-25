@@ -1,0 +1,64 @@
+# OS and editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Codex / OMX local runtime state
+.omx/
+.agents/
+
+# Dependency directories
+node_modules/
+vendor/
+.venv/
+venv/
+__pycache__/
+
+# Build, coverage, and cache output
+dist/
+build/
+coverage/
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.turbo/
+.next/
+
+# Logs and generated reports
+*.log
+logs/
+reports/
+tools/offline-lab/reports/
+
+# Generated audio and large local dataset artifacts
+*.wav
+*.aiff
+*.aif
+*.flac
+*.mp3
+*.ogg
+*.m4a
+*.caf
+datasets/**/*.wav
+datasets/**/*.aiff
+datasets/**/*.aif
+datasets/**/*.flac
+datasets/**/*.mp3
+datasets/**/*.ogg
+datasets/**/*.m4a
+datasets/**/*.caf
+!datasets/**/.gitkeep
+!datasets/**/README.md
+
