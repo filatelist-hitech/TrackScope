@@ -167,6 +167,18 @@ On `analyze`, the engine clones the bounded onset history, applies the median-fl
 
 Steady-state output is equivalent to the offline `analyze_pcm` path within parity tolerance: the `streaming_engine_matches_batch_analysis` test in `core/dsp/tests/offline_contract.rs` enforces this. Tail/transient behavior differs slightly because streaming carries `prev_frame_rms` across pushes rather than re-zeroing it at the window boundary; this is the *desired* behavior because it preserves continuity of the spectral-flux signal as old PCM falls off the front.
 
+### FFI Boundary (Phase 2)
+
+The `core/ffi` crate exposes the streaming engine to non-Rust callers (Flutter, native iOS/Android audio bridges). Only six symbols cross the boundary; none lets the caller compute BPM on its own:
+
+- `hitech_bpm_engine_new` / `hitech_bpm_engine_free` — handle lifetime.
+- `hitech_bpm_engine_reset` — drop rolling state in place.
+- `hitech_bpm_engine_push_samples(samples, len, sample_rate) -> bool` — audio-thread ingress; allocation-light.
+- `hitech_bpm_engine_analyze_json(engine) -> *mut c_char` — UI-rate poll. Serializes the rolling `DspResult` to UTF-8 JSON owned by the caller. JSON keys match the contract above. Recommended poll rate ~10–30 Hz; do not call from the audio thread.
+- `hitech_bpm_string_free(ptr)` — release the JSON buffer.
+
+Internal buffers (`pcm_window`, `pcm_pending`, `onset_history`, `prev_frame_rms`, autocorrelation arrays) never cross the FFI boundary. End-to-end coverage lives in `core/ffi/tests/ffi_contract.rs`.
+
 ### Streaming Tests (Phase 2)
 
 `core/dsp/tests/streaming.rs` exercises the streaming path with 100 ms chunks:
