@@ -6,7 +6,7 @@ Goal: prove deterministic BPM detection against synthetic hitech fixtures before
 
 Deliverables:
 
-- `core/dsp` result contract and engine skeleton
+- Rust `core/dsp` result contract and engine skeleton
 - synthetic fixture generator
 - offline analyzer CLI
 - clean click/kick tests at 170, 180, 190, 200, and 220 BPM
@@ -81,9 +81,10 @@ Exit criteria:
 
 ## Next Patch
 
-Implement the Phase 1 engine skeleton and test harness:
+Port the Phase 1 offline detector into the Rust DSP engine:
 
-1. Add typed `DspResult`, `TempoCandidate`, `SignalQuality`, and lock-state definitions.
-2. Add synthetic fixture generator for clean click/kick tracks.
-3. Add offline test cases for 170, 180, 190, 200, 220, 100 half-time, 400 double-time, silence, noise, and clipped input.
-4. Keep mobile UI untouched.
+1. Move signal-quality measurement into Rust.
+2. Port onset envelope extraction and tempo autocorrelation into Rust.
+3. Add Rust synthetic fixtures mirroring `core/tests/helpers/synthetic_fixtures.py`.
+4. Validate Rust against 170, 180, 190, 200, 220, 100 half-time, 400 double-time, silence, noise, clipped input, breakdown, and dense bassline cases.
+5. Keep Flutter limited to the bridge shell until Rust emits verified `DspResult` snapshots.
