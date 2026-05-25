@@ -1,5 +1,32 @@
 # AGENTS.md — hitech-bpm-radar
 
+## Toolchain Requirements
+
+Always use these explicit binaries:
+
+Node.js:
+`/opt/homebrew/opt/nodejs/bin/node`
+
+Cargo:
+`/opt/homebrew/opt/rust/bin/cargo`
+
+Do not rely on system PATH for Node.js or Rust toolchain discovery.
+
+When running tests or build commands:
+- use the explicit node binary
+- use the explicit cargo binary
+
+Examples:
+
+```
+/opt/homebrew/opt/nodejs/bin/node --version
+/opt/homebrew/opt/rust/bin/cargo test
+```
+
+Never substitute these binaries with system-installed alternatives unless explicitly instructed.
+
+
+
 ## Project goal
 
 Build a mobile application that detects BPM automatically through microphone input.
