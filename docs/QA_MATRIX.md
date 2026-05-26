@@ -1,126 +1,126 @@
-# QA Matrix
+# QA-матрица
 
-## Acceptance Targets
+## Цели приёмки
 
-| Area | Required pass condition |
+| Область | Требуемое условие прохождения |
 | --- | --- |
-| Clean synthetic click tracks | 170, 180, 190, 200, and 220 BPM detected within +/-1 BPM |
-| Noisy mic / club-like input | Primary BPM within +/-2-4 BPM when SNR is adequate |
-| First lock | Reaches `LOCKING` or a usable candidate within 6 seconds |
-| Stable lock | Reaches `STABLE` within 12 seconds only for valid consistent signal |
-| Silence | Must not emit `STABLE` |
-| White/pink noise | Must not emit `STABLE` |
-| Clipped mic | Must flag clipping and reduce confidence or enter `CLIPPED_MIC` |
-| Breakdown/no-kick | Must leave `STABLE` or decay confidence |
-| Candidate normalization | Half-time and double-time candidates must be preserved |
-| Hitech preference | 100 BPM must not win if normalized 200 BPM is stronger |
+| Чистые синтетические click-треки | 170, 180, 190, 200 и 220 BPM детектируются в пределах ±1 BPM |
+| Шумный микрофон / клубоподобный вход | Основной BPM в пределах ±2–4 BPM при адекватном SNR |
+| Первый захват | Достигает `LOCKING` или пригодного кандидата за 6 секунд |
+| Стабильный захват | Достигает `STABLE` за 12 секунд только на валидном устойчивом сигнале |
+| Тишина | Не должна эмитить `STABLE` |
+| Белый/розовый шум | Не должны эмитить `STABLE` |
+| Клиппинг микрофона | Должен поднимать флаг клиппинга и снижать уверенность или переходить в `CLIPPED_MIC` |
+| Брейкдаун / без kick'а | Должен покинуть `STABLE` или просадить уверенность |
+| Нормализация кандидатов | Half-time и double-time кандидаты должны сохраняться |
+| Hitech-предпочтение | 100 BPM не должен побеждать, если нормализованный 200 BPM сильнее |
 
-## Required Test Cases
+## Обязательные тест-кейсы
 
-| Case | Fixture | Expected primary | Expected state | Key checks |
+| Случай | Фикстура | Ожидаемый основной | Ожидаемое состояние | Ключевые проверки |
 | --- | --- | --- | --- | --- |
-| Clean 170 | synthetic click or kick pulse | `170 +/-1` | `STABLE` by 12s | high candidate score |
-| Clean 180 | synthetic click or kick pulse | `180 +/-1` | `STABLE` by 12s | no 90 BPM final lock |
-| Clean 190 | synthetic click or kick pulse | `190 +/-1` | `STABLE` by 12s | stable ranking |
-| Clean 200 | synthetic click or kick pulse | `200 +/-1` | `STABLE` by 12s | hitech baseline |
-| Clean 220 | synthetic click or kick pulse | `220 +/-1` | `STABLE` by 12s | upper-range stability |
-| Half-time trap | 100 BPM pulse in hitech mode | normalized `200 +/-1` if stronger | `STABLE` only when normalized candidate wins | raw 100 remains visible |
-| Double-time trap | 400 BPM pulse | normalized `200 +/-1` if stronger | `STABLE` only when normalized candidate wins | raw 400 remains visible |
-| Silence | zeros | `null` | `SEARCHING` or `NOISE_ONLY` | no false lock |
-| White noise | broadband random | `null` or low-confidence candidate | `NOISE_ONLY` or `SEARCHING` | no false `STABLE` |
-| Pink noise | 1/f noise | `null` or low-confidence candidate | `NOISE_ONLY` or `SEARCHING` | no false periodicity lock |
-| Noisy 200 | 200 BPM plus noise | `196-204` | `LOCKING` or `STABLE` if SNR adequate | quality warning if noisy |
-| Clipped 200 | hard-clipped 200 BPM | `null` for severe clipping; `196-204` only if recoverable | `CLIPPED_MIC` or low confidence | clipping flag true and no false `STABLE` |
-| Breakdown | valid BPM then low/no onset section | prior BPM may decay | `BREAKDOWN` or `UNSTABLE` | confidence decay |
-| Dense hitech bassline | simulated 190-210 rolling bass | +/-2 clean, +/-4 noisy | `STABLE` if periodic | avoid sub-pulse double lock |
-| Unstable club simulation | noisy pulse with changing level/onset clarity | low-confidence or `UNSTABLE` unless consistent | `UNSTABLE` or `LOCKING` | uncertainty remains visible |
+| Чистые 170 | синтетический click или kick-пульс | `170 ±1` | `STABLE` к 12 с | высокий score кандидата |
+| Чистые 180 | синтетический click или kick-пульс | `180 ±1` | `STABLE` к 12 с | нет финального захвата на 90 BPM |
+| Чистые 190 | синтетический click или kick-пульс | `190 ±1` | `STABLE` к 12 с | стабильное ранжирование |
+| Чистые 200 | синтетический click или kick-пульс | `200 ±1` | `STABLE` к 12 с | hitech-эталон |
+| Чистые 220 | синтетический click или kick-пульс | `220 ±1` | `STABLE` к 12 с | устойчивость в верхней части диапазона |
+| Half-time-ловушка | 100 BPM пульс в hitech-режиме | нормализованные `200 ±1`, если сильнее | `STABLE` только когда побеждает нормализованный кандидат | raw 100 остаётся видимым |
+| Double-time-ловушка | 400 BPM пульс | нормализованные `200 ±1`, если сильнее | `STABLE` только когда побеждает нормализованный кандидат | raw 400 остаётся видимым |
+| Тишина | нули | `null` | `SEARCHING` или `NOISE_ONLY` | нет ложного захвата |
+| Белый шум | широкополосный random | `null` или кандидат с низкой уверенностью | `NOISE_ONLY` или `SEARCHING` | нет ложного `STABLE` |
+| Розовый шум | 1/f-шум | `null` или кандидат с низкой уверенностью | `NOISE_ONLY` или `SEARCHING` | нет ложного захвата на периодичности |
+| Шумные 200 | 200 BPM плюс шум | `196–204` | `LOCKING` или `STABLE` при адекватном SNR | предупреждение о качестве, если шумно |
+| Клиппированные 200 | жёстко клиппированный 200 BPM | `null` при сильном клиппинге; `196–204` только если восстановимо | `CLIPPED_MIC` или низкая уверенность | флаг клиппинга true и нет ложного `STABLE` |
+| Брейкдаун | валидный BPM, затем секция с малым/нулевым онсетом | прежний BPM может просесть | `BREAKDOWN` или `UNSTABLE` | проседание уверенности |
+| Плотный hitech-басс | симуляция перекатывающегося баса 190–210 | ±2 на чистом, ±4 на шумном | `STABLE`, если периодично | избежать двойного захвата на суб-пульсе |
+| Нестабильная клубная симуляция | шумный пульс с меняющимся уровнем/чёткостью онсетов | низкая уверенность или `UNSTABLE`, кроме консистентных случаев | `UNSTABLE` или `LOCKING` | неопределённость остаётся видимой |
 
-## Current Offline Lab Verification
+## Текущая верификация offline-lab
 
-Verified on 2026-05-25 with deterministic generated PCM fixtures through `python3 tools/offline-lab/offline_lab.py report`. The report generates audio samples in memory, analyzes PCM onset evidence, and uses expected BPM metadata only for pass/fail evaluation; it does not hardcode analyzer output.
+Проверено 25.05.2026 на детерминированно сгенерированных PCM-фикстурах командой `python3 tools/offline-lab/offline_lab.py report`. Отчёт генерирует аудио-сэмплы в памяти, анализирует PCM-онсет-evidence и использует ожидаемые BPM-метаданные только для оценки pass/fail; вывод анализатора не хардкодится.
 
-| Fixture | Expected BPM | Detected BPM | Error | Confidence | Lock state | Signal quality | Candidate evidence | Result | Notes |
+| Фикстура | Ожидаемый BPM | Детектированный BPM | Ошибка | Уверенность | Состояние захвата | Качество сигнала | Evidence кандидатов | Результат | Заметки |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `clean_170` | 170.0 | 170.2 | 0.2 | 0.856 | `STABLE` | no clipping | 170.2 `main`, 170.2 `raw`, 85.1 `raw` | PASS | Clean hitech-range pulse within +/-1 BPM. |
-| `clean_180` | 180.0 | 180.5 | 0.5 | 0.774 | `STABLE` | no clipping | 180.5 `main`, 180.5 `raw`, 89.9 `raw` | PASS | Clean hitech-range pulse within +/-1 BPM. |
-| `clean_190` | 190.0 | 190.5 | 0.5 | 0.809 | `STABLE` | no clipping | 190.5 `main`, 190.5 `raw`, 94.9 `raw` | PASS | Clean hitech-range pulse within +/-1 BPM. |
-| `clean_200` | 200.0 | 200.0 | 0.0 | 0.874 | `STABLE` | no clipping | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Clean hitech baseline. |
-| `clean_220` | 220.0 | 220.2 | 0.2 | 0.867 | `STABLE` | no clipping | 220.2 `main`, 220.2 `raw`, 110.1 `raw` | PASS | Upper hitech-range pulse within +/-1 BPM. |
-| `half_time_trap_100` | 200.0 | 200.0 | 0.0 | 0.854 | `STABLE` | no clipping | 200.0 `main`, 200.0 `normalized_from_half`, 100.0 `raw` | PASS | Preserves raw 100 BPM while choosing normalized 200 BPM in hitech mode. |
-| `double_time_trap_400` | 200.0 | 200.0 | 0.0 | 0.858 | `STABLE` | no clipping | 200.0 `main`, 200.0 `normalized_from_double`, 400.0 `raw` | PASS | Preserves raw 400 BPM while choosing normalized 200 BPM in hitech mode. |
-| `silence` | `null` | `null` | n/a | 0.0 | `SEARCHING` | silence, no clipping | none | PASS | No false `STABLE` lock. |
-| `white_noise` | `null` | `null` | n/a | 0.203 | `NOISE_ONLY` | no clipping | low-score candidates only | PASS | No false `STABLE` lock on deterministic broadband noise. |
-| `pink_noise` | `null` | `null` | n/a | 0.219 | `NOISE_ONLY` | no clipping | low-score candidates only | PASS | No false `STABLE` lock on deterministic low-frequency-biased noise. |
-| `clipped_200` | `null` | `null` | n/a | 0.34 | `CLIPPED_MIC` | severe clipping flagged | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Candidate evidence remains visible, but primary BPM is suppressed when clipped-frame ratio reaches the severe threshold. |
-| `recoverable_clipped_200` | 200.0 | 200.0 | 0.0 | 0.690 | `LOCKING` | mild clipping flagged | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Mild clipping caps confidence below `STABLE` while tempo candidates stay usable. |
-| `breakdown_200` | `null` | `null` | n/a | 0.42 | `BREAKDOWN` | breakdown likely, no clipping | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Prior tempo candidate remains visible, but final lock is rejected. |
-| `dense_hitech_bassline_200` | 200.0 | 200.0 | 0.0 | 0.874 | `STABLE` | no clipping | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Rolling bassline does not promote sub-pulses over the beat. |
-| `unstable_club_simulation` | `null` | `null` | n/a | 0.182 | `NOISE_ONLY` | noisy, no clipping | low-score candidates only | PASS | Tempo drift, dropouts, rumble, and broadband noise keep uncertainty visible. |
+| `clean_170` | 170.0 | 170.2 | 0.2 | 0.856 | `STABLE` | без клиппинга | 170.2 `main`, 170.2 `raw`, 85.1 `raw` | PASS | Чистый пульс в hitech-диапазоне в пределах ±1 BPM. |
+| `clean_180` | 180.0 | 180.5 | 0.5 | 0.774 | `STABLE` | без клиппинга | 180.5 `main`, 180.5 `raw`, 89.9 `raw` | PASS | Чистый пульс в hitech-диапазоне в пределах ±1 BPM. |
+| `clean_190` | 190.0 | 190.5 | 0.5 | 0.809 | `STABLE` | без клиппинга | 190.5 `main`, 190.5 `raw`, 94.9 `raw` | PASS | Чистый пульс в hitech-диапазоне в пределах ±1 BPM. |
+| `clean_200` | 200.0 | 200.0 | 0.0 | 0.874 | `STABLE` | без клиппинга | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Hitech-эталон. |
+| `clean_220` | 220.0 | 220.2 | 0.2 | 0.867 | `STABLE` | без клиппинга | 220.2 `main`, 220.2 `raw`, 110.1 `raw` | PASS | Пульс у верхней границы hitech в пределах ±1 BPM. |
+| `half_time_trap_100` | 200.0 | 200.0 | 0.0 | 0.854 | `STABLE` | без клиппинга | 200.0 `main`, 200.0 `normalized_from_half`, 100.0 `raw` | PASS | Сохраняет raw 100 BPM, выбирая нормализованный 200 BPM в hitech-режиме. |
+| `double_time_trap_400` | 200.0 | 200.0 | 0.0 | 0.858 | `STABLE` | без клиппинга | 200.0 `main`, 200.0 `normalized_from_double`, 400.0 `raw` | PASS | Сохраняет raw 400 BPM, выбирая нормализованный 200 BPM в hitech-режиме. |
+| `silence` | `null` | `null` | n/a | 0.0 | `SEARCHING` | тишина, без клиппинга | нет | PASS | Нет ложного захвата `STABLE`. |
+| `white_noise` | `null` | `null` | n/a | 0.203 | `NOISE_ONLY` | без клиппинга | только низкоscored кандидаты | PASS | Нет ложного `STABLE` на детерминированном широкополосном шуме. |
+| `pink_noise` | `null` | `null` | n/a | 0.219 | `NOISE_ONLY` | без клиппинга | только низкоscored кандидаты | PASS | Нет ложного `STABLE` на детерминированном шуме с уклоном в низкие частоты. |
+| `clipped_200` | `null` | `null` | n/a | 0.34 | `CLIPPED_MIC` | сильный клиппинг помечен | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Evidence кандидатов остаётся видимым, но основной BPM подавлен, когда отношение клиппированных кадров достигает сильного порога. |
+| `recoverable_clipped_200` | 200.0 | 200.0 | 0.0 | 0.690 | `LOCKING` | мягкий клиппинг помечен | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Мягкий клиппинг ограничивает уверенность ниже `STABLE`, темповые кандидаты остаются пригодными. |
+| `breakdown_200` | `null` | `null` | n/a | 0.42 | `BREAKDOWN` | вероятен брейкдаун, без клиппинга | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Прежний темповый кандидат остаётся видимым, но финальный захват отклонён. |
+| `dense_hitech_bassline_200` | 200.0 | 200.0 | 0.0 | 0.874 | `STABLE` | без клиппинга | 200.0 `main`, 200.0 `raw`, 100.0 `raw` | PASS | Перекатывающийся басс не продвигает суб-пульсы выше основной доли. |
+| `unstable_club_simulation` | `null` | `null` | n/a | 0.182 | `NOISE_ONLY` | шумно, без клиппинга | только низкоscored кандидаты | PASS | Дрифт темпа, пропадания, гул и широкополосный шум сохраняют неопределённость видимой. |
 
-## Dataset Layout
+## Раскладка датасетов
 
 ```text
-datasets/synthetic/     Generated clean click tracks, kick pulses, traps, silence, and noise.
-datasets/hitech/        Curated real hitech / psytrance excerpts with licensing notes.
-datasets/noisy_club/    Club-like noise, crowd rumble, and microphone contamination.
-datasets/clipped_mic/   Phone microphone clipping and hard-limited examples.
-datasets/breakdowns/    No-kick and low-onset sections after a stable pulse.
+datasets/synthetic/     Сгенерированные чистые click-треки, kick-пульсы, ловушки, тишина и шум.
+datasets/hitech/        Курируемые реальные фрагменты hitech / psytrance с заметками о лицензировании.
+datasets/noisy_club/    Клубоподобный шум, гул толпы и контаминация микрофона.
+datasets/clipped_mic/   Клиппинг телефонного микрофона и жёстко лимитированные примеры.
+datasets/breakdowns/    Секции без kick'а и с малой плотностью онсетов после стабильного пульса.
 ```
 
-## QA Report Shape
+## Форма QA-отчёта
 
-Each offline-lab report row should include:
+Каждая строка отчёта offline-lab должна включать:
 
-- fixture name
-- expected BPM
-- detected BPM
-- BPM error
-- confidence
-- lock state
-- signal quality warnings
-- candidate list
-- pass/fail
-- notes
+- имя фикстуры;
+- ожидаемый BPM;
+- детектированный BPM;
+- ошибку BPM;
+- уверенность;
+- состояние захвата;
+- предупреждения о качестве сигнала;
+- список кандидатов;
+- pass/fail;
+- заметки.
 
-The first deterministic offline-lab report is produced with:
+Первый детерминированный отчёт offline-lab генерируется командой:
 
 ```sh
 python3 tools/offline-lab/offline_lab.py report
 ```
 
-The report analyzes generated PCM fixtures directly, including clean 170/180/190/200/220 BPM pulses, half-time and double-time traps, silence, white noise, pink noise, severe and recoverable clipped microphone input, no-kick breakdown, dense hitech bassline simulation, and unstable club simulation. It exits non-zero if any row fails.
+Отчёт анализирует сгенерированные PCM-фикстуры напрямую, включая чистые пульсы 170/180/190/200/220 BPM, half-time- и double-time-ловушки, тишину, белый шум, розовый шум, сильный и восстановимый клиппинг микрофона, брейкдаун без kick'а, плотную симуляцию hitech-басса и нестабильную клубную симуляцию. Завершается с не-нулевым кодом, если любая строка не прошла.
 
-Half-time and double-time trap rows validate both the visible raw candidate and the normalized candidate relation/source pair, not only the numeric BPM.
+Строки half-time- и double-time-ловушек проверяют и видимый raw-кандидат, и пару relation/source нормализованного кандидата, а не только числовое значение BPM.
 
-## Regression Policy
+## Политика регрессий
 
-Every DSP algorithm change must add or update tests. Clean synthetic tests are the first gate, but they are not enough for production confidence; noisy, clipped, and breakdown cases are required before mobile integration is considered ready.
+Каждое изменение DSP-алгоритма обязано добавлять или обновлять тесты. Чистые синтетические тесты — первый гейт, но их недостаточно для продакшен-уверенности; шумные, клиппированные и брейкдаун-случаи требуются до того, как мобильную интеграцию можно считать готовой.
 
-## Validation Commands
+## Команды валидации
 
 ```sh
 python3 -m unittest discover core/tests
 node --test core/dsp/index.test.js
-cargo test --workspace                       # hermetic: does not invoke python3
+cargo test --workspace                       # герметично: не вызывает python3
 python3 tools/offline-lab/offline_lab.py report
-python3 tools/offline-lab/parity.py          # optional cross-language Python ↔ Rust check
+python3 tools/offline-lab/parity.py          # опциональный кросс-языковой parity Python ↔ Rust
 ```
 
-Flutter validation becomes required once platform files and the microphone bridge are implemented.
+Flutter-валидация становится обязательной после имплементации платформенных файлов и микрофонного моста.
 
-## Rust Fixture Inventory
+## Инвентарь Rust-фикстур
 
-The Rust DSP regression suite (`core/dsp/tests/offline_contract.rs`) consumes the deterministic generators in `core/dsp/tests/common/mod.rs`, which mirror `core/tests/helpers/synthetic_fixtures.py`. The canonical inventory is:
+Rust DSP-регрессионная обвязка (`core/dsp/tests/offline_contract.rs`) потребляет детерминированные генераторы из `core/dsp/tests/common/mod.rs`, которые зеркалируют `core/tests/helpers/synthetic_fixtures.py`. Канонический инвентарь:
 
-| Fixture | Generator | Expected lock state | Expected primary BPM |
+| Фикстура | Генератор | Ожидаемое состояние захвата | Ожидаемый основной BPM |
 | --- | --- | --- | --- |
 | `clean_170` | `pulse_track(170.0, …)` | `STABLE` | 170 ±1 |
 | `clean_180` | `pulse_track(180.0, …)` | `STABLE` | 180 ±1 |
 | `clean_190` | `pulse_track(190.0, …)` | `STABLE` | 190 ±1 |
 | `clean_200` | `pulse_track(200.0, …)` | `STABLE` | 200 ±1 |
 | `clean_220` | `pulse_track(220.0, …)` | `STABLE` | 220 ±1 |
-| `half_time_trap_100` | `pulse_track(100.0, …)` | `STABLE` | 200 ±1 (raw 100 visible) |
-| `double_time_trap_400` | `pulse_track(400.0, …)` | `STABLE` | 200 ±1 (raw 400 visible) |
+| `half_time_trap_100` | `pulse_track(100.0, …)` | `STABLE` | 200 ±1 (raw 100 видим) |
+| `double_time_trap_400` | `pulse_track(400.0, …)` | `STABLE` | 200 ±1 (raw 400 видим) |
 | `silence` | `silence(…)` | `SEARCHING` / `NOISE_ONLY` | `null` |
 | `white_noise` | `white_noise(170170, 0.28, …)` | `NOISE_ONLY` / `UNSTABLE` | `null` |
 | `pink_noise` | `pink_noise(220220, 0.32, …)` | `NOISE_ONLY` / `UNSTABLE` | `null` |
@@ -130,4 +130,4 @@ The Rust DSP regression suite (`core/dsp/tests/offline_contract.rs`) consumes th
 | `dense_hitech_bassline` | `dense_hitech_bassline(200.0, …)` | `STABLE` | 200 ±2 |
 | `unstable_club_simulation` | `unstable_club_simulation(…)` | `NOISE_ONLY` / `UNSTABLE` / `LOCKING` / `SEARCHING` | `null` |
 
-`canonical_fixture_inventory_round_trip` in `offline_contract.rs` walks the full inventory and asserts the anti-fake invariants (no `STABLE` on silence/noise/severe clipping, half/double relations preserved on traps).
+`canonical_fixture_inventory_round_trip` в `offline_contract.rs` обходит весь инвентарь и проверяет anti-fake-инварианты (никакого `STABLE` на тишине/шуме/сильном клиппинге, half/double-relations сохраняются на ловушках).

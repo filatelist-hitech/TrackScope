@@ -1,8 +1,8 @@
 # AGENTS.md — hitech-bpm-radar
 
-## Toolchain Requirements
+## Требования к тулчейну
 
-Always use these explicit binaries:
+Всегда используйте эти явные бинарники:
 
 Node.js:
 `/opt/homebrew/opt/nodejs/bin/node`
@@ -10,123 +10,123 @@ Node.js:
 Cargo:
 `/opt/homebrew/opt/rust/bin/cargo`
 
-Do not rely on system PATH for Node.js or Rust toolchain discovery.
+Не полагайтесь на системный PATH для поиска Node.js или Rust-тулчейна.
 
-When running tests or build commands:
-- use the explicit node binary
-- use the explicit cargo binary
+При запуске тестов и сборки:
+- используйте явный бинарь node;
+- используйте явный бинарь cargo.
 
-Examples:
+Примеры:
 
 ```
 /opt/homebrew/opt/nodejs/bin/node --version
 /opt/homebrew/opt/rust/bin/cargo test
 ```
 
-Never substitute these binaries with system-installed alternatives unless explicitly instructed.
+Никогда не заменяйте эти бинарники системными альтернативами без явного указания.
 
 
 
-## Project goal
+## Цель проекта
 
-Build a mobile application that detects BPM automatically through microphone input.
-Primary target genre: hitech / psytrance, 170–230 BPM.
-No tap tempo as the main mechanism.
+Мобильное приложение, которое автоматически определяет BPM через микрофон.
+Основной жанр: hitech / psytrance, 170–230 BPM.
+Tap-tempo — не основной механизм.
 
-The product must show:
-- detected BPM
-- confidence
-- lock state
-- tempo candidates
-- half-time / double-time correction
-- signal quality warnings
-- session history
+Продукт показывает:
+- определённый BPM;
+- уверенность;
+- состояние захвата (lock state);
+- BPM-кандидатов;
+- коррекцию half-time / double-time;
+- предупреждения о качестве сигнала;
+- историю сессий.
 
-## Non-negotiable rules
+## Непреложные правила
 
-- Do not fake BPM values.
-- Do not hardcode demo BPM into production logic.
-- Do not build UI before the DSP contract exists.
-- Do not treat 100 BPM as final in hitech mode if 200 BPM is a stronger normalized candidate.
-- Always expose confidence and candidate list in debug mode.
-- For complex tasks, plan first, then implement.
-- For every implementation task, update or add tests.
-- For DSP changes, add synthetic test cases.
-- For mobile audio changes, document platform-specific latency and permission behavior.
-- Final answer must include:
-  - changed files
-  - what was implemented
-  - how it was tested
-  - known limitations
-  - next recommended patch
+- Не фейкать BPM.
+- Не хардкодить демо-BPM в продакшен-логику.
+- Не делать UI раньше, чем существует DSP-контракт.
+- В hitech-режиме не финализировать 100 BPM, если нормализованный 200 BPM сильнее.
+- Всегда показывать уверенность и список кандидатов в debug-режиме.
+- Для сложных задач — сначала план, потом реализация.
+- Каждая задача с кодом обновляет или добавляет тесты.
+- DSP-изменения требуют синтетических тест-кейсов.
+- Изменения в мобильном аудио документируют платформенные задержку и поведение разрешений.
+- Финальный ответ включает:
+  - изменённые файлы;
+  - что реализовано;
+  - как тестировалось;
+  - известные ограничения;
+  - рекомендуемый следующий патч.
 
-## Target architecture
+## Целевая архитектура
 
 apps/mobile:
-- UI
-- microphone permissions
-- native audio bridge
-- live BPM screen
-- debug screen
-- session history
+- UI;
+- разрешения микрофона;
+- нативный аудио-мост;
+- живой BPM-экран;
+- отладочный экран;
+- история сессий.
 
 core/dsp:
-- ring buffer
-- preprocessing
-- onset detection
-- tempo estimation
-- hitech BPM normalizer
-- confidence engine
-- lock state machine
+- кольцевой буфер;
+- препроцессинг;
+- детекция онсетов;
+- оценка темпа;
+- hitech BPM-нормализатор;
+- движок уверенности;
+- автомат состояния захвата.
 
 tools/offline-lab:
-- CLI analyzer for audio files
-- synthetic fixture generator
-- algorithm comparison reports
+- CLI-анализатор аудио-файлов;
+- генератор синтетических фикстур;
+- отчёты сравнения алгоритмов.
 
 datasets:
-- synthetic click tracks
-- hitech test samples
-- noisy club recordings
-- clipped microphone examples
+- синтетические click-треки;
+- тестовые hitech-сэмплы;
+- шумные клубные записи;
+- примеры клиппирующего микрофона.
 
 docs:
-- architecture
-- DSP algorithm
-- QA matrix
-- mobile audio notes
-- release checklist
+- архитектура;
+- DSP-алгоритм;
+- QA-матрица;
+- заметки по мобильному аудио;
+- релизный чеклист.
 
-## Preferred implementation approach
+## Предпочтительный подход к реализации
 
 Phase 1:
-- Create offline analyzer and synthetic tests.
-- No mobile UI yet.
+- Офлайн-анализатор и синтетические тесты.
+- Мобильного UI ещё нет.
 
 Phase 2:
-- Implement streaming DSP core.
-- Define stable public API.
+- Реализовать потоковое DSP-ядро.
+- Зафиксировать стабильное публичное API.
 
 Phase 3:
-- Add mobile microphone input.
-- Connect live DSP output to UI.
+- Добавить вход с микрофона на мобильном.
+- Подключить живой DSP-вывод к UI.
 
 Phase 4:
-- Harden for club noise, clipping, breakdowns, unstable tempo.
+- Закалить под клубный шум, клиппинг, брейкдауны, нестабильный темп.
 
-## BPM logic
+## BPM-логика
 
-Primary target range:
-- hitech: 170–230 BPM
+Основной целевой диапазон:
+- hitech: 170–230 BPM.
 
-Candidate normalization:
-- if candidate < 130 BPM, test candidate * 2
-- if candidate > 260 BPM, test candidate / 2
-- keep all candidates with scores
-- choose primary by score + genre range + stability
-- never discard half-time / double-time candidates silently
+Нормализация кандидатов:
+- если кандидат < 130 BPM — тестируем `candidate * 2`;
+- если кандидат > 260 BPM — тестируем `candidate / 2`;
+- сохраняем всех кандидатов со score;
+- основного выбираем по score + жанровому диапазону + стабильности;
+- никогда не выбрасываем half-time / double-time молча.
 
-## Required lock states
+## Обязательные состояния захвата
 
 - SEARCHING
 - LOCKING
@@ -136,9 +136,9 @@ Candidate normalization:
 - CLIPPED_MIC
 - NOISE_ONLY
 
-## Required output contract
+## Обязательный output-контракт
 
-The DSP core must return nullable BPM results. If the signal is silence, noise-only, clipped beyond recovery, or otherwise untrustworthy, `primary_bpm` must be `null`; do not invent a fallback tempo.
+DSP-ядро возвращает nullable-BPM. Если сигнал — тишина, шум-без-сигнала, клиппинг без возможности восстановления или иначе недостоверен, `primary_bpm` обязан быть `null`; не подменяйте fallback-темпом.
 
 ```json
 {
@@ -165,27 +165,27 @@ The DSP core must return nullable BPM results. If the signal is silence, noise-o
 }
 ```
 
-The full contract is documented in `docs/DSP_ALGORITHM.md`.
+Полный контракт — в `docs/DSP_ALGORITHM.md`.
 
-## Required tests
+## Обязательные тесты
 
 # DSP:
 
-- 170 BPM synthetic
-- 180 BPM synthetic
-- 190 BPM synthetic
-- 200 BPM synthetic
-- 220 BPM synthetic
-- 100 BPM half-time trap
-- 400 BPM double-time trap
-- noisy input
-- clipped input
-- breakdown / no-kick section
+- синтетика 170 BPM
+- синтетика 180 BPM
+- синтетика 190 BPM
+- синтетика 200 BPM
+- синтетика 220 BPM
+- half-time-ловушка 100 BPM
+- double-time-ловушка 400 BPM
+- шумный вход
+- клиппинг
+- брейкдаун / без kick-секции
 
-## Acceptance:
+## Приёмка
 
-- clean synthetic accuracy: +/-1 BPM
-- noisy mic target: +/-2-4 BPM
-- first lock target: under 6 seconds
-- stable lock target: under 12 seconds
-- no false STABLE state on silence or noise-only input
+- точность на чистой синтетике: ±1 BPM;
+- цель на шумном микрофоне: ±2–4 BPM;
+- первый захват: до 6 секунд;
+- стабильный захват: до 12 секунд;
+- никакого ложного `STABLE` на тишине или шуме-без-сигнала.

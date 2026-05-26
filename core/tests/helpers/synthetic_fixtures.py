@@ -1,7 +1,7 @@
-"""Deterministic synthetic audio fixtures for the offline DSP lab.
+"""Детерминированные синтетические аудио-фикстуры для офлайн-DSP-лаба.
 
-The helpers intentionally generate audio, not expected analyzer output. Tests
-use the metadata only as acceptance criteria for a real public DSP API/CLI.
+Хелперы намеренно генерируют аудио, а не ожидаемый вывод анализатора. Тесты
+используют метаданные только как критерии приёмки для реального публичного DSP API/CLI.
 """
 
 from __future__ import annotations

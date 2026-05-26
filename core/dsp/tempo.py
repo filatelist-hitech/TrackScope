@@ -1,4 +1,4 @@
-"""Simple deterministic offline tempo detector for hitech BPM fixtures."""
+"""Простой детерминированный офлайн-детектор темпа для hitech BPM-фикстур."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def analyze_pcm(
     hitech_min_bpm: float = 170.0,
     hitech_max_bpm: float = 230.0,
 ) -> DspResult:
-    """Analyze normalized mono PCM samples and return the DSP contract."""
+    """Проанализировать нормализованные моно PCM-сэмплы и вернуть DSP-контракт."""
 
     duration_sec = len(samples) / sample_rate if sample_rate else 0.0
     signal = _measure_signal(samples, sample_rate)

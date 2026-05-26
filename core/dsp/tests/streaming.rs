@@ -3,13 +3,13 @@ mod common;
 use common::{pulse_track, SAMPLE_RATE};
 use hitech_bpm_dsp::{DspConfig, DspEngine, LockState};
 
-/// First-lock timing — once a clean 200 BPM pulse has been fed
-/// frame-by-frame, the engine must leave `SEARCHING` within
-/// `config.lock_min_seconds` (default 6 s) of audio.
+/// Тайминг первого захвата — после покадровой подачи чистого импульса 200 BPM
+/// движок обязан покинуть `SEARCHING` в течение `config.lock_min_seconds`
+/// (по умолчанию 6 с) аудио.
 #[test]
 fn streaming_first_lock_under_six_seconds_for_200_bpm() {
     let config = DspConfig::default();
-    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize; // 100 ms
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize; // 100 мс
     let samples = pulse_track(200.0, config.lock_min_seconds, 0.9);
 
     let mut engine = DspEngine::new(config);
@@ -35,9 +35,9 @@ fn streaming_first_lock_under_six_seconds_for_200_bpm() {
     );
 }
 
-/// Stable-lock timing — feed up to `stable_min_seconds` of audio and
-/// require the engine to reach `STABLE` with `primary_bpm` within ±2 BPM
-/// of the truth.
+/// Тайминг стабильного захвата — подать до `stable_min_seconds` аудио и
+/// потребовать от движка достижения `STABLE` с `primary_bpm` в пределах ±2 BPM
+/// от эталона.
 #[test]
 fn streaming_stable_lock_under_twelve_seconds_for_200_bpm() {
     let config = DspConfig::default();
@@ -74,22 +74,21 @@ fn streaming_stable_lock_under_twelve_seconds_for_200_bpm() {
     );
 }
 
-/// Mid-stream tempo change — concatenate 12 s of 180 BPM pulse with 12 s
-/// of 200 BPM pulse and feed the whole 24-second stream frame-by-frame.
+/// Смена темпа на середине стрима — конкатенировать 12 с импульса 180 BPM
+/// с 12 с импульса 200 BPM и покадрово подать весь 24-секундный стрим.
 ///
-/// Asserts:
-/// 1. By the end of the first segment the engine reports ~180 BPM and
-///    STABLE.
-/// 2. After the transition, `primary_bpm` reaches ~200 BPM within one
-///    analysis window (`analysis_window_seconds`).
-/// 3. The lock state transitions through a non-STABLE state during the
-///    change — the engine does not silently swap one BPM for another
-///    while remaining STABLE.
+/// Проверяет:
+/// 1. К концу первого сегмента движок сообщает ~180 BPM и STABLE.
+/// 2. После перехода `primary_bpm` достигает ~200 BPM в течение одного
+///    окна анализа (`analysis_window_seconds`).
+/// 3. Состояние захвата проходит через не-STABLE состояние во время
+///    изменения — движок не меняет молча один BPM на другой,
+///    оставаясь при этом в STABLE.
 #[test]
 fn streaming_reflects_mid_stream_tempo_change_within_one_window() {
     let config = DspConfig::default();
     let window_sec = config.analysis_window_seconds;
-    let segment_sec = window_sec; // 12 s of each tempo
+    let segment_sec = window_sec; // 12 с каждого темпа
     let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
 
     let mut samples = pulse_track(180.0, segment_sec, 0.9);

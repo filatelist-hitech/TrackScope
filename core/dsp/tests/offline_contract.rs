@@ -178,9 +178,9 @@ fn streaming_engine_matches_batch_analysis() {
     assert_bpm(streamed.primary_bpm, batch.primary_bpm.unwrap(), 0.1);
 }
 
-/// Every canonical fixture must resolve to a `DspResult` and never violate
-/// the anti-fake invariants — silence/noise/severe-clipping never reach STABLE,
-/// half/double-time relations remain visible on the matching traps.
+/// Каждая фикстура из канонического инвентаря обязана давать `DspResult`
+/// и не нарушать anti-fake-инварианты: тишина/шум/сильный клиппинг не
+/// достигают STABLE, half/double-time-связи остаются видимыми в ловушках.
 #[test]
 fn canonical_fixture_inventory_round_trip() {
     for name in CANONICAL_FIXTURES {
@@ -244,7 +244,7 @@ fn assert_source_candidate(
     );
 }
 
-// Suppress unused-warnings from common module helpers not used in this binary.
+// Подавить предупреждения об неиспользуемых хелперах общего модуля.
 #[allow(dead_code)]
 fn _force_normalize_used(samples: Vec<f32>, peak: f32) -> Vec<f32> {
     normalize(samples, peak)

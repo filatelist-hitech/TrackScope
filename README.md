@@ -1,112 +1,113 @@
 # hitech-bpm-radar
 
-DSP-first BPM detection for hitech / psytrance, targeting automatic microphone-based tempo detection in the 170-230 BPM range.
+DSP-first определение BPM для hitech / psytrance — автоматический темп с микрофона в диапазоне 170–230 BPM.
 
-This repository is not a tap-tempo toy and not a UI demo. The first production milestone is a deterministic DSP core with synthetic tests and an offline analyzer. Mobile microphone capture and UI come only after the DSP contract is stable.
+Это не tap-tempo и не UI-демо. Первая продакшен-веха — детерминированное DSP-ядро с синтетическими тестами и офлайн-анализатором. Захват микрофона и UI на мобильном устройстве подключаются только после стабилизации DSP-контракта.
 
-## Product Contract
+## Продуктовый контракт
 
-The product must report:
+Продукт обязан сообщать:
 
-- detected BPM, or `null` when the signal is not trustworthy
-- confidence from `0.0` to `1.0`
-- lock state
-- tempo candidates with scores
-- half-time and double-time relationships
-- signal quality warnings
-- session history once mobile integration begins
+- определённый BPM, либо `null`, если сигналу нельзя доверять;
+- уверенность от `0.0` до `1.0`;
+- состояние захвата (`lock state`);
+- BPM-кандидаты со score;
+- связи half-time и double-time;
+- предупреждения о качестве сигнала;
+- историю сессий — после интеграции с мобильным приложением.
 
-Production logic must never hardcode demo BPM values or invent a tempo for silence, noise-only input, clipped microphone input, or breakdown sections.
+Продакшен-логика никогда не хардкодит демо-значения BPM и не выдумывает темп для тишины, шума-без-сигнала, перегруженного микрофона или брейкдаунов.
 
-## Repository Map
+## Структура репозитория
 
 ```text
-apps/mobile/       Flutter shell, future microphone permission flow, audio bridge, and result rendering.
-core/dsp/          Rust DSP contract plus current Python/Node offline prototype used by Phase 1 tests.
-core/ffi/          Native bridge boundary for Flutter/mobile integration.
-core/tests/        Synthetic fixtures, regression tests, and DSP acceptance coverage.
-tools/offline-lab/ Python offline analyzer, fixture generator, and algorithm comparison reports.
-datasets/          Synthetic and real-world audio fixture storage.
-docs/              Architecture, DSP algorithm, QA matrix, roadmap, mobile notes, and release checklist.
-.codex/            Codex config, role agents, and plan template.
-.agents/skills/    Reusable project skills for local agent workflows.
+apps/mobile/       Flutter-оболочка, сценарий выдачи разрешений микрофона, аудио-мост и рендер результата.
+core/dsp/          Rust DSP-ядро + текущий Python/Node-прототип офлайн-анализатора, используемый тестами Phase 1.
+core/ffi/          Граница нативного моста для интеграции с Flutter / мобильным шеллом.
+core/tests/        Синтетические фикстуры, регрессионные тесты, приёмочные DSP-тесты.
+tools/offline-lab/ Python-офлайн-анализатор, генератор фикстур, отчёты сравнения алгоритмов.
+datasets/          Хранилище синтетических и реальных аудио-фикстур.
+docs/              Архитектура, DSP-алгоритм, QA-матрица, roadmap, заметки по мобильному аудио, релизный чеклист.
+.codex/            Конфиг Codex, role-агенты, шаблон планов.
+.agents/skills/    Переиспользуемые навыки проекта для локальных воркфлоу с агентами.
 ```
 
-## Current Phase
+## Текущая фаза
 
-Phase 3 step 2 (mobile bridge live): Flutter app captures microphone audio via `package:record`, ships PCM into a dedicated DSP worker isolate that owns the Rust FFI handle, and renders rolling `DspResult` snapshots through `StreamBuilder` on a live BPM screen + a debug screen.
+Phase 3, шаг 2 (мобильный мост в эфире): Flutter-приложение захватывает звук с микрофона через `package:record`, отправляет PCM в отдельный изолят DSP-воркера, который владеет Rust-FFI-хэндлом, и рендерит скользящие снэпшоты `DspResult` через `StreamBuilder` на живом BPM-экране + отладочном экране.
 
-The Rust crate in `core/dsp/` is the production source of truth: it owns onset extraction, autocorrelation tempo estimation, hitech candidate normalization, confidence scoring, and lock-state classification in native Rust. `core/dsp/tempo.py` and `core/dsp/synthetic.py` remain as the readable algorithmic reference and continue to back the Python offline-lab report.
+Rust-крейт в `core/dsp/` — продакшен-источник истины: он содержит извлечение онсетов, оценку темпа автокорреляцией, hitech-нормализацию кандидатов, скоринг уверенности и классификацию состояния захвата на нативном Rust. `core/dsp/tempo.py` и `core/dsp/synthetic.py` остаются как читаемая алгоритмическая референс-реализация и продолжают обслуживать офлайн-отчёт Python.
 
-### Running the mobile app
+### Запуск мобильного приложения
 
 ```sh
-# 1. Build the Rust FFI dylib (once per machine, cached by cargo)
+# 1. Собрать Rust FFI dylib (один раз на машину, дальше кэшируется cargo)
 /opt/homebrew/opt/rust/bin/cargo build --release -p hitech-bpm-ffi
 
-# 2. Fetch Flutter deps
+# 2. Подтянуть Flutter-зависимости
 cd apps/mobile
 /opt/homebrew/bin/flutter pub get
 
-# 3. Static + unit checks
+# 3. Статика + юнит-тесты
 /opt/homebrew/bin/flutter analyze
 /opt/homebrew/bin/flutter test
 
-# 4. Launch on an attached device or running simulator/emulator
+# 4. Запуск на подключённом устройстве или работающем симуляторе/эмуляторе
 /opt/homebrew/bin/flutter run
 ```
 
-The Rust dylib is bundled into the Android/iOS app via the platform plugin pipeline (`record_darwin`, `permission_handler_apple` are picked up automatically by Flutter). For the test runner, `apps/mobile/test/helpers/native_library.dart` invokes `cargo build` itself if the dylib is missing.
+Rust dylib подтягивается в Android/iOS-приложение через пайплайн плагинов платформы (`record_darwin`, `permission_handler_apple` подхватываются Flutter автоматически). Для тестового раннера `apps/mobile/test/helpers/native_library.dart` сам вызывает `cargo build`, если dylib отсутствует.
 
-Before merging the mobile bridge to `stage`, run the device-level acceptance items in [docs/MANUAL_TEST_CHECKLIST.md](docs/MANUAL_TEST_CHECKLIST.md).
+Перед мерджем мобильного моста в `stage` пройдите чеклист устройств в [docs/MANUAL_TEST_CHECKLIST.md](docs/MANUAL_TEST_CHECKLIST.md).
 
-### Test workflow
+### Воркфлоу тестов
 
-- `cargo test --workspace` is **hermetic**: it does not invoke `python3`. Rust regression coverage lives in `core/dsp/tests/offline_contract.rs` using the shared fixture module `core/dsp/tests/common/mod.rs`.
-- `python3 -m unittest discover core/tests` runs the Python reference suite.
-- `node --test core/dsp/index.test.js` runs the Node offline analyzer.
-- `python3 tools/offline-lab/offline_lab.py report` runs the deterministic offline QA report.
-- `python3 tools/offline-lab/parity.py` is the optional cross-language Python ↔ Rust drift check (invokes the Rust `analyze_wav` binary; not part of `cargo test`).
+- `cargo test --workspace` — **герметичный**: не вызывает `python3`. Регрессионное покрытие на Rust лежит в `core/dsp/tests/offline_contract.rs` и использует общий модуль фикстур `core/dsp/tests/common/mod.rs`.
+- `python3 -m unittest discover core/tests` — Python-референс-сьют.
+- `node --test core/dsp/index.test.js` — Node-офлайн-анализатор.
+- `python3 tools/offline-lab/offline_lab.py report` — детерминированный офлайн-QA-отчёт.
+- `python3 tools/offline-lab/parity.py` — опциональная сверка дрифта Python ↔ Rust (вызывает Rust-бинарь `analyze_wav`; не входит в `cargo test`).
 
-## Acceptance Targets
+## Критерии приёмки
 
-- Clean synthetic fixtures: within +/-1 BPM at 170, 180, 190, 200, and 220 BPM.
-- Noisy microphone-like input: within +/-2-4 BPM when signal quality is adequate.
-- First usable lock: under 6 seconds.
-- Stable lock: under 12 seconds.
-- Silence and noise-only input must not reach `STABLE`.
-- In hitech mode, a 100 BPM half-time candidate must not beat a stronger normalized 200 BPM candidate.
+- Чистые синтетические фикстуры: ±1 BPM на 170, 180, 190, 200 и 220 BPM.
+- Шумный микрофонный вход: ±2–4 BPM при адекватном качестве сигнала.
+- Первый рабочий захват: до 6 секунд.
+- Стабильный захват: до 12 секунд.
+- Тишина и шум-без-сигнала не должны достигать `STABLE`.
+- В hitech-режиме half-time-кандидат 100 BPM не должен побеждать более сильного нормализованного кандидата 200 BPM.
 
-## Documentation
+## Документация
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [DSP Algorithm](docs/DSP_ALGORITHM.md)
-- [QA Matrix](docs/QA_MATRIX.md)
+- [Архитектура](docs/ARCHITECTURE.md)
+- [DSP-алгоритм](docs/DSP_ALGORITHM.md)
+- [QA-матрица](docs/QA_MATRIX.md)
 - [Roadmap](docs/ROADMAP.md)
-- [Mobile Audio Notes](docs/MOBILE_AUDIO.md)
-- [Manual Test Checklist (mobile)](docs/MANUAL_TEST_CHECKLIST.md)
-- [Release Checklist](docs/RELEASE_CHECKLIST.md)
+- [Заметки по мобильному аудио](docs/MOBILE_AUDIO.md)
+- [Ручной тест-чеклист (mobile)](docs/MANUAL_TEST_CHECKLIST.md)
+- [Релизный чеклист](docs/RELEASE_CHECKLIST.md)
+- [Глоссарий терминов](docs/GLOSSARY.md)
 
-## Working with Claude Code
+## Работа с Claude Code
 
-The repository is configured for native Claude Code in parallel to the legacy Codex setup.
+Репозиторий настроен под нативный Claude Code параллельно с легаси-окружением Codex.
 
-Where to look:
+Где смотреть:
 
-- `CLAUDE.md` — project memory: DSP contract, hitech normalization rules, anti-fake rules, workflow, build/test commands.
-- `.claude/agents/` — 7 subagents (`archman`, `dspman`, `mobileman`, `qaman`, `perfman`, `reviewman`, `docman`) mirroring the Codex `.codex/agents/*.toml` roles.
-- `.claude/skills/` — 5 skills (`project-bootstrap`, `dsp-tempo-analysis`, `mobile-audio-input`, `qa-audio-dataset`, `review-gate`) mirroring `.agents/skills/*/SKILL.md`.
-- `.claude/commands/` — slash commands: `/plan`, `/qa-report`, `/parity`, `/review-gate`, `/bootstrap-task`.
-- `.claude/settings.json` — project permissions and hooks. Personal overrides go in `.claude/settings.local.json` (gitignored).
+- `CLAUDE.md` — память проекта: DSP-контракт, правила hitech-нормализации, anti-fake правила, воркфлоу, команды сборки и тестов.
+- `.claude/agents/` — 7 субагентов (`archman`, `dspman`, `mobileman`, `qaman`, `perfman`, `reviewman`, `docman`), зеркалирующие роли Codex `.codex/agents/*.toml`.
+- `.claude/skills/` — 5 навыков (`project-bootstrap`, `dsp-tempo-analysis`, `mobile-audio-input`, `qa-audio-dataset`, `review-gate`), зеркалирующие `.agents/skills/*/SKILL.md`.
+- `.claude/commands/` — slash-команды: `/plan`, `/qa-report`, `/parity`, `/review-gate`, `/bootstrap-task`.
+- `.claude/settings.json` — разрешения и хуки проекта. Личные оверрайды — в `.claude/settings.local.json` (gitignore).
 
-Typical workflows:
+Типичные воркфлоу:
 
-- Start any non-trivial task with `/bootstrap-task <description>` — it reads `AGENTS.md` + `CLAUDE.md`, classifies complexity, picks the relevant subagents and skills, and scaffolds a plan for medium/high tasks.
-- `/plan <task-title>` produces a full execution plan from the `.codex/plans/PLANS.md` template.
-- `/qa-report` runs `python3 tools/offline-lab/offline_lab.py report` and summarizes regressions and lock-state violations.
-- `/parity` runs Rust + Python parity tests and reports drift in `primary_bpm` or `confidence`.
-- `/review-gate` invokes the `reviewman` subagent against the staged + unstaged diff before merging.
+- Любую нетривиальную задачу начинаем с `/bootstrap-task <описание>` — она читает `AGENTS.md` + `CLAUDE.md`, классифицирует сложность, подбирает релевантных субагентов и навыки и скаффолдит план для medium/high-задач.
+- `/plan <название>` генерирует полный execution-plan по шаблону `.codex/plans/PLANS.md`.
+- `/qa-report` запускает `python3 tools/offline-lab/offline_lab.py report` и суммирует регрессии и нарушения состояний захвата.
+- `/parity` гоняет parity-тесты Rust + Python и репортит дрифт `primary_bpm` / `confidence`.
+- `/review-gate` запускает субагент `reviewman` по staged + unstaged-диффу перед мерджем.
 
-Subagents and skills are description-matched and activate automatically when their triggers fire; you can also invoke them explicitly via `@agent-name` or by referencing the skill.
+Субагенты и навыки сопоставляются по `description` и активируются автоматически по триггерам; их также можно вызвать явно через `@agent-name` или сослаться на навык по имени.
 
-> `.codex/` and `.agents/` are preserved as legacy reference from the original OpenAI Codex environment. Do not delete or modify them. The Codex agent → Claude Code subagent mapping is documented at the bottom of `CLAUDE.md`.
+> `.codex/` и `.agents/` сохранены как легаси-референс из исходного окружения OpenAI Codex. Не удаляйте и не модифицируйте их. Маппинг агентов Codex → субагентов Claude Code описан внизу `CLAUDE.md`.

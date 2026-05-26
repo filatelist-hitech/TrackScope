@@ -1,86 +1,86 @@
-# Mobile Audio Notes
+# Заметки по мобильному аудио
 
-Phase 3 step 2 lands the live capture pipeline: `package:record` feeds PCM into a dedicated DSP worker isolate that owns the Rust FFI handle, parses rolling `DspResult` snapshots, and ships them back to the UI isolate for `StreamBuilder` rendering.
+Phase 3 шаг 2 вводит в эфир пайплайн живого захвата: `package:record` отдаёт PCM в выделенный изолят DSP-воркера, который владеет Rust-FFI-хэндлом, парсит скользящие снэпшоты `DspResult` и отправляет их обратно в UI-изолят для рендера через `StreamBuilder`.
 
-## Pipeline (end-to-end)
+## Пайплайн (end-to-end)
 
 ```
-┌─────────────── main (UI) isolate ───────────────┐    ┌──────── DSP worker isolate ────────┐
-│                                                 │    │                                    │
-│ AudioRecorder (package:record)                  │    │ DspEngine (FFI handle)             │
-│   ↓ Stream<Uint8List> pcm16 mono 48 kHz         │    │   pushSamples(Float32List, sr)    │
-│ MicrophoneSource                                │    │   analyzeJson() @ 20 Hz timer     │
-│   ↓                                             │    │     ↓ JSON string                 │
-│ CaptureBridge.start(pcmStream, sr, encoding)    │    │                                    │
-│   sendPort.send(PushPcm(bytes, sr, encoding))   ├───►│ ReceivePort listener              │
-│                                                 │    │   _decodePcm16Mono(bytes) → f32   │
-│ ReceivePort listener:                           │    │   engine.pushSamples(f32, sr)     │
-│   DspResultMessage(json) → DspResult.parse      │◄───┤ Timer.periodic → sendPort.send    │
-│   WorkerError(message) → CaptureError stream    │    │   StopWorker → engine.dispose()   │
-│                                                 │    │                                    │
-│ Stream<DspResult> results                       │    │                                    │
-│   → StreamBuilder<DspResult> on main/debug      │    │                                    │
-└─────────────────────────────────────────────────┘    └────────────────────────────────────┘
+┌────────── главный (UI) изолят ──────────┐    ┌──── изолят DSP-воркера ────┐
+│                                         │    │                            │
+│ AudioRecorder (package:record)          │    │ DspEngine (FFI handle)     │
+│   ↓ Stream<Uint8List> pcm16 mono 48 kHz │    │   pushSamples(Float32List, sr)│
+│ MicrophoneSource                        │    │   analyzeJson() @ 20 Hz   │
+│   ↓                                     │    │     ↓ JSON-строка         │
+│ CaptureBridge.start(pcmStream, sr, enc) │    │                            │
+│   sendPort.send(PushPcm(bytes, sr, enc))├───►│ ReceivePort listener       │
+│                                         │    │   _decodePcm16Mono(bytes)  │
+│ ReceivePort listener:                   │    │   engine.pushSamples(...)  │
+│   DspResultMessage(json) → DspResult    │◄───┤ Timer.periodic → sendPort  │
+│   WorkerError(message) → CaptureError   │    │   StopWorker → dispose()   │
+│                                         │    │                            │
+│ Stream<DspResult> results               │    │                            │
+│   → StreamBuilder<DspResult> в UI       │    │                            │
+└─────────────────────────────────────────┘    └────────────────────────────┘
 ```
 
-## Capture Package Choice
+## Выбор пакета захвата
 
-`package:record` 5.x — pure Dart, supports `startStream(RecordConfig)` returning a `Stream<Uint8List>` of PCM bytes on every supported platform (Android, iOS, macOS, Linux, Web). The plugin runs its own native capture thread (AudioRecord on Android, AVAudioEngine on iOS), so the Dart-side stream callback receives buffers off the UI thread already. No platform channels written by us — the bridge stays UI-free.
+`package:record` 5.x — pure Dart, поддерживает `startStream(RecordConfig)`, возвращающий `Stream<Uint8List>` с PCM-байтами на каждой поддерживаемой платформе (Android, iOS, macOS, Linux, Web). Плагин держит собственный нативный поток захвата (AudioRecord на Android, AVAudioEngine на iOS), поэтому callback Dart-стрима получает буферы уже не на UI-потоке. Мы не пишем собственных platform channels — мост остаётся свободным от UI.
 
-## Isolate Model
+## Изолятная модель
 
-We use a **dedicated DSP worker isolate**, not a dedicated capture isolate. Justification: `package:record`'s plugin platform channels are not designed to be initialized in a background Dart isolate; opening the recorder there risks "no implementation found" failures on first call. Capture itself is already off the UI thread (native side); the work that benefits from isolation is the FFI poll, JSON serialization, and PCM16 → f32 conversion — those move into the worker.
+Используется **выделенный изолят DSP-воркера**, не отдельный изолят захвата. Обоснование: platform channels плагина `package:record` не рассчитаны на инициализацию в фоновом Dart-изоляте; открытие рекордера там грозит ошибками «no implementation found» на первом вызове. Сам захват уже идёт вне UI-потока (на нативной стороне); работа, выигрывающая от изоляции, — это поллинг FFI, сериализация JSON и конверсия PCM16 → f32 — она уезжает в воркер.
 
-Spawn lifecycle:
+Жизненный цикл запуска:
 
-1. `CaptureBridge.start()` is called from `_LiveCaptureScaffold.initState` after permission grant.
+1. `CaptureBridge.start()` вызывается из `_LiveCaptureScaffold.initState` после выдачи разрешения.
 2. `Isolate.spawn(dspWorkerEntry, WorkerInit{replyPort, libraryPath, sampleRate, pollIntervalMs})`.
-3. Worker opens its own `DspEngine` via `DspEngine.open(libraryPath:)` — each isolate must load the dylib in its own VM, but the FFI ABI is process-shared.
-4. Worker sends `WorkerReady`; main signals start by listening to the local `package:record` stream and forwarding `PushPcm` messages over the SendPort.
-5. Worker drives its own `Timer.periodic` calling `engine.analyzeJson()` and sends `DspResultMessage(json)` back. The engine's internal stream timer is disabled in this configuration (poll interval set to 1 hour) — the worker owns the poll cadence.
-6. `CaptureBridge.dispose()` sends `StopWorker`, the worker frees its handle, then the bridge kills the isolate.
+3. Воркер открывает собственный `DspEngine` через `DspEngine.open(libraryPath:)` — каждому изоляту нужна своя загрузка dylib в своей VM, но ABI FFI разделяется на уровне процесса.
+4. Воркер шлёт `WorkerReady`; main стартует, подписываясь на локальный стрим `package:record` и пересылая `PushPcm` через SendPort.
+5. Воркер крутит собственный `Timer.periodic` с вызовом `engine.analyzeJson()` и шлёт обратно `DspResultMessage(json)`. Внутренний поллинг engine отключён в этой конфигурации (poll interval выставлен в 1 час) — каденс владеет воркер.
+6. `CaptureBridge.dispose()` шлёт `StopWorker`, воркер освобождает хэндл, и мост убивает изолят.
 
-## Frame Format Reconciliation
+## Согласование формата кадров
 
-| Platform | `package:record` output | Bridge conversion                          | DSP input    |
-| -------- | ----------------------- | ------------------------------------------ | ------------ |
-| Android  | PCM16 signed LE, mono   | `s / 32768.0` → Float32                    | f32 mono     |
-| iOS      | PCM16 signed LE, mono   | `s / 32768.0` → Float32                    | f32 mono     |
-| macOS    | PCM16 signed LE, mono   | `s / 32768.0` → Float32                    | f32 mono     |
-| Linux    | PCM16 signed LE, mono   | `s / 32768.0` → Float32                    | f32 mono     |
+| Платформа | Выход `package:record`  | Конверсия в мосте                          | Вход DSP    |
+| --------- | ----------------------- | ------------------------------------------ | ----------- |
+| Android   | PCM16 signed LE, mono   | `s / 32768.0` → Float32                    | f32 mono    |
+| iOS       | PCM16 signed LE, mono   | `s / 32768.0` → Float32                    | f32 mono    |
+| macOS     | PCM16 signed LE, mono   | `s / 32768.0` → Float32                    | f32 mono    |
+| Linux     | PCM16 signed LE, mono   | `s / 32768.0` → Float32                    | f32 mono    |
 
-- **Sample rate:** we ask the platform for 48 kHz; no resampling is performed. If a device cannot deliver 48 kHz, `package:record` rounds to the nearest supported rate — the worker forwards the announced rate into `pushSamples`, so the DSP sees the true rate.
-- **Channels:** mono via `RecordConfig(numChannels: 1)`. No downmix code needed; the bridge rejects any chunk whose declared encoding it does not know rather than guessing.
-- **dtype/byte order:** `pcm16bits` is signed 16-bit little-endian. Conversion happens in `apps/mobile/lib/capture/dsp_worker.dart::_decodePcm16Mono`, in the worker isolate. The DSP crate is never asked to handle integer samples.
+- **Частота дискретизации:** запрашиваем у платформы 48 kHz; ресэмплинг не делаем. Если устройство не может выдать 48 kHz, `package:record` округлит до ближайшей поддерживаемой частоты — воркер пробрасывает заявленную частоту в `pushSamples`, поэтому DSP видит реальную частоту.
+- **Каналы:** mono через `RecordConfig(numChannels: 1)`. Микширования делать не надо; мост отвергает чанк, чей объявленный encoding ему неизвестен, а не гадает.
+- **dtype/порядок байт:** `pcm16bits` — signed 16-bit little-endian. Конверсия живёт в `apps/mobile/lib/capture/dsp_worker.dart::_decodePcm16Mono`, в изоляте воркера. DSP-крейт никогда не должен иметь дело с целочисленными сэмплами.
 
-The bridge also supports `pcm_f32le` for future ports that already deliver f32; the encoding is negotiated explicitly via `PushPcm.encoding` so a surprise format yields a `WorkerError`, not a silent miscount.
+Мост также поддерживает `pcm_f32le` для будущих портов, которые уже отдают f32; encoding согласуется явно через `PushPcm.encoding`, поэтому сюрприз-формат даст `WorkerError`, а не тихую ошибку счёта.
 
-## Latency Policy
+## Политика задержек
 
-- Audio callbacks do not allocate beyond the per-chunk `Float32List` (negligible — a 100 ms chunk at 48 kHz is 9600 samples = 38 KB).
-- The UI isolate sees no raw audio bytes; only typed `DspResult` snapshots reach the widget tree.
-- Worker poll interval defaults to 50 ms (~20 Hz). Adjustable via `CaptureBridge(pollInterval:)`.
-- First-lock and stable-lock timing acceptance (under 6 s / under 12 s on clean signal) is enforced by `core/dsp/tests/streaming.rs` and exercised end-to-end through the FFI by `apps/mobile/test/dsp_engine_test.dart`.
+- Аудио-callback'и не аллоцируют ничего, кроме `Float32List` на чанк (пренебрежимо — 100 мс чанк на 48 kHz это 9600 сэмплов = 38 КБ).
+- UI-изолят не видит сырых аудио-байт; до дерева виджетов доходят только типизированные `DspResult`-снэпшоты.
+- Интервал поллинга воркера — 50 мс по умолчанию (~20 Hz). Регулируется через `CaptureBridge(pollInterval:)`.
+- Приёмочный тайминг первого и стабильного захвата (до 6 с / до 12 с на чистом сигнале) обеспечивается `core/dsp/tests/streaming.rs` и проигрывается end-to-end через FFI в `apps/mobile/test/dsp_engine_test.dart`.
 
-## Permission Policy
+## Политика разрешений
 
-- Android: `<uses-permission android:name="android.permission.RECORD_AUDIO" />` in `apps/mobile/android/app/src/main/AndroidManifest.xml`. Runtime request via `package:permission_handler` on first launch.
-- iOS: `NSMicrophoneUsageDescription` in `apps/mobile/ios/Runner/Info.plist` with user-readable copy explaining on-device processing and that no audio is recorded or sent.
-- Denial path: `PermissionDeniedScreen` renders an explainer and either re-prompts (`Permission.microphone.request()`) on soft denial or opens system settings (`openAppSettings()`) on permanent denial. The app never silently falls back to a synthetic audio source.
+- Android: `<uses-permission android:name="android.permission.RECORD_AUDIO" />` в `apps/mobile/android/app/src/main/AndroidManifest.xml`. Runtime-запрос через `package:permission_handler` на первом запуске.
+- iOS: `NSMicrophoneUsageDescription` в `apps/mobile/ios/Runner/Info.plist` с понятным пользователю текстом про обработку на устройстве и отсутствие записи/отправки аудио.
+- Путь отказа: `PermissionDeniedScreen` показывает пояснение и либо повторно запрашивает (`Permission.microphone.request()`) при мягком отказе, либо открывает системные настройки (`openAppSettings()`) при постоянном отказе. Приложение никогда тихо не подменяет вход синтетическим аудио-источником.
 
-## Anti-Fake Guarantees
+## Anti-fake гарантии
 
-- `apps/mobile/lib/` contains no hardcoded BPM literals (verified via grep). The only BPM-shaped value in production code is `bpm == null ? '— —' : bpm.toStringAsFixed(1)` in `main_screen.dart`, which reads from `DspResult.primaryBpm`.
-- If `record` fails to start, `_LiveCaptureScaffold` surfaces the exception via a labelled error screen — the worker isolate is not asked to fabricate frames.
-- If the FFI dylib fails to load in the worker, the worker emits `WorkerError("failed to open native DSP: …")` over the SendPort. `CaptureBridge` forwards this on its `errors` stream and `MainScreen` renders an error banner; the worker exits cleanly.
-- UI subscribes only to `CaptureBridge.results`. No parallel state, no fallback timer, no demo source.
+- В `apps/mobile/lib/` нет хардкодных BPM-литералов (проверено grep). Единственное BPM-подобное значение в продакшен-коде — `bpm == null ? '— —' : bpm.toStringAsFixed(1)` в `main_screen.dart`, и оно читает из `DspResult.primaryBpm`.
+- Если `record` не стартует, `_LiveCaptureScaffold` показывает исключение через помеченный экран ошибки — изолят воркера не просят фабриковать кадры.
+- Если в воркере не загружается FFI dylib, воркер эмитит `WorkerError("failed to open native DSP: …")` через SendPort. `CaptureBridge` перепосылает это по своему `errors`-стриму, а `MainScreen` рендерит баннер ошибки; воркер выходит чисто.
+- UI подписан только на `CaptureBridge.results`. Никакого параллельного состояния, никакого fallback-таймера, никакого демо-источника.
 
-## Debug Requirements
+## Требования к отладочному режиму
 
-The debug screen (`apps/mobile/lib/ui/debug_screen.dart`) renders:
+Отладочный экран (`apps/mobile/lib/ui/debug_screen.dart`) рендерит:
 
-- Full `candidates[]` list with `bpm`, `relation` (including `main`, `raw`, `half_time`, `double_time`, `normalized_from_half`, `normalized_from_double`), `score`, and `source_bpm` — half- and double-time candidates are always visible.
-- All `signal_quality` fields (`input_level_dbfs`, `peak_dbfs`, `clipping`, `clipped_frame_ratio`, `noise_level`, `snr_estimate_db`, `silence`, `breakdown_likely`).
+- полный список `candidates[]` с `bpm`, `relation` (включая `main`, `raw`, `half_time`, `double_time`, `normalized_from_half`, `normalized_from_double`), `score` и `source_bpm` — half- и double-time кандидаты всегда видимы;
+- все поля `signal_quality` (`input_level_dbfs`, `peak_dbfs`, `clipping`, `clipped_frame_ratio`, `noise_level`, `snr_estimate_db`, `silence`, `breakdown_likely`);
 - `DspTiming` (analysis time, window, hop, first-lock time).
 
-Both screens use the same `Stream<DspResult>` backed by `CaptureBridge.results`; no screen polls the engine.
+Оба экрана используют один и тот же `Stream<DspResult>`, питаемый `CaptureBridge.results`; ни один экран не поллит engine сам.

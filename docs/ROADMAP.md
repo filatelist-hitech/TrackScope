@@ -1,90 +1,90 @@
 # Roadmap
 
-## Phase 1: Offline DSP Lab
+## Phase 1: офлайн-DSP-лаборатория
 
-Goal: prove deterministic BPM detection against synthetic hitech fixtures before UI work.
+Цель: доказать детерминированное определение BPM на синтетических hitech-фикстурах до UI-работы.
 
-Deliverables:
+Артефакты:
 
-- Rust `core/dsp` result contract and engine skeleton
-- synthetic fixture generator
-- offline analyzer CLI
-- clean click/kick tests at 170, 180, 190, 200, and 220 BPM
-- half-time and double-time trap tests
-- silence and noise-only negative tests
+- Контракт результата и каркас движка Rust `core/dsp`.
+- Генератор синтетических фикстур.
+- CLI офлайн-анализатора.
+- Тесты на чистый click/kick при 170, 180, 190, 200 и 220 BPM.
+- Тесты half-time и double-time ловушек.
+- Негативные тесты на тишину и шум-без-сигнала.
 
-Exit criteria:
+Критерии выхода:
 
-- clean synthetic accuracy within +/-1 BPM
-- no fake BPM on silence/noise-only
-- candidate list exposes raw and normalized candidates
-- offline report includes confidence, lock state, signal quality, and pass/fail
+- точность на чистой синтетике в пределах ±1 BPM;
+- нет фейкового BPM на тишине/шуме;
+- список кандидатов содержит raw и нормализованных кандидатов;
+- офлайн-отчёт содержит уверенность, состояние захвата, качество сигнала и pass/fail.
 
-## Phase 2: Streaming DSP Core
+## Phase 2: потоковое DSP-ядро
 
-Goal: make the detector work incrementally on audio chunks.
+Цель: детектор работает инкрементально на аудио-чанках.
 
-Deliverables:
+Артефакты:
 
-- ring buffer
-- rolling onset history
-- candidate history
-- confidence engine
-- lock state machine
-- first-lock and stable-lock timing tests
+- кольцевой буфер;
+- скользящая история онсетов;
+- история кандидатов;
+- движок уверенности;
+- автомат состояния захвата;
+- тесты тайминга первого и стабильного захвата.
 
-Exit criteria:
+Критерии выхода:
 
-- first usable lock under 6 seconds on clean synthetic input
-- stable lock under 12 seconds on valid hitech input
-- no false `STABLE` on silence/noise-only
-- `BREAKDOWN`, `CLIPPED_MIC`, and `UNSTABLE` are exercised by tests
+- первый рабочий захват до 6 секунд на чистом синтетическом входе;
+- стабильный захват до 12 секунд на валидном hitech-входе;
+- никакого ложного `STABLE` на тишине/шуме;
+- `BREAKDOWN`, `CLIPPED_MIC` и `UNSTABLE` покрыты тестами.
 
-## Phase 3: Mobile Audio Bridge
+## Phase 3: мобильный аудио-мост
 
-Goal: feed real microphone audio into the already-tested DSP engine.
+Цель: подавать живой аудио-сигнал с микрофона в уже протестированный DSP-движок.
 
-Deliverables:
+Артефакты:
 
-- microphone permission flow
-- native audio bridge
-- sample-rate conversion policy
-- platform latency notes
-- debug screen that renders the DSP contract
-- session history storage
+- сценарий выдачи разрешения микрофона;
+- нативный аудио-мост;
+- политика конверсии частоты дискретизации;
+- заметки о платформенной задержке;
+- отладочный экран, рендерящий DSP-контракт;
+- хранилище истории сессий.
 
-Exit criteria:
+Критерии выхода:
 
-- mobile code does not calculate BPM directly
-- permission and latency behavior is documented per platform
-- debug mode shows candidates and confidence
+- мобильный код не считает BPM напрямую;
+- поведение разрешений и задержки задокументировано на каждую платформу;
+- debug-режим показывает кандидатов и уверенность.
 
-## Phase 4: Hardening
+## Phase 4: закалка
 
-Goal: handle club noise, clipping, breakdowns, unstable tempo, and real hitech recordings.
+Цель: обработать клубный шум, клиппинг, брейкдауны, нестабильный темп и реальные hitech-записи.
 
-Deliverables:
+Артефакты:
 
-- curated test recordings
-- clipped microphone regression fixtures
-- noisy club fixtures
-- breakdown/no-kick scenarios
-- algorithm comparison reports
-- release checklist
+- курируемые тестовые записи;
+- регрессионные фикстуры с клиппингом микрофона;
+- шумные клубные фикстуры;
+- сценарии brейкдауна / без kick'а;
+- отчёты сравнения алгоритмов;
+- релизный чеклист.
 
-Exit criteria:
+Критерии выхода:
 
-- noisy mic target accuracy within +/-2-4 BPM when signal quality is adequate
-- clipped input warns clearly and does not overstate confidence
-- breakdown sections do not preserve stale `STABLE`
-- release documentation identifies known limitations
+- целевая точность на шумном микрофоне в пределах ±2–4 BPM при адекватном качестве сигнала;
+- клиппирующий вход явно предупреждает и не завышает уверенность;
+- брейкдауны не сохраняют устаревший `STABLE`;
+- релизная документация фиксирует известные ограничения.
 
-## Next Patch
+## Следующий патч
 
-Port the Phase 1 offline detector into the Rust DSP engine:
+Перенести Phase 1 офлайн-детектор в Rust-движок DSP:
 
-1. Move signal-quality measurement into Rust.
-2. Port onset envelope extraction and tempo autocorrelation into Rust.
-3. Add Rust synthetic fixtures mirroring `core/tests/helpers/synthetic_fixtures.py`.
-4. Validate Rust against 170, 180, 190, 200, 220, 100 half-time, 400 double-time, silence, noise, clipped input, breakdown, and dense bassline cases.
-5. Keep Flutter limited to the bridge shell until Rust emits verified `DspResult` snapshots.
+1. Перенести измерение signal-quality в Rust.
+2. Перенести извлечение огибающей онсетов и автокорреляцию темпа в Rust.
+3. Добавить Rust-синтетические фикстуры, зеркалирующие `core/tests/helpers/synthetic_fixtures.py`.
+4. Валидировать Rust на кейсах 170, 180, 190, 200, 220, 100 half-time, 400 double-time, тишина, шум, клиппинг, брейкдаун и плотный бас.
+5. Держать Flutter в рамках только bridge-shell, пока Rust не начнёт эмитить проверенные снэпшоты `DspResult`.

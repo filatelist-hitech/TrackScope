@@ -1,7 +1,8 @@
-// Debug screen. Subscribes to the same `CaptureBridge.results` stream
-// the main screen uses; renders the full candidate list (raw + half /
-// double / normalized) and every field of `signal_quality`. Half- and
-// double-time candidates are always shown — the UI never hides them.
+// Debug-экран. Подписывается на тот же поток `CaptureBridge.results`,
+// что и главный экран; рисует полный список BPM-кандидатов (raw +
+// half / double / normalized) и каждое поле `signal_quality`.
+// Кандидаты половинного и удвоенного темпа показываются всегда — UI
+// их никогда не прячет.
 
 import 'package:flutter/material.dart';
 
@@ -15,20 +16,20 @@ class DebugScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Debug')),
+      appBar: AppBar(title: const Text('Отладка')),
       body: StreamBuilder<DspResult>(
         stream: results,
         builder: (context, snap) {
           final r = snap.data;
           if (r == null) {
             return const Center(
-                child: Text('Waiting for the first DspResult snapshot…'));
+                child: Text('Ожидание первого снапшота DspResult…'));
           }
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               _Section(
-                title: 'Candidates (${r.candidates.length})',
+                title: 'BPM-кандидаты (${r.candidates.length})',
                 child: Column(
                   children: [
                     for (final c in r.candidates) _CandidateRow(candidate: c),
@@ -37,12 +38,12 @@ class DebugScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               _Section(
-                title: 'Signal quality',
+                title: 'Качество сигнала',
                 child: _SignalQualityTable(quality: r.signalQuality),
               ),
               const SizedBox(height: 16),
               _Section(
-                title: 'Timing',
+                title: 'Тайминги',
                 child: _TimingTable(timing: r.timing),
               ),
             ],
@@ -100,7 +101,7 @@ class _CandidateRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              'score ${candidate.score.toStringAsFixed(3)}'
+              'оценка ${candidate.score.toStringAsFixed(3)}'
               '${candidate.sourceBpm != null ? '  ← ${candidate.sourceBpm!.toStringAsFixed(1)}' : ''}',
               style: const TextStyle(fontSize: 12),
             ),

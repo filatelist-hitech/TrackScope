@@ -1,7 +1,7 @@
-// Typed view over the JSON `DspResult` emitted by the Rust DSP through
-// the FFI boundary. Mirrors the contract documented in
-// `docs/DSP_ALGORITHM.md`. This file does no BPM math — it only parses
-// what Rust already decided.
+// Типизированное представление JSON-`DspResult`, который Rust-DSP
+// эмитит через границу FFI. Зеркалит контракт, описанный в
+// `docs/DSP_ALGORITHM.md`. Никаких вычислений BPM в этом файле — он
+// только парсит то, что Rust уже решил.
 
 import 'dart:convert';
 
@@ -153,8 +153,8 @@ class DspResult {
     required this.timing,
   });
 
-  /// `null` when the DSP has not cleared the lock threshold. UI MUST
-  /// render this as "no value" — never invent a placeholder BPM.
+  /// `null`, когда DSP не перешагнул порог захвата. UI ОБЯЗАН отрисовать
+  /// это как «нет значения» — никогда не выдумывать плейсхолдерный BPM.
   final double? primaryBpm;
   final double confidence;
   final LockState lockState;

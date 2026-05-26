@@ -1,25 +1,25 @@
 # core/ffi
 
-Native bridge boundary for Flutter/mobile integration.
+Граница нативного моста для интеграции с Flutter / мобильным шеллом.
 
-Responsibilities:
+Ответственности:
 
-- own C ABI handles for `DspEngine`
-- accept PCM frame pointers from platform audio code
-- forward audio into Rust DSP without calculating BPM
-- expose serialized `DspResult` snapshots via `hitech_bpm_engine_analyze_json` (caller frees with `hitech_bpm_string_free`)
+- владеть C ABI-хэндлами `DspEngine`;
+- принимать указатели на PCM-кадры из платформенного аудио-кода;
+- пробрасывать аудио в Rust DSP без вычисления BPM самостоятельно;
+- отдавать сериализованные снэпшоты `DspResult` через `hitech_bpm_engine_analyze_json` (вызывающий освобождает через `hitech_bpm_string_free`).
 
-## C ABI surface
+## Поверхность C ABI
 
-| Function | Purpose |
+| Функция | Назначение |
 | --- | --- |
-| `hitech_bpm_engine_new()` | Allocate a streaming engine with hitech defaults. Returns an opaque `*mut HitechBpmEngine`. |
-| `hitech_bpm_engine_free(engine)` | Release an engine. Safe on null. |
-| `hitech_bpm_engine_reset(engine)` | Drop rolling state without reallocating buffers. |
-| `hitech_bpm_engine_push_samples(engine, samples, len, sample_rate) -> bool` | Append PCM. Allocation-light; safe to call from the audio thread. Returns `false` on null/zero-length input. |
-| `hitech_bpm_engine_analyze_json(engine) -> *mut c_char` | Serialize the current rolling `DspResult` as UTF-8 JSON. Caller owns the buffer. Intended for UI-rate polling (~10–30 Hz), not the audio thread. Returns null on invalid handle. |
-| `hitech_bpm_string_free(ptr)` | Release a string returned by `analyze_json`. Safe on null. |
+| `hitech_bpm_engine_new()` | Аллоцирует потоковый движок с hitech-дефолтами. Возвращает непрозрачный `*mut HitechBpmEngine`. |
+| `hitech_bpm_engine_free(engine)` | Освобождает движок. Безопасна на null. |
+| `hitech_bpm_engine_reset(engine)` | Сбрасывает скользящее состояние без переаллокации буферов. |
+| `hitech_bpm_engine_push_samples(engine, samples, len, sample_rate) -> bool` | Дописывает PCM. Аллокационно лёгкая; безопасна для вызова из аудио-потока. Возвращает `false` на null/нулевую длину. |
+| `hitech_bpm_engine_analyze_json(engine) -> *mut c_char` | Сериализует текущий скользящий `DspResult` как UTF-8 JSON. Буфером владеет вызывающий. Рассчитан на поллинг на UI-частоте (~10–30 Hz), не из аудио-потока. Возвращает null на невалидном хэндле. |
+| `hitech_bpm_string_free(ptr)` | Освобождает строку, вернутую `analyze_json`. Безопасна на null. |
 
-JSON keys match the `DspResult` contract documented in `docs/DSP_ALGORITHM.md`: `primary_bpm`, `confidence`, `lock_state`, `signal_quality`, `candidates`, `timing`.
+Ключи JSON соответствуют контракту `DspResult`, описанному в `docs/DSP_ALGORITHM.md`: `primary_bpm`, `confidence`, `lock_state`, `signal_quality`, `candidates`, `timing`.
 
-This layer must remain thin. Candidate ranking, confidence, clipping, and lock state belong in `core/dsp`.
+Этот слой должен оставаться тонким. Ранжирование кандидатов, уверенность, клиппинг и состояние захвата живут в `core/dsp`.

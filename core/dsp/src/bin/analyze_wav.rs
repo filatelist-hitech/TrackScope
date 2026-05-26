@@ -1,8 +1,8 @@
-//! Standalone Rust analyzer CLI for cross-language parity checks.
+//! Автономный Rust-CLI-анализатор для кросс-языковых parity-проверок.
 //!
-//! Reads a mono 16-bit PCM WAV file from `--input <path>` and emits the
-//! `DspResult` as JSON on stdout. Intended to be invoked by
-//! `tools/offline-lab/parity.py`, not by `cargo test`.
+//! Читает моно 16-битный PCM WAV-файл из `--input <path>` и выводит
+//! `DspResult` в виде JSON на stdout. Предназначен для вызова из
+//! `tools/offline-lab/parity.py`, а не из `cargo test`.
 
 use std::env;
 use std::fs;
@@ -60,9 +60,9 @@ fn main() -> ExitCode {
     }
 }
 
-/// Minimal 16-bit PCM WAV reader matching the format written by
-/// `core/tests/helpers/synthetic_fixtures.py::write_wav` and Python's
-/// `wave` module (1 channel, 16-bit signed little-endian samples).
+/// Минимальный ридер 16-битных PCM WAV-файлов, совместимый с форматом,
+/// который создаёт `core/tests/helpers/synthetic_fixtures.py::write_wav`
+/// и модуль Python `wave` (1 канал, 16-бит, знаковый little-endian).
 fn read_pcm16_wav(bytes: &[u8]) -> Result<(Vec<f32>, u32), String> {
     if bytes.len() < 44 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
         return Err("not a RIFF/WAVE file".to_string());

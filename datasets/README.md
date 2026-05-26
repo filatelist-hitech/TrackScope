@@ -1,13 +1,13 @@
 # datasets
 
-Audio fixture storage for synthetic and curated QA material.
+Хранилище аудио-фикстур для синтетического и курируемого QA-материала.
 
-Large or licensed audio files require an explicit dataset policy before committing.
+Большие или лицензированные аудиофайлы требуют явной dataset-политики перед коммитом.
 
 ```text
-synthetic/     Generated click tracks, kick pulses, traps, silence, and noise.
-hitech/        Curated hitech / psytrance excerpts with licensing notes.
-noisy_club/    Club-like noise and microphone contamination.
-clipped_mic/   Clipped microphone examples.
-breakdowns/    No-kick and low-onset sections.
+synthetic/     Сгенерированные click-треки, kick-пульсы, ловушки, тишина и шум.
+hitech/        Курируемые hitech / psytrance-фрагменты с лицензионными заметками.
+noisy_club/    Клубный шум и микрофонные загрязнения.
+clipped_mic/   Примеры клиппирующего микрофона.
+breakdowns/    Без-kick и low-onset секции.
 ```

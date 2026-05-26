@@ -1,6 +1,7 @@
-// Live BPM screen. Subscribes to `CaptureBridge.results` via a
-// StreamBuilder and renders every field from the latest `DspResult`
-// directly — no derived state, no fallback values, no fake BPM.
+// Живой экран BPM. Через StreamBuilder подписывается на
+// `CaptureBridge.results` и напрямую рисует каждое поле из последнего
+// `DspResult` — никакого производного состояния, никаких запасных
+// значений, никакого фейкового BPM.
 
 import 'dart:async';
 import 'dart:collection';
@@ -21,8 +22,8 @@ class MainScreen extends StatefulWidget {
   final Stream<DspResult> results;
   final Stream<CaptureError> errors;
 
-  /// How the debug screen is constructed when the user taps the bug
-  /// icon. Injected so widget tests can substitute a stub builder.
+  /// Как строится debug-экран, когда пользователь нажимает иконку жука.
+  /// Инжектится, чтобы виджет-тесты могли подставить стаб-builder.
   final WidgetBuilder debugBuilder;
 
   @override
@@ -65,7 +66,7 @@ class _MainScreenState extends State<MainScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.bug_report_outlined),
-            tooltip: 'Debug',
+            tooltip: 'Отладка',
             onPressed: () {
               Navigator.of(context).push(MaterialPageRoute(
                 builder: widget.debugBuilder,
@@ -117,7 +118,7 @@ class _BpmReadout extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('PRIMARY BPM',
+        const Text('ОСНОВНОЙ BPM',
             style: TextStyle(letterSpacing: 1.5, fontSize: 12)),
         const SizedBox(height: 4),
         Text(
@@ -146,7 +147,7 @@ class _ConfidenceAndLock extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Confidence $pct%'),
+              Text('Уверенность $pct%'),
               const SizedBox(height: 4),
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
@@ -211,7 +212,7 @@ class _SignalQualityMeter extends StatelessWidget {
   Widget build(BuildContext context) {
     final sq = result?.signalQuality;
     final dbfs = sq?.inputLevelDbfs;
-    // -60 dBFS → 0.0, 0 dBFS → 1.0 (clamped).
+    // -60 dBFS → 0.0, 0 dBFS → 1.0 (с ограничением).
     final norm =
         dbfs == null ? 0.0 : ((dbfs + 60.0) / 60.0).clamp(0.0, 1.0);
     final clipping = sq?.clipping ?? false;
@@ -222,7 +223,7 @@ class _SignalQualityMeter extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                'Input level: ${dbfs?.toStringAsFixed(1) ?? '—'} dBFS',
+                'Уровень входа: ${dbfs?.toStringAsFixed(1) ?? '—'} dBFS',
                 style: const TextStyle(fontSize: 12),
               ),
             ),
@@ -233,7 +234,7 @@ class _SignalQualityMeter extends StatelessWidget {
                 decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.error,
                     borderRadius: BorderRadius.circular(4)),
-                child: const Text('CLIPPING',
+                child: const Text('КЛИППИНГ',
                     style: TextStyle(
                         color: Colors.white,
                         fontSize: 10,
@@ -265,7 +266,7 @@ class _HistorySparkline extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Recent BPM',
+        const Text('НЕДАВНИЙ BPM',
             style: TextStyle(letterSpacing: 1.5, fontSize: 12)),
         const SizedBox(height: 8),
         Expanded(
@@ -344,7 +345,7 @@ class _ErrorBanner extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Capture error: ${error.message}',
+              'Ошибка захвата: ${error.message}',
               style: TextStyle(
                   color: Theme.of(context).colorScheme.onErrorContainer),
             ),

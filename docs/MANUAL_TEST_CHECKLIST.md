@@ -1,73 +1,73 @@
-# Manual Test Checklist — Phase 3 step 2
+# Ручной тест-чеклист — Phase 3 шаг 2
 
-Things that automated tests cannot validate. Run these on hardware before merging the Phase 3 mobile bridge to `stage`.
+То, что автоматические тесты не могут проверить. Прогоните на железе перед мерджем Phase 3 мобильного моста в `stage`.
 
-## Setup
+## Подготовка
 
-- [ ] Workspace built: `cargo build --release -p hitech-bpm-ffi` from repo root.
-- [ ] `flutter pub get` clean in `apps/mobile/`.
-- [ ] `flutter analyze` clean.
-- [ ] `flutter test` green (FFI + widget tests).
-- [ ] Hardware: at least one of:
-  - Android device or emulator with API ≥ 24
-  - iOS device or simulator with iOS ≥ 12
-- [ ] Reference audio: a phone or speaker that can play a known-BPM track (suggested: a 200 BPM hitech mix, or a metronome at 200 BPM).
+- [ ] Воркспейс собран: `cargo build --release -p hitech-bpm-ffi` из корня репозитория.
+- [ ] `flutter pub get` отработал чисто в `apps/mobile/`.
+- [ ] `flutter analyze` без ошибок.
+- [ ] `flutter test` зелёный (FFI + widget-тесты).
+- [ ] Железо: хотя бы одно из:
+  - Android-устройство или эмулятор с API ≥ 24;
+  - iOS-устройство или симулятор с iOS ≥ 12.
+- [ ] Опорное аудио: телефон или колонка, которая может проиграть трек с известным BPM (рекомендуется: hitech-микс 200 BPM или метроном 200 BPM).
 
-## Build & launch
+## Сборка и запуск
 
-- [ ] `cd apps/mobile && flutter run` succeeds on the target device.
-- [ ] App icon appears with name "Hitech BPM Radar".
-- [ ] No crash on cold launch.
+- [ ] `cd apps/mobile && flutter run` стартует на целевом устройстве.
+- [ ] Появляется иконка приложения с названием «Hitech BPM Radar».
+- [ ] Нет краша на холодном старте.
 
-## Permission flow
+## Сценарий разрешений
 
-- [ ] First launch: system microphone permission prompt appears.
-- [ ] iOS prompt text contains "music around you" wording (matches `NSMicrophoneUsageDescription`).
-- [ ] On **grant**: app transitions to the live BPM screen within ~1 second; the BPM display starts as `— —` and updates as audio arrives.
-- [ ] On **deny** (soft): app lands on the `PermissionDeniedScreen` with title "We need the microphone to detect BPM".
-- [ ] Tapping "Grant microphone access" re-prompts. On grant the live screen appears without restart.
-- [ ] On **permanently deny** (Android: tick "Don't ask again"; iOS: deny twice): screen offers "Open system settings"; tapping it opens system settings for this app.
-- [ ] After enabling the permission in system settings and returning to the app, `PermissionGate` re-checks (via `didChangeAppLifecycleState`) and transitions to the live screen.
+- [ ] Первый запуск: появляется системный prompt разрешения микрофона.
+- [ ] Текст prompt'а на iOS содержит формулировку про «музыку вокруг» (соответствует `NSMicrophoneUsageDescription`).
+- [ ] При **grant**: приложение переходит на живой BPM-экран в течение ~1 секунды; индикатор BPM сначала показывает `— —` и обновляется по мере прихода аудио.
+- [ ] При **deny** (мягкий отказ): приложение попадает на `PermissionDeniedScreen` с заголовком «Нужен микрофон для определения BPM».
+- [ ] Нажатие «Выдать доступ к микрофону» повторно запрашивает разрешение. При grant живой экран появляется без рестарта.
+- [ ] При **постоянном запрете** (Android: галочка «Больше не спрашивать»; iOS: отказ дважды): экран предлагает «Открыть системные настройки»; нажатие открывает системные настройки этого приложения.
+- [ ] После включения разрешения в системных настройках и возврата в приложение `PermissionGate` перепроверяет (через `didChangeAppLifecycleState`) и переходит на живой экран.
 
-## Live capture path (with a reference speaker playing 200 BPM)
+## Путь живого захвата (с опорной колонкой, играющей 200 BPM)
 
-- [ ] Hold the phone within ~30 cm of the speaker.
-- [ ] Within 6 s, `lock_state` leaves `SEARCHING` (badge changes color/label).
-- [ ] Within 12 s, `lock_state` reads `STABLE` and `primary_bpm` is within 198–202 BPM.
-- [ ] Confidence percentage rises monotonically (small dips OK) toward ≥ 70%.
-- [ ] Input level dBFS meter is visible and moves with the speaker volume.
-- [ ] Recent BPM sparkline shows a roughly flat line near 200 once locked.
+- [ ] Удерживайте телефон в ~30 см от колонки.
+- [ ] В течение 6 с `lock_state` покидает `SEARCHING` (бэйдж меняет цвет/лейбл).
+- [ ] В течение 12 с `lock_state` показывает `STABLE`, а `primary_bpm` в пределах 198–202 BPM.
+- [ ] Процент уверенности растёт монотонно (небольшие просадки OK) к ≥ 70%.
+- [ ] Метр уровня входа в dBFS виден и реагирует на громкость колонки.
+- [ ] Spark-линия последних BPM показывает приблизительно прямую около 200 после захвата.
 
-## Negative / anti-fake spot checks
+## Негативные / anti-fake точечные проверки
 
-- [ ] Silence (mute speaker, cover mic): `lock_state` does NOT reach `STABLE`. `primary_bpm` returns to `— —`.
-- [ ] Very loud playback (hold phone against the speaker): `signal_quality.clipping` flips to `true`, the red `CLIPPING` chip appears, and `lock_state` does not stay `STABLE` indefinitely (`CLIPPED_MIC` allowed).
-- [ ] Half-time trap (play a 100 BPM kick): debug screen shows raw 100 BPM candidate visible AND a normalized 200 BPM candidate; primary should prefer 200 BPM in hitech mode.
+- [ ] Тишина (приглушить колонку, закрыть микрофон): `lock_state` НЕ достигает `STABLE`. `primary_bpm` возвращается к `— —`.
+- [ ] Очень громкое воспроизведение (поднести телефон вплотную к колонке): `signal_quality.clipping` переходит в `true`, появляется красный чип `CLIPPING`, и `lock_state` не остаётся в `STABLE` бесконечно (`CLIPPED_MIC` допустим).
+- [ ] Half-time-ловушка (играем 100 BPM kick): отладочный экран показывает raw-кандидат 100 BPM И нормализованный кандидат 200 BPM; в hitech-режиме основной должен предпочесть 200 BPM.
 
-## Debug screen
+## Отладочный экран
 
-- [ ] Tapping the bug icon opens the debug screen.
-- [ ] Candidate list shows ≥ 2 rows during STABLE playback.
-- [ ] Each candidate row shows BPM (2 decimals), relation label (`main` / `half_time` / `double_time` / `raw` / `normalized_from_*`), and score.
-- [ ] Signal-quality block shows every field from the DspResult contract (input_level_dbfs, peak_dbfs, clipping, clipped_frame_ratio, noise_level, snr_estimate_db, silence, breakdown_likely).
-- [ ] Timing block shows analysis_time_sec advancing.
-- [ ] Returning to the main screen does not restart capture (BPM does not drop back to `— —`).
+- [ ] Нажатие на иконку bug открывает отладочный экран.
+- [ ] Список кандидатов показывает ≥ 2 строки во время STABLE-воспроизведения.
+- [ ] Каждая строка кандидата показывает BPM (2 знака после запятой), relation-лейбл (`main` / `half_time` / `double_time` / `raw` / `normalized_from_*`) и score.
+- [ ] Блок signal-quality показывает каждое поле контракта DspResult (input_level_dbfs, peak_dbfs, clipping, clipped_frame_ratio, noise_level, snr_estimate_db, silence, breakdown_likely).
+- [ ] Блок timing показывает растущий analysis_time_sec.
+- [ ] Возврат на главный экран не перезапускает захват (BPM не сбрасывается обратно в `— —`).
 
-## UI smoothness
+## Плавность UI
 
-- [ ] Sustained 60-second capture: UI remains responsive; no jank scrolling the debug screen.
-- [ ] Background → foreground: app picks up where it left off (lock state may briefly transition through non-STABLE).
-- [ ] Force-quit and relaunch: permission is remembered; live screen appears without re-prompting.
+- [ ] Непрерывный 60-секундный захват: UI остаётся отзывчивым; нет джанков при скролле отладочного экрана.
+- [ ] Background → foreground: приложение продолжает с того места, где остановилось (состояние захвата может кратко проходить через не-`STABLE`).
+- [ ] Force-quit и перезапуск: разрешение запомнено; живой экран появляется без повторного запроса.
 
-## Known platform-specific items
+## Известные платформенные особенности
 
-- Android emulator: the host microphone is shared with the emulator only if AVD audio passthrough is enabled. The lock test may pass with the host-side speaker playing reference audio.
-- iOS simulator: there is no real microphone path; this checklist must be run on a physical iOS device for the live-capture rows.
-- macOS (if ever built as a desktop target): privacy settings → Microphone must include the app; otherwise the permission flow falls through to `PermissionDeniedScreen` despite Apple-issued grants.
+- Android-эмулятор: микрофон хоста делится с эмулятором только при включённом AVD audio passthrough. Тест захвата может пройти, если опорное аудио играет с колонок хоста.
+- iOS-симулятор: настоящего микрофонного пути нет; для строк живого захвата чеклист обязан запускаться на физическом iOS-устройстве.
+- macOS (если когда-либо собирается как desktop-target): в настройках privacy → Microphone должно быть это приложение; иначе сценарий разрешений падает на `PermissionDeniedScreen`, несмотря на выданные Apple grants.
 
-## Sign-off
+## Подписание
 
-- [ ] Hardware target(s) used: ____________________
-- [ ] OS version(s): ____________________
-- [ ] Date: ____________________
-- [ ] Tester: ____________________
+- [ ] Использованное железо: ____________________
+- [ ] Версии ОС: ____________________
+- [ ] Дата: ____________________
+- [ ] Тестировщик: ____________________

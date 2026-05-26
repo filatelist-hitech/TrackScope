@@ -1,10 +1,11 @@
-// Main-isolate orchestrator. Spawns the DSP worker isolate, forwards
-// raw PCM byte chunks from a caller-supplied audio source into the
-// worker via SendPort, and re-emits parsed `DspResult` snapshots on a
-// broadcast stream the UI subscribes to.
+// Оркестратор на главном изоляте. Спавнит изолят DSP-воркера, пересылает
+// сырые куски PCM-байтов из переданного вызывающим аудио-источника в
+// воркер через SendPort и заново эмитит распарсенные снапшоты `DspResult`
+// в broadcast-поток, на который подписывается UI.
 //
-// This class never inspects audio bytes. It never derives BPM. All
-// detection runs in the worker; UI sees only typed `DspResult`.
+// Этот класс никогда не инспектирует аудио-байты. Он никогда не выводит
+// BPM. Вся детекция выполняется в воркере; UI видит только типизированный
+// `DspResult`.
 
 import 'dart:async';
 import 'dart:isolate';
@@ -15,9 +16,9 @@ import '../dsp/engine.dart' show defaultLibraryName;
 import 'capture_messages.dart';
 import 'dsp_worker.dart';
 
-/// Surfaced to the UI when the capture path or the DSP worker hits an
-/// unrecoverable error. UI must render this — never swallow it and
-/// never substitute synthetic audio.
+/// Выносится в UI, когда путь захвата или DSP-воркер сталкивается с
+/// невосстановимой ошибкой. UI обязан её показать — никогда не глотать
+/// её молча и никогда не подменять синтетическим аудио.
 class CaptureError {
   const CaptureError(this.message, [this.stackTrace]);
   final String message;
@@ -47,21 +48,21 @@ class CaptureBridge {
   Completer<void>? _readyCompleter;
   bool _disposed = false;
 
-  /// Broadcast stream of rolling `DspResult` snapshots. UI subscribes
-  /// here; no other state source is allowed.
+  /// Broadcast-поток скользящих снапшотов `DspResult`. UI подписывается
+  /// сюда; никаких других источников состояния не допускается.
   Stream<DspResult> get results => _resultsCtrl.stream;
 
-  /// Broadcast stream of capture / worker errors. UI must render these
-  /// (e.g., a banner) — silent fallback to a synthetic source is
-  /// explicitly forbidden by the anti-fake rules.
+  /// Broadcast-поток ошибок захвата / воркера. UI обязан их показывать
+  /// (например, баннером) — тихий откат на синтетический источник явно
+  /// запрещён правилами anti-fake.
   Stream<CaptureError> get errors => _errorsCtrl.stream;
 
   bool get isRunning => _worker != null;
 
-  /// Spawn the worker if not already running, then bind [pcmStream] as
-  /// the live audio source. The bridge forwards each chunk into the
-  /// worker; encoding is announced explicitly so the worker rejects
-  /// surprise formats instead of guessing.
+  /// Спавнит воркер, если он ещё не запущен, и привязывает [pcmStream]
+  /// как живой аудио-источник. Мост пересылает каждый кусок в воркер;
+  /// кодировка анонсируется явно, чтобы воркер отвергал неожиданные
+  /// форматы вместо угадывания.
   Future<void> start({
     required Stream<Uint8List> pcmStream,
     required int sampleRate,
@@ -71,7 +72,7 @@ class CaptureBridge {
     if (_worker == null) {
       await _spawnWorker(sampleRate: sampleRate);
     }
-    // Drop any previous source.
+    // Сбрасываем предыдущий источник, если был.
     await _pcmSub?.cancel();
     _pcmSub = pcmStream.listen(
       (chunk) {
@@ -81,13 +82,14 @@ class CaptureBridge {
             PushPcm(chunk, sampleRate: sampleRate, encoding: encoding));
       },
       onError: (Object e, StackTrace st) =>
-          _errorsCtrl.add(CaptureError('audio source error: $e', st)),
+          _errorsCtrl.add(CaptureError('ошибка аудио-источника: $e', st)),
       cancelOnError: false,
     );
   }
 
-  /// Detach the audio source and ask the worker to drop rolling state.
-  /// The worker stays alive so a subsequent `start` is fast.
+  /// Отвязывает аудио-источник и просит воркер сбросить скользящее
+  /// состояние. Сам воркер остаётся живым, чтобы последующий `start`
+  /// был быстрым.
   Future<void> stop() async {
     await _pcmSub?.cancel();
     _pcmSub = null;
@@ -100,7 +102,8 @@ class CaptureBridge {
     await _pcmSub?.cancel();
     _pcmSub = null;
     _workerInbox?.send(const StopWorker());
-    // Give the worker a brief window to free its FFI handle cleanly.
+    // Даём воркеру короткое окно, чтобы он успел корректно освободить
+    // свой FFI-handle.
     await Future<void>.delayed(const Duration(milliseconds: 50));
     _worker?.kill(priority: Isolate.immediate);
     _worker = null;
@@ -129,7 +132,7 @@ class CaptureBridge {
     );
     await _readyCompleter!.future
         .timeout(const Duration(seconds: 5), onTimeout: () {
-      throw StateError('DSP worker did not signal ready within 5s');
+      throw StateError('DSP-воркер не сообщил о готовности за 5 с');
     });
   }
 
@@ -145,7 +148,7 @@ class CaptureBridge {
         final parsed = DspResult.parse(message.json);
         if (!_resultsCtrl.isClosed) _resultsCtrl.add(parsed);
       } catch (e, st) {
-        _errorsCtrl.add(CaptureError('failed to parse DspResult: $e', st));
+        _errorsCtrl.add(CaptureError('не удалось распарсить DspResult: $e', st));
       }
     } else if (message is WorkerError) {
       _errorsCtrl.add(CaptureError(message.message, message.stackTrace));
@@ -157,7 +160,7 @@ class CaptureBridge {
 
   void _ensureAlive() {
     if (_disposed) {
-      throw StateError('CaptureBridge has been disposed');
+      throw StateError('CaptureBridge уже освобождён');
     }
   }
 
@@ -165,9 +168,9 @@ class CaptureBridge {
     try {
       return defaultLibraryName();
     } catch (_) {
-      // On hosts where we don't recognize the platform, let the worker
-      // try the literal default — it'll surface a load failure via
-      // WorkerError, which UI must render.
+      // На хостах, где платформа не распознана, даём воркеру попробовать
+      // дефолтное имя — он поднимет ошибку загрузки через WorkerError,
+      // которую UI обязан показать.
       return 'libhitech_bpm_ffi';
     }
   }

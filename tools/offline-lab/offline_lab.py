@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline fixture generator and BPM analyzer."""
+"""Офлайн-генератор фикстур и BPM-анализатор."""
 
 from __future__ import annotations
 

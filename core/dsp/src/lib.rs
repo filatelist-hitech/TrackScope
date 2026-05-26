@@ -1,8 +1,8 @@
-//! Rust DSP core contract for hitech-bpm-radar.
+//! Контракт Rust DSP-ядра для hitech-bpm-radar.
 //!
-//! The current implementation intentionally starts with the public data model,
-//! signal-quality gates, and hitech candidate normalization. Realtime onset
-//! detection and candidate estimation will fill this boundary in Phase 2.
+//! Текущая реализация намеренно начинается с публичной модели данных,
+//! гейтов качества сигнала и hitech-нормализации кандидатов. Realtime-детекция
+//! онсетов и оценка кандидатов заполнят эту границу в Phase 2.
 
 use std::collections::VecDeque;
 
@@ -119,14 +119,14 @@ pub struct DspResult {
     pub timing: DspTiming,
 }
 
-/// Rolling onset state maintained by `DspEngine::push_samples`.
+/// Скользящее состояние онсетов, поддерживаемое `DspEngine::push_samples`.
 ///
-/// Each `push_samples` call appends new PCM to a bounded ring, drains
-/// full onset frames into `onset_history`, and drops the oldest onset
-/// samples that fall outside the analysis window. The per-call CPU cost
-/// is therefore proportional to the size of the *new* PCM chunk, not the
-/// elapsed stream duration — analysis of a stream that has been running
-/// for an hour costs the same as analysis after the first push.
+/// Каждый вызов `push_samples` добавляет новый PCM в ограниченное кольцо,
+/// сливает полные кадры онсетов в `onset_history` и отбрасывает самые
+/// старые сэмплы онсетов, выпадающие за пределы окна анализа. Поэтому
+/// CPU-стоимость на вызов пропорциональна размеру *нового* PCM-чанка,
+/// а не длительности стрима — анализ стрима, работающего уже час, стоит
+/// столько же, сколько анализ после первого push.
 #[derive(Debug, Clone)]
 pub struct DspEngine {
     config: DspConfig,
@@ -184,10 +184,10 @@ impl DspEngine {
             samples
         } else {
             resampled_owned = resample_linear(samples, sample_rate, self.config.sample_rate);
-            // SAFETY: `resampled_owned` lives until the end of this function.
-            // We borrow it here for the duration of the call.
-            // (We can't return a borrow tied to a function-local, so we use
-            // a small dance: read everything out of it now.)
+            // SAFETY: `resampled_owned` живёт до конца этой функции.
+            // Заимствуем его на время вызова.
+            // (Нельзя вернуть заимствование, привязанное к локальной переменной,
+            // поэтому делаем небольшой трюк: считываем всё прямо сейчас.)
             return self.push_normalized(&resampled_owned);
         };
 
@@ -199,7 +199,7 @@ impl DspEngine {
             .observed_samples
             .saturating_add(normalized.len() as u64);
 
-        // Bounded PCM ring: O(new) work, never grows past pcm_capacity.
+        // Ограниченное PCM-кольцо: O(новых) работы, не растёт выше pcm_capacity.
         for &sample in normalized {
             if self.pcm_window.len() >= self.pcm_capacity && self.pcm_capacity > 0 {
                 self.pcm_window.pop_front();
@@ -207,9 +207,9 @@ impl DspEngine {
             self.pcm_window.push_back(sample);
         }
 
-        // Onset extraction over only the newly arrived PCM. The frame
-        // loop carries the boundary in `pcm_pending` so a frame that
-        // straddles two pushes is still emitted exactly once.
+        // Извлечение онсетов только по только что пришедшему PCM. Цикл
+        // по кадрам несёт границу в `pcm_pending`, поэтому кадр,
+        // оседлавший два push'а, всё равно эмитится ровно один раз.
         self.pcm_pending.extend_from_slice(normalized);
         while self.pcm_pending.len() >= self.frame_size {
             let rms = frame_rms(&self.pcm_pending[..self.frame_size]);
@@ -288,8 +288,8 @@ fn frame_rms(frame: &[f32]) -> f32 {
         .sqrt() as f32
 }
 
-/// Apply the same post-processing as `onset_envelope` (median floor +
-/// peak normalize) to a precomputed flux series.
+/// Применить ту же постобработку, что и `onset_envelope` (медианный пол +
+/// пиковая нормализация), к предварительно вычисленному ряду flux.
 fn finalize_envelope(mut flux: Vec<f32>) -> Vec<f32> {
     if flux.len() < 4 {
         return Vec::new();
@@ -335,11 +335,11 @@ pub fn analyze_pcm(samples: &[f32], sample_rate: u32, config: DspConfig) -> DspR
     analyze_from_envelope(samples, sample_rate, &envelope, hop_sec, config)
 }
 
-/// Shared post-onset pipeline used by both the offline `analyze_pcm` entry
-/// point and the streaming `DspEngine::analyze` entry point. Given a PCM
-/// window, a finalized onset envelope, and the corresponding `hop_sec`,
-/// produce a `DspResult` with full scoring, candidate normalization, and
-/// lock-state classification.
+/// Общий пост-онсетный пайплайн, используемый и офлайн-точкой входа `analyze_pcm`,
+/// и потоковой точкой входа `DspEngine::analyze`. Принимает PCM-окно,
+/// финализированную огибающую онсетов и соответствующий `hop_sec`,
+/// возвращает `DspResult` с полным скорингом, нормализацией кандидатов
+/// и классификацией состояния захвата.
 fn analyze_from_envelope(
     samples: &[f32],
     sample_rate: u32,

@@ -1,11 +1,11 @@
 ---
-description: Trigger the reviewman subagent for a pre-merge review — anti-fake check, tests green, docs aligned, no STABLE without evidence.
+description: Триггернуть субагента reviewman для pre-merge-ревью — anti-fake-проверка, тесты зелёные, документация согласована, никакого STABLE без evidence.
 allowed-tools: Bash(git status:*), Bash(git diff:*), Read, Grep, Glob
 ---
 
-Use the **reviewman** subagent on the currently staged + unstaged changes.
+Использовать субагента **reviewman** на текущих staged + unstaged-изменениях.
 
-Before delegating, gather context:
+Перед делегированием собрать контекст:
 
 !`git status`
 
@@ -13,16 +13,16 @@ Before delegating, gather context:
 
 !`git diff`
 
-Then invoke `@reviewman` with this checklist:
+Затем вызвать `@reviewman` с этим чек-листом:
 
-1. **Anti-fake**: no hardcoded BPM, no random BPM, no timer-based fake pulse, no demo BPM in production paths.
-2. **Tests green**: `cargo test --workspace`, `python3 -m unittest discover core/tests`, `python3 tools/offline-lab/offline_lab.py report` all pass.
-3. **Docs updated**: `docs/ARCHITECTURE.md`, `docs/DSP_ALGORITHM.md`, `docs/QA_MATRIX.md`, `docs/ROADMAP.md` reflect the change.
-4. **No STABLE without evidence**: silence, white/pink noise, severe clipping, breakdown cannot reach `STABLE`.
-5. **Candidate visibility**: half/double candidates with correct `relation` and `source_bpm` are present.
-6. **Boundary**: BPM math lives only in `core/dsp/`. FFI and Flutter are adapters.
-7. **No weakened tests**: no existing test was deleted or relaxed.
+1. **Anti-fake**: никакого хардкода BPM, никаких случайных BPM, никакого таймер-based фейкового пульса, никаких демо-BPM в продакшен-путях.
+2. **Тесты зелёные**: `cargo test --workspace`, `python3 -m unittest discover core/tests`, `python3 tools/offline-lab/offline_lab.py report` — все проходят.
+3. **Документация обновлена**: `docs/ARCHITECTURE.md`, `docs/DSP_ALGORITHM.md`, `docs/QA_MATRIX.md`, `docs/ROADMAP.md` отражают изменение.
+4. **Никакого STABLE без evidence**: тишина, белый/розовый шум, сильный клиппинг, брейкдаун не могут достичь `STABLE`.
+5. **Видимость кандидатов**: half/double-кандидаты с корректными `relation` и `source_bpm` присутствуют.
+6. **Границы**: BPM-математика живёт только в `core/dsp/`. FFI и Flutter — адаптеры.
+7. **Никаких ослабленных тестов**: ни один существующий тест не удалён и не ослаблен.
 
-Output: blocking issues, non-blocking issues, missing tests, commands run, recommended next patch.
+Вывод: блокирующие проблемы, не-блокирующие проблемы, отсутствующие тесты, прогнанные команды, рекомендуемый следующий патч.
 
-References: @CLAUDE.md, @docs/DSP_ALGORITHM.md, @docs/QA_MATRIX.md
+Ссылки: @CLAUDE.md, @docs/DSP_ALGORITHM.md, @docs/QA_MATRIX.md

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Public offline analyzer CLI for regression tests and fixture reports."""
+"""Публичный CLI офлайн-анализатора для регрессионных тестов и отчётов по фикстурам."""
 
 from __future__ import annotations
 

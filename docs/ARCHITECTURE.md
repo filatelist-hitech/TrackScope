@@ -1,64 +1,64 @@
-# Architecture
+# Архитектура
 
-## Intent
+## Намерение
 
-hitech-bpm-radar is a DSP-first mobile BPM detector for hitech / psytrance in the 170-230 BPM range. The repository is structured so tempo logic is implemented once in `core/dsp` and reused by both the offline lab and the future mobile app.
+hitech-bpm-radar — DSP-first мобильный BPM-детектор для hitech / psytrance в диапазоне 170–230 BPM. Репозиторий устроен так, чтобы темповая логика была реализована один раз в `core/dsp` и переиспользовалась и офлайн-лабом, и будущим мобильным приложением.
 
-## Dependency Direction
+## Направление зависимостей
 
 ```text
 datasets/ -> tools/offline-lab/ -> core/dsp/
 apps/mobile/ ---------------------> core/dsp/
 core/tests/ ----------------------> core/dsp/
-docs/ ----------------------------> repository contracts
+docs/ ----------------------------> контракты репозитория
 ```
 
-`core/dsp` must not depend on mobile UI code, file-system fixture loading, platform microphone APIs, or demo data. Adapters may feed audio into the DSP core, but they must not calculate BPM themselves.
+`core/dsp` не должен зависеть ни от мобильного UI-кода, ни от загрузки фикстур с файловой системы, ни от платформенных микрофонных API, ни от демо-данных. Адаптеры могут подавать аудио в DSP-ядро, но не должны сами считать BPM.
 
-The production source of truth is the Rust crate in `core/dsp`. The current Python/Node offline analyzer remains as a Phase 1 deterministic lab and regression reference until the Rust streaming engine reaches parity.
+Продакшен-источник истины — Rust-крейт в `core/dsp`. Текущий Python/Node-офлайн-анализатор остаётся как детерминированная лаборатория Phase 1 и регрессионный референс до тех пор, пока Rust streaming-движок не достигнет parity.
 
-## Module Boundaries
+## Границы модулей
 
 ### `core/dsp`
 
-Owns:
+Владеет:
 
-- Rust `DspEngine` contract
-- sample format normalization
-- ring buffer and streaming state
-- preprocessing
-- multiband onset detection
-- onset history
-- tempo candidate estimation
-- hitech half-time / double-time normalization
-- confidence scoring
-- lock state machine
-- public DSP result contract
+- контрактом Rust-`DspEngine`;
+- нормализацией формата сэмплов;
+- кольцевым буфером и потоковым состоянием;
+- препроцессингом;
+- многополосной детекцией онсетов;
+- историей онсетов;
+- оценкой BPM-кандидатов;
+- hitech-нормализацией half-time / double-time;
+- скорингом уверенности;
+- автоматом состояния захвата;
+- публичным контрактом DSP-результата.
 
-Does not own:
+Не владеет:
 
-- mobile permissions
-- UI state
-- platform audio callbacks
-- file decoding
-- dataset generation
-- fake/demo BPM values
+- мобильными разрешениями;
+- состоянием UI;
+- платформенными аудио-callback'ами;
+- декодированием файлов;
+- генерацией датасетов;
+- фейковыми / демо-значениями BPM.
 
 ### `core/tests`
 
-Owns deterministic DSP regression tests and expected-result fixtures. Every DSP algorithm change should add or update synthetic coverage.
+Владеет детерминированными DSP-регрессионными тестами и фикстурами ожидаемых результатов. Любое изменение DSP-алгоритма обязано добавлять или обновлять синтетическое покрытие.
 
 ### `tools/offline-lab`
 
-Owns the Python offline analyzer, synthetic fixture generator, and report runner. During Phase 1 it may call the Python prototype under `core/dsp`; after Rust parity it must call the Rust DSP API through the same boundary as mobile.
+Владеет Python-офлайн-анализатором, генератором синтетических фикстур и раннером отчётов. В Phase 1 может вызывать Python-прототип под `core/dsp`; после Rust-parity обязан вызывать Rust DSP API через ту же границу, что и mobile.
 
 ### `core/ffi`
 
-Owns the native C ABI handle boundary used by Flutter/native code. It may manage engine lifetimes and pass PCM frames into Rust DSP, but it must not score or rank BPM itself.
+Владеет границей нативных C ABI хэндлов, используемой Flutter / нативным кодом. Управляет временем жизни движка и прокидывает PCM-кадры в Rust DSP, но не должен сам скорить или ранжировать BPM.
 
 ### `datasets`
 
-Stores generated and curated audio fixtures:
+Хранит сгенерированные и курируемые аудио-фикстуры:
 
 - `synthetic/`
 - `hitech/`
@@ -66,24 +66,24 @@ Stores generated and curated audio fixtures:
 - `clipped_mic/`
 - `breakdowns/`
 
-Large licensed audio files should not be committed without an explicit dataset policy.
+Большие лицензированные аудиофайлы не должны коммититься без явной политики работы с датасетами.
 
 ### `apps/mobile`
 
-Live Flutter app boundary. Owns microphone permissions, native audio bridge behavior, result rendering, debug screen, and session history. It must not implement independent BPM logic.
+Граница живого Flutter-приложения. Владеет разрешениями микрофона, поведением нативного аудио-моста, рендером результата, отладочным экраном и историей сессий. Не должен содержать независимую BPM-логику.
 
-Layering (Phase 3 step 2 is live):
+Слои (Phase 3 шаг 2 — в эфире):
 
-- `lib/dsp/` — typed Dart wrapper over the Rust FFI: `bindings.dart` (raw C ABI), `dsp_result.dart` (typed view of the JSON contract), `engine.dart` (handle + stream/poll). No BPM math on this side.
-- `lib/capture/` — `MicrophoneSource` (thin wrapper over `package:record`), `CaptureBridge` (spawns a DSP worker isolate, forwards PCM byte chunks via `SendPort`, re-emits parsed `DspResult` and `CaptureError` on broadcast streams), `dsp_worker.dart` (isolate entry point owning the FFI handle, doing PCM16 → f32 conversion, polling `analyzeJson` at UI rate).
-- `lib/permissions/` — `PermissionGate` wraps `package:permission_handler`, re-checks on resume.
-- `lib/ui/` — `MainScreen`, `DebugScreen`, `PermissionDeniedScreen`. Both data screens take a `Stream<DspResult>` directly so they are testable in isolation; the production wiring lives in `main.dart`.
+- `lib/dsp/` — типизированная Dart-обёртка над Rust FFI: `bindings.dart` (сырой C ABI), `dsp_result.dart` (типизированный взгляд на JSON-контракт), `engine.dart` (хэндл + stream/poll). Никакой BPM-математики на этой стороне.
+- `lib/capture/` — `MicrophoneSource` (тонкая обёртка над `package:record`), `CaptureBridge` (запускает изолят DSP-воркера, прокидывает байтовые PCM-чанки через `SendPort`, переэмитит распарсенный `DspResult` и `CaptureError` в broadcast-стримах), `dsp_worker.dart` (точка входа изолята, владеет FFI-хэндлом, делает конверсию PCM16 → f32, поллит `analyzeJson` на UI-частоте).
+- `lib/permissions/` — `PermissionGate` оборачивает `package:permission_handler`, перепроверяет на resume.
+- `lib/ui/` — `MainScreen`, `DebugScreen`, `PermissionDeniedScreen`. Оба экрана с данными принимают `Stream<DspResult>` напрямую, поэтому тестируемы изолированно; продакшен-проводка живёт в `main.dart`.
 
-The capture pipeline is documented in `docs/MOBILE_AUDIO.md`. UI subscribes only to `CaptureBridge.results` — there is no parallel state.
+Пайплайн захвата задокументирован в `docs/MOBILE_AUDIO.md`. UI подписан только на `CaptureBridge.results` — параллельного состояния нет.
 
-## Public DSP API Shape
+## Форма публичного DSP API
 
-The Rust DSP crate exposes the stable conceptual API:
+Rust DSP-крейт раскрывает стабильное концептуальное API:
 
 ```text
 DspEngine(config)
@@ -92,7 +92,7 @@ DspEngine.analyze() -> DspResult
 DspEngine.reset()
 ```
 
-Configuration must include hitech defaults:
+Конфигурация обязана содержать hitech-дефолты:
 
 ```text
 mode: hitech
@@ -105,26 +105,26 @@ lock_min_seconds
 stable_min_seconds
 ```
 
-## Production Rules
+## Продакшен-правила
 
-- Do not build final UI before the DSP contract and synthetic tests exist.
-- Do not fake BPM values.
-- Do not hardcode demo BPM values in production code.
-- Preserve raw and normalized tempo candidates.
-- Expose confidence and candidate lists in debug output.
-- Treat mobile audio as an input adapter, not a second DSP implementation.
+- Не строить финальный UI раньше, чем существуют DSP-контракт и синтетические тесты.
+- Не фейкать BPM.
+- Не хардкодить демо-значения BPM в продакшен-код.
+- Сохранять raw- и нормализованных кандидатов.
+- Показывать уверенность и список кандидатов в debug-выводе.
+- Относиться к мобильному аудио как к входному адаптеру, а не ко второй DSP-реализации.
 
-## Codex Infrastructure
+## Codex-инфраструктура
 
-- `.codex/config.toml` sets the project model, sandbox, and max agent concurrency.
-- `.codex/agents/*.toml` defines ARCHMAN, DSPMAN, MOBILEMAN, QAMAN, PERFMAN, REVIEWMAN, and DOCMAN.
-- `.codex/plans/PLANS.md` is the required planning template for non-trivial work.
-- `.agents/skills/*/SKILL.md` stores reusable local skills for bootstrap, DSP, mobile audio, QA datasets, and review gates.
+- `.codex/config.toml` задаёт проектную модель, sandbox и максимум параллельных агентов.
+- `.codex/agents/*.toml` определяет ARCHMAN, DSPMAN, MOBILEMAN, QAMAN, PERFMAN, REVIEWMAN и DOCMAN.
+- `.codex/plans/PLANS.md` — обязательный шаблон планирования для нетривиальной работы.
+- `.agents/skills/*/SKILL.md` хранит переиспользуемые локальные навыки для bootstrap, DSP, мобильного аудио, QA-датасетов и review-гейтов.
 
-## Primary Risks
+## Основные риски
 
-- UI-first work can create fake confidence before the detector exists.
-- Dense hitech material can produce half-time and double-time ambiguity.
-- Microphone clipping and AGC can distort onset strength.
-- Noise-only and breakdown sections can create false periodicity unless confidence is conservative.
-- Mobile sample-rate drift and callback latency can affect lock timing.
+- UI-first работа может создать фейковую уверенность ещё до того, как существует детектор.
+- Плотный hitech-материал может породить half-time / double-time неоднозначность.
+- Клиппинг микрофона и AGC могут исказить силу онсетов.
+- Шум-без-сигнала и брейкдауны могут создать ложную периодичность, если уверенность не консервативна.
+- Дрифт частоты дискретизации мобильного и задержка callback'ов могут повлиять на тайминг захвата.

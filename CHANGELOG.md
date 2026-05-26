@@ -1,105 +1,108 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+Все значимые изменения этого проекта будут задокументированы в этом файле.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to semantic versioning once releases begin.
+Формат основан на [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), а проект придерживается семантического версионирования после старта релизов.
 
 ## [Unreleased]
 
+### Changed
+- Полный перевод человекочитаемой поверхности репозитория на русский: документация (`docs/`, корневые `README.md`, `AGENTS.md`, `CLAUDE.md`), все per-module `README.md`, `CHANGELOG.md`, тела субагентов и навыков `.claude/agents/*.md`, `.claude/skills/*/SKILL.md`, `.claude/commands/*.md`, UI-строки в `apps/mobile/lib/`, `NSMicrophoneUsageDescription` в `apps/mobile/ios/Runner/Info.plist`, комментарии в Rust / Python / Dart / JS-коде. Идентификаторы, JSON-ключи контракта, значения enum `LockState`, имена фикстур, лог-сообщения и slash-команды остались английскими — поведение и тесты сохраняются. Глоссарий: `docs/GLOSSARY.md`. План: `docs/plans/translations-russian.md`.
+
 ### Added
-- Phase 3 mobile bridge (step 2 — platform files, mic capture, live UI):
-  - `apps/mobile/android/` + `apps/mobile/ios/` generated via `flutter create --platforms=android,ios .` with org `dev.hitech.bpmradar`. Existing Dart code preserved.
-  - `AndroidManifest.xml` declares `<uses-permission android:name="android.permission.RECORD_AUDIO" />`.
-  - `ios/Runner/Info.plist` declares `NSMicrophoneUsageDescription` with user-readable copy ("Hitech BPM Radar listens through the microphone to detect the BPM of the music around you. Audio stays on your device and is never recorded or sent anywhere.").
+- Phase 3 мобильный мост (шаг 2 — платформенные файлы, захват микрофона, живой UI):
+  - `apps/mobile/android/` + `apps/mobile/ios/` сгенерированы через `flutter create --platforms=android,ios .` с org `dev.hitech.bpmradar`. Существующий Dart-код сохранён.
+  - `AndroidManifest.xml` объявляет `<uses-permission android:name="android.permission.RECORD_AUDIO" />`.
+  - `ios/Runner/Info.plist` объявляет `NSMicrophoneUsageDescription` с человекочитаемым текстом для пользователя («Hitech BPM Radar слушает через микрофон, чтобы определить BPM окружающей музыки. Аудио остаётся на вашем устройстве и нигде не записывается и не отправляется.»).
   - `apps/mobile/lib/capture/`:
-    - `microphone_source.dart` — thin wrapper over `package:record` 5.x, opens PCM16 mono 48 kHz via `startStream()`.
-    - `dsp_worker.dart` — isolate entry point that owns the FFI handle, decodes PCM16 → Float32 via `s / 32768.0`, calls `DspEngine.pushSamples`, and polls `engine.analyzeJson()` at UI rate (default 20 Hz), forwarding raw JSON to the main isolate.
-    - `capture_bridge.dart` — main-isolate orchestrator. Spawns the worker, forwards `PushPcm` messages via `SendPort`, re-emits parsed `DspResult` on a broadcast stream and `CaptureError` on an error stream. UI never sees raw bytes.
-    - `capture_messages.dart` — typed message envelopes (`WorkerInit`, `PushPcm`, `ResetEngine`, `StopWorker`, `DspResultMessage`, `WorkerReady`, `WorkerError`).
-  - `apps/mobile/lib/permissions/permission_gate.dart` — wraps `package:permission_handler`. Requests `Permission.microphone`, re-checks on app resume so returning from system settings transitions automatically.
+    - `microphone_source.dart` — тонкая оболочка над `package:record` 5.x, открывает PCM16 моно 48 кГц через `startStream()`.
+    - `dsp_worker.dart` — точка входа изолята, владеет FFI-хэндлом, декодирует PCM16 → Float32 через `s / 32768.0`, вызывает `DspEngine.pushSamples`, опрашивает `engine.analyzeJson()` на UI-частоте (по умолчанию 20 Гц), форвардит raw JSON в основной изолят.
+    - `capture_bridge.dart` — оркестратор основного изолята. Поднимает воркер, форвардит `PushPcm`-сообщения через `SendPort`, переэмитит распарсенный `DspResult` в broadcast-стрим и `CaptureError` в стрим ошибок. UI никогда не видит сырых байтов.
+    - `capture_messages.dart` — типизированные конверты сообщений (`WorkerInit`, `PushPcm`, `ResetEngine`, `StopWorker`, `DspResultMessage`, `WorkerReady`, `WorkerError`).
+  - `apps/mobile/lib/permissions/permission_gate.dart` — обёртка над `package:permission_handler`. Запрашивает `Permission.microphone`, перепроверяет на resume приложения, поэтому возврат из системных настроек переключает состояние автоматически.
+  - `ios/Runner/Info.plist` объявляет `NSMicrophoneUsageDescription` с человекочитаемой копией.
   - `apps/mobile/lib/ui/`:
-    - `main_screen.dart` — `StreamBuilder<DspResult>` rendering primary BPM (with `— —` placeholder when null, never a guess), confidence percent + bar, lock-state badge, signal-quality dBFS meter, clipping chip, and a recent-BPM sparkline.
-    - `debug_screen.dart` — same stream, layouts the full candidate list with relation labels (`main`, `raw`, `half_time`, `double_time`, `normalized_from_*`), score, `source_bpm`, every `signal_quality` field, and timing metrics. Half- and double-time candidates always visible.
-    - `permission_denied_screen.dart` — explainer with `openAppSettings()` deep-link on permanent denial, soft re-prompt button otherwise.
-  - `apps/mobile/lib/main.dart` rewired: `PermissionGate` → `_LiveCaptureScaffold` owns `CaptureBridge` + `MicrophoneSource` for the screen's lifetime; capture start failures surface as a labelled error screen, never as a synthetic fallback.
-  - `apps/mobile/lib/dsp/engine.dart` — added `String analyzeJson()` accessor so the worker forwards raw JSON without an intermediate decode.
-  - `apps/mobile/test/widget_test.dart` — 7 widget tests covering: live STABLE render from a synthetic snapshot, capture-error banner from the error stream, debug-screen candidate visibility (main + half_time), debug waiting state, SEARCHING never showing an invented BPM, permanent-denial settings copy, soft-denial retry button.
-- New Flutter dependencies (justified):
-  - `record: ^5.1.2` — pure Dart microphone capture with `startStream()` PCM byte stream on Android / iOS / macOS / Linux / Web. Avoids writing custom platform channels.
-  - `permission_handler: ^11.3.1` — runtime permission request + `openAppSettings()` deep-link.
+    - `main_screen.dart` — `StreamBuilder<DspResult>`, рендерит основной BPM (с плейсхолдером `— —` при null, никогда не догадка), процент уверенности + бар, бейдж состояния захвата, метр качества сигнала в dBFS, чип клиппинга и спарклайн недавнего BPM.
+    - `debug_screen.dart` — тот же стрим, раскладывает полный список кандидатов с relation-лейблами (`main`, `raw`, `half_time`, `double_time`, `normalized_from_*`), score, `source_bpm`, каждое поле `signal_quality` и метрики тайминга. Half- и double-time-кандидаты всегда видимы.
+    - `permission_denied_screen.dart` — экран-объяснение с `openAppSettings()` deep-link на permanent denial, кнопкой мягкого re-prompt'а в остальных случаях.
+  - `apps/mobile/lib/main.dart` перепроводка: `PermissionGate` → `_LiveCaptureScaffold` владеет `CaptureBridge` + `MicrophoneSource` на время жизни экрана; ошибки старта захвата всплывают как помеченный экран ошибки, никогда как синтетический fallback.
+  - `apps/mobile/lib/dsp/engine.dart` — добавлен аксессор `String analyzeJson()`, чтобы воркер форвардил raw JSON без промежуточного декода.
+  - `apps/mobile/test/widget_test.dart` — 7 widget-тестов, покрывающих: рендер живого `STABLE` из синтетического снэпшота, баннер ошибки захвата из стрима ошибок, видимость кандидатов на отладочном экране (main + half_time), debug-screen в режиме ожидания, `SEARCHING` никогда не показывает выдуманный BPM, копию settings на permanent denial, кнопку повтора на soft denial.
+- Новые Flutter-зависимости (обоснованные):
+  - `record: ^5.1.2` — pure-Dart захват микрофона с `startStream()` PCM-байтовым стримом на Android / iOS / macOS / Linux / Web. Избавляет от написания кастомных platform channels.
+  - `permission_handler: ^11.3.1` — runtime-запрос разрешения + `openAppSettings()` deep-link.
 
 ### Changed
-- `docs/MOBILE_AUDIO.md` rewritten with the concrete pipeline: package choice, isolate model, frame-format table per platform, latency policy, anti-fake guarantees.
-- `docs/ARCHITECTURE.md` `apps/mobile` section updated from "future boundary" to live Flutter layering (`lib/dsp/`, `lib/capture/`, `lib/permissions/`, `lib/ui/`).
-- `README.md` Current Phase + "Running the mobile app" instructions; links the new manual test checklist.
+- `docs/MOBILE_AUDIO.md` переписан под конкретный пайплайн: выбор пакета, изолятная модель, таблица формата кадров по платформам, политика задержки, anti-fake-гарантии.
+- Секция `apps/mobile` в `docs/ARCHITECTURE.md` обновлена с «будущей границы» на живую Flutter-раскладку (`lib/dsp/`, `lib/capture/`, `lib/permissions/`, `lib/ui/`).
+- `README.md` — Текущая фаза + инструкции «Как запустить мобильное приложение»; ссылается на новый чек-лист ручных тестов.
 
 ### Added
-- `docs/MANUAL_TEST_CHECKLIST.md` — device-level acceptance: build/launch, permission flow (grant / soft deny / permanent deny + settings return), live capture against a 200 BPM reference, silence + clipping + half-time-trap spot checks, debug-screen content, sustained 60 s smoothness.
+- `docs/MANUAL_TEST_CHECKLIST.md` — приёмка на уровне устройства: сборка / запуск, сценарий разрешения (grant / soft deny / permanent deny + возврат из settings), живой захват против эталонного 200 BPM, проверки тишины + клиппинга + half-time-ловушки, содержание отладочного экрана, выдерживание 60 с плавности.
 
-- Phase 3 mobile bridge (step 1 — FFI binding & DSP wrapper, no mic yet):
-  - `core/ffi/include/hitech_bpm_ffi.h` — public C ABI header; single source of truth for `ffigen` and any native consumer.
-  - `apps/mobile/lib/dsp/bindings.dart` — Dart FFI bindings for `hitech_bpm_engine_*` and `hitech_bpm_string_free`. Hand-checked-in but regenerable via the `ffigen:` config in `apps/mobile/pubspec.yaml` so contributors don't need libclang locally just to build.
-  - `apps/mobile/lib/dsp/dsp_result.dart` — typed view over the JSON `DspResult` (LockState enum, SignalQuality, TempoCandidate, DspTiming). Parses what Rust decided; performs no BPM math.
-  - `apps/mobile/lib/dsp/engine.dart` — `DspEngine` wrapper that owns the native handle, marshals `Float32List` PCM into pinned native memory, polls `analyze_json` on a UI-rate timer (default 50 ms), and exposes parsed snapshots on a broadcast `Stream<DspResult>`. Mic capture is the next patch — for now the caller (test or future audio bridge) supplies PCM.
-  - `apps/mobile/test/dsp_engine_test.dart` — Flutter test that builds `libhitech_bpm_ffi` via `cargo build --release -p hitech-bpm-ffi`, drives 13 s of synthetic 200 BPM PCM through the Dart binding, and asserts `lock_state == STABLE`, `primary_bpm` within ±2 BPM, half-time candidate visibility, and that 14 s of silence never reaches `STABLE`. Also asserts the broadcast stream emits parsed snapshots while subscribed.
-  - `apps/mobile/test/helpers/native_library.dart` — locates / builds the workspace dylib so the Flutter test layer drives the same Rust DSP the production app will load.
-  - `apps/mobile/test/helpers/synthetic_pulse.dart` — deterministic 200 BPM kick generator mirroring `core/ffi/tests/ffi_contract.rs::pulse_200_bpm`.
-- New Flutter dependencies (justified):
-  - `ffi: ^2.1.0` — required for `Pointer<Float>` allocation when handing PCM frames to Rust.
-  - `ffigen: ^13.0.0` (dev) — regenerates `bindings.dart` from the C header when the ABI evolves.
+- Phase 3 мобильный мост (шаг 1 — FFI-binding и DSP-обёртка, ещё без микрофона):
+  - `core/ffi/include/hitech_bpm_ffi.h` — публичный C ABI-заголовок; единственный источник истины для `ffigen` и любого нативного потребителя.
+  - `apps/mobile/lib/dsp/bindings.dart` — Dart FFI-биндинги для `hitech_bpm_engine_*` и `hitech_bpm_string_free`. Закоммичены руками, но регенерируются через `ffigen:`-конфиг в `apps/mobile/pubspec.yaml`, чтобы контрибьюторам не нужен был локальный libclang только ради сборки.
+  - `apps/mobile/lib/dsp/dsp_result.dart` — типизированный взгляд на JSON `DspResult` (enum LockState, SignalQuality, TempoCandidate, DspTiming). Парсит, что решил Rust; никакой BPM-математики.
+  - `apps/mobile/lib/dsp/engine.dart` — обёртка `DspEngine`, владеет нативным хэндлом, маршалит `Float32List` PCM в pinned-нативную память, опрашивает `analyze_json` на таймере UI-частоты (по умолчанию 50 мс) и выставляет распарсенные снэпшоты в broadcast-`Stream<DspResult>`. Захват микрофона — следующий патч; пока вызывающий (тест или будущий аудио-мост) поставляет PCM.
+  - `apps/mobile/test/dsp_engine_test.dart` — Flutter-тест, собирает `libhitech_bpm_ffi` через `cargo build --release -p hitech-bpm-ffi`, прогоняет 13 с синтетического 200 BPM PCM через Dart-биндинг и проверяет `lock_state == STABLE`, `primary_bpm` в пределах ±2 BPM, видимость half-time-кандидата и что 14 с тишины никогда не достигают `STABLE`. Также проверяет, что broadcast-стрим эмитит распарсенные снэпшоты, пока есть подписка.
+  - `apps/mobile/test/helpers/native_library.dart` — находит / собирает workspace-dylib, чтобы Flutter-тест-слой прогонял тот же Rust DSP, который продакшен-приложение будет загружать.
+  - `apps/mobile/test/helpers/synthetic_pulse.dart` — детерминированный генератор kick'а на 200 BPM, зеркалирующий `core/ffi/tests/ffi_contract.rs::pulse_200_bpm`.
+- Новые Flutter-зависимости (обоснованные):
+  - `ffi: ^2.1.0` — требуется для аллокации `Pointer<Float>` при передаче PCM-кадров в Rust.
+  - `ffigen: ^13.0.0` (dev) — регенерирует `bindings.dart` из C-заголовка, когда ABI развивается.
 
-- FFI `analyze` boundary: `hitech_bpm_engine_analyze_json` returns the current rolling `DspResult` as a heap-owned UTF-8 JSON C string; `hitech_bpm_string_free` releases it. Flutter / native consumers can now read tempo, confidence, lock state, signal quality, and the full candidate list without owning a parallel BPM implementation. JSON crosses the boundary at UI poll rate (~10–30 Hz); the audio thread continues to call only `push_samples`, which stays allocation-light.
-- `core/ffi/tests/ffi_contract.rs` drives `push_samples` + `analyze_json` end-to-end through the C ABI on a clean 200 BPM pulse, on silence, and on a null handle. Verifies JSON shape, `STABLE` lock on 13 s of clean signal, primary_bpm within ±2 BPM, half-time candidate visibility, and the anti-fake gate that silence never reaches `STABLE`.
-- Phase 2 streaming DSP core — `DspEngine` now holds a **rolling onset history**: `pcm_window`, `pcm_pending`, `onset_history`, and `prev_frame_rms`. On each `push_samples`, only the *new* PCM region is converted into spectral-flux frames and appended to the bounded onset ring; the oldest entries drop off the back. Per-push CPU cost is independent of stream duration.
-- Shared `analyze_from_envelope` post-onset pipeline used by both batch `analyze_pcm` and streaming `DspEngine::analyze`, so both paths produce equivalent steady-state `DspResult` snapshots.
-- Three new Rust streaming tests in `core/dsp/tests/streaming.rs`:
-  - `streaming_first_lock_under_six_seconds_for_200_bpm` — engine leaves `SEARCHING` within `lock_min_seconds` on a clean 200 BPM pulse.
-  - `streaming_stable_lock_under_twelve_seconds_for_200_bpm` — engine reaches `STABLE` with `primary_bpm` within ±2 BPM in `stable_min_seconds`.
-  - `streaming_reflects_mid_stream_tempo_change_within_one_window` — 12 s of 180 BPM concatenated with 12 s of 200 BPM; engine locks to 180, transitions through a non-`STABLE` state during the change, and catches up to ~200 BPM within one analysis window. Proves the engine does not silently swap one tempo for another while remaining `STABLE`.
-- `core/dsp/tests/streaming_perf.rs` (`--ignored`) — release-mode timing harness for `push_samples` + `analyze` over a 60-second stream in 100 ms chunks, asserting a 200 ms per-push upper bound.
+- Граница FFI `analyze`: `hitech_bpm_engine_analyze_json` возвращает текущий скользящий `DspResult` как heap-owned UTF-8 JSON C-строку; `hitech_bpm_string_free` освобождает её. Flutter / нативные потребители теперь могут читать темп, уверенность, состояние захвата, качество сигнала и полный список кандидатов без владения параллельной BPM-имплементацией. JSON пересекает границу на UI-частоте опроса (~10–30 Гц); аудио-поток продолжает вызывать только `push_samples`, который остаётся легковесным по аллокациям.
+- `core/ffi/tests/ffi_contract.rs` прогоняет `push_samples` + `analyze_json` end-to-end через C ABI на чистом пульсе 200 BPM, на тишине и на null-хэндле. Проверяет форму JSON, захват `STABLE` на 13 с чистого сигнала, primary_bpm в пределах ±2 BPM, видимость half-time-кандидата и anti-fake-гейт того, что тишина никогда не достигает `STABLE`.
+- Phase 2 потоковое DSP-ядро — `DspEngine` теперь держит **скользящую историю онсетов**: `pcm_window`, `pcm_pending`, `onset_history` и `prev_frame_rms`. На каждом `push_samples` только *новая* PCM-область конвертируется в spectral-flux-кадры и аппендится в ограниченное onset-кольцо; самые старые записи сбрасываются с хвоста. CPU-стоимость на push не зависит от длительности стрима.
+- Общий пост-онсетный пайплайн `analyze_from_envelope`, используемый и пакетным `analyze_pcm`, и потоковым `DspEngine::analyze`, поэтому оба пути выдают эквивалентные установившиеся снэпшоты `DspResult`.
+- Три новых Rust-теста streaming в `core/dsp/tests/streaming.rs`:
+  - `streaming_first_lock_under_six_seconds_for_200_bpm` — движок покидает `SEARCHING` в пределах `lock_min_seconds` на чистом пульсе 200 BPM.
+  - `streaming_stable_lock_under_twelve_seconds_for_200_bpm` — движок достигает `STABLE` с `primary_bpm` в пределах ±2 BPM за `stable_min_seconds`.
+  - `streaming_reflects_mid_stream_tempo_change_within_one_window` — 12 с 180 BPM, конкатенированных с 12 с 200 BPM; движок захватывает 180, проходит через не-`STABLE`-состояние во время изменения и догоняет ~200 BPM в пределах одного окна анализа. Доказывает, что движок не подменяет молча один темп другим, оставаясь `STABLE`.
+- `core/dsp/tests/streaming_perf.rs` (`--ignored`) — release-режим, тайминг-обвязка для `push_samples` + `analyze` на 60-секундном стриме чанками по 100 мс, проверяет верхнюю границу 200 мс на push.
 
 ### Changed
-- `DspEngine` now pre-sizes its rings from `DspConfig` in `new()`. Public API unchanged: `new`, `config`, `push_samples`, `analyze`, `analyze_raw_candidates`, and `reset` keep their existing signatures.
-- `docs/DSP_ALGORITHM.md` documents the rolling onset history and the new streaming tests.
+- `DspEngine` теперь pre-sizes свои кольца из `DspConfig` в `new()`. Публичное API не изменилось: `new`, `config`, `push_samples`, `analyze`, `analyze_raw_candidates` и `reset` сохраняют существующие сигнатуры.
+- `docs/DSP_ALGORITHM.md` документирует скользящую историю онсетов и новые streaming-тесты.
 
 ### Performance
-- `push_samples` (release, 100 ms chunks at 48 kHz): median 42µs → **29µs** (−31%), p95 119µs → **50µs** (−58%), max 329µs → **78µs** (−76%).
-- `analyze` (release): median 2591µs → **1747µs** (−33%), p95 3236µs → **2167µs** (−33%), max 8272µs → **2553µs** (−69%).
-- Total per-chunk cost (push + analyze): median 2633µs → **1776µs** (−33%); max 8601µs → **2631µs** (−69%).
+- `push_samples` (release, чанки 100 мс на 48 кГц): медиана 42µs → **29µs** (−31%), p95 119µs → **50µs** (−58%), max 329µs → **78µs** (−76%).
+- `analyze` (release): медиана 2591µs → **1747µs** (−33%), p95 3236µs → **2167µs** (−33%), max 8272µs → **2553µs** (−69%).
+- Полная стоимость на чанк (push + analyze): медиана 2633µs → **1776µs** (−33%); max 8601µs → **2631µs** (−69%).
 
-### Earlier in [Unreleased]
+### Ранее в [Unreleased]
 
-- Rust DSP is now the authoritative production analyzer. `cargo test --workspace` runs hermetically with no `python3` subprocess.
-- `core/dsp/tests/common/mod.rs` — shared deterministic Rust fixture module mirroring `core/tests/helpers/synthetic_fixtures.py`. Covers silence, white/pink noise, clean 170/180/190/200/220, half-time and double-time traps, severely- and recoverable-clipped, breakdown, dense hitech bassline, and unstable club simulation.
-- `canonical_fixture_inventory_round_trip` test in `core/dsp/tests/offline_contract.rs` walks the full Rust fixture inventory and asserts anti-fake invariants.
-- `core/dsp/src/bin/analyze_wav.rs` — Rust CLI that reads a 16-bit PCM WAV and emits the `DspResult` as JSON; used by the standalone parity tool.
-- `tools/offline-lab/parity.py` — opt-in cross-language drift check that runs the Python analyzer and the Rust `analyze_wav` binary on the same WAV fixtures and tabulates per-fixture drift in `primary_bpm`, `confidence`, `lock_state`, and candidate relations.
-- `serde` / `serde_json` derives on the public DSP result types (`DspResult`, `TempoCandidate`, `SignalQuality`, etc.) so the result contract serializes to the same JSON shape Python emits.
+- Rust DSP теперь авторитативный продакшен-анализатор. `cargo test --workspace` прогоняется герметично, без сабпроцесса `python3`.
+- `core/dsp/tests/common/mod.rs` — общий детерминированный Rust-фикстурный модуль, зеркалирующий `core/tests/helpers/synthetic_fixtures.py`. Покрывает тишину, белый/розовый шум, чистые 170/180/190/200/220, half-time- и double-time-ловушки, сильный и восстановимый клиппинг, брейкдаун, плотный hitech-басс и нестабильную клубную симуляцию.
+- Тест `canonical_fixture_inventory_round_trip` в `core/dsp/tests/offline_contract.rs` обходит весь Rust-фикстурный инвентарь и проверяет anti-fake-инварианты.
+- `core/dsp/src/bin/analyze_wav.rs` — Rust-CLI, читает 16-битный PCM WAV и эмитит `DspResult` как JSON; используется отдельным parity-инструментом.
+- `tools/offline-lab/parity.py` — opt-in кросс-языковая проверка дрифта, запускает Python-анализатор и Rust-бинарник `analyze_wav` на одних и тех же WAV-фикстурах и табулирует pet-фикстурный дрифт в `primary_bpm`, `confidence`, `lock_state` и relation'ах кандидатов.
+- `serde` / `serde_json`-derives на публичных DSP-типах результата (`DspResult`, `TempoCandidate`, `SignalQuality` и т.д.), чтобы контракт результата сериализовался в ту же форму JSON, что эмитит Python.
 
 ### Changed
-- `core/dsp/tests/offline_contract.rs` now consumes the shared `common::*` fixture module; the duplicated generators are gone.
-- `docs/DSP_ALGORITHM.md` documents the Rust-as-source-of-truth posture and the parity refactor (Option A — no Python subprocess in `cargo test`).
-- `docs/QA_MATRIX.md` adds the Rust fixture inventory table and the new `parity.py` validation command.
-- `README.md` documents the hermetic `cargo test` workflow and the optional `parity.py` cross-language drift check.
+- `core/dsp/tests/offline_contract.rs` теперь потребляет общий модуль фикстур `common::*`; дублирующиеся генераторы убраны.
+- `docs/DSP_ALGORITHM.md` документирует позицию Rust-as-source-of-truth и parity-рефакторинг (вариант A — без Python-сабпроцесса в `cargo test`).
+- `docs/QA_MATRIX.md` добавляет таблицу инвентаря Rust-фикстур и новую команду валидации `parity.py`.
+- `README.md` документирует герметичный воркфлоу `cargo test` и опциональную кросс-языковую проверку дрифта `parity.py`.
 
 ### Removed
-- `core/dsp/tests/python_parity.rs`. The Rust contract is asserted directly in `offline_contract.rs`; cross-language comparison moved to the standalone `tools/offline-lab/parity.py` tool.
+- `core/dsp/tests/python_parity.rs`. Rust-контракт проверяется напрямую в `offline_contract.rs`; кросс-языковое сравнение переехало в отдельный инструмент `tools/offline-lab/parity.py`.
 
-## [0.0.1] - 2026-05-25 (Phase 1 offline DSP lab baseline)
+## [0.0.1] - 2026-05-25 (базовая линия offline-DSP-лаборатории Phase 1)
 
 ### Added
-- Phase 1 offline DSP lab: synthetic fixture generator, Python reference analyzer (`core/dsp/tempo.py`), Rust crate (`core/dsp/src/lib.rs`), Node offline analyzer (`core/dsp/index.js`), and `tools/offline-lab/offline_lab.py report` deterministic gate.
-- Hitech candidate normalization: raw < 130 BPM emits `normalized_from_half`, raw > 260 BPM emits `normalized_from_double`; raw, half-time, double-time, and normalized candidates are all preserved.
-- Lock-state machine covering `SEARCHING`, `LOCKING`, `STABLE`, `UNSTABLE`, `BREAKDOWN`, `CLIPPED_MIC`, `NOISE_ONLY`.
-- Graded clipping handling: mild clipping caps confidence below `STABLE` while keeping candidates visible; severe clipping (clipped-frame ratio >= 5%) forces `CLIPPED_MIC` and suppresses `primary_bpm`.
-- Harmonic-ambiguity penalty applied to the confidence score so a close-second candidate decays final confidence.
-- New `recoverable_clipped_200` fixture and offline-lab row to assert mild-clipping behavior.
-- Rust ↔ Python parity test `core/dsp/tests/python_parity.rs` running the Python analyzer over a shared fixture matrix.
-- QA matrix entry and DSP algorithm notes for graded clipping and parity test coverage.
+- Офлайн-DSP-лаборатория Phase 1: генератор синтетических фикстур, Python-референс-анализатор (`core/dsp/tempo.py`), Rust-крейт (`core/dsp/src/lib.rs`), Node-офлайн-анализатор (`core/dsp/index.js`) и детерминированный гейт `tools/offline-lab/offline_lab.py report`.
+- Hitech-нормализация кандидатов: raw < 130 BPM эмитит `normalized_from_half`, raw > 260 BPM эмитит `normalized_from_double`; raw, half-time, double-time и нормализованные кандидаты — все сохраняются.
+- Автомат состояния захвата, покрывающий `SEARCHING`, `LOCKING`, `STABLE`, `UNSTABLE`, `BREAKDOWN`, `CLIPPED_MIC`, `NOISE_ONLY`.
+- Градированная обработка клиппинга: мягкий клиппинг ограничивает уверенность ниже `STABLE`, сохраняя кандидатов видимыми; сильный клиппинг (отношение клиппированных кадров >= 5%) форсит `CLIPPED_MIC` и подавляет `primary_bpm`.
+- Штраф за гармоническую неоднозначность, применённый к оценке уверенности, чтобы близкий-второй кандидат проседал финальную уверенность.
+- Новая фикстура `recoverable_clipped_200` и строка offline-lab для проверки поведения мягкого клиппинга.
+- Parity-тест Rust ↔ Python `core/dsp/tests/python_parity.rs`, прогоняющий Python-анализатор поверх общей фикстурной матрицы.
+- Запись QA-матрицы и заметки в DSP-алгоритме для градированного клиппинга и parity-покрытия.
 
 ### Notes
-- No hardcoded BPM in production paths; silence, noise-only, and severely clipped inputs return `primary_bpm: null`.
-- Half-time and double-time candidates are never hidden — they remain in the candidate list with relation/source metadata.
+- Никакого хардкода BPM в продакшен-путях; тишина, шум-без-сигнала и сильно клиппированные входы возвращают `primary_bpm: null`.
+- Half-time- и double-time-кандидаты никогда не скрываются — они остаются в списке кандидатов с relation/source-метаданными.
 
 [Unreleased]: https://github.com/filatelist-hitech/hitech-bpm-radar/compare/main...HEAD

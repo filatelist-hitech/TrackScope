@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-/// Shown when microphone access is denied. The retry path differs by
-/// state: a soft denial can re-prompt; a permanent denial sends the
-/// user into system settings via `openAppSettings()`.
+/// Показывается при отказе в доступе к микрофону. Путь повторной
+/// попытки зависит от состояния: мягкий отказ можно перезапросить;
+/// постоянный отказ ведёт пользователя в системные настройки через
+/// `openAppSettings()`.
 class PermissionDeniedScreen extends StatelessWidget {
   const PermissionDeniedScreen({
     super.key,
@@ -17,7 +18,7 @@ class PermissionDeniedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Microphone access')),
+      appBar: AppBar(title: const Text('Доступ к микрофону')),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -25,27 +26,27 @@ class PermissionDeniedScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'We need the microphone to detect BPM',
+                'Нужен микрофон для определения BPM',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 12),
               const Text(
-                'Hitech BPM Radar listens to the music around you and runs '
-                'the tempo detection on-device. Audio is never recorded, '
-                'stored, or sent anywhere.',
+                'Hitech BPM Radar слушает музыку вокруг и считает темп '
+                'прямо на устройстве. Аудио никогда не записывается, '
+                'не сохраняется и никуда не отправляется.',
               ),
               const SizedBox(height: 24),
               if (permanentlyDenied)
                 Text(
-                  'You previously denied microphone access permanently. '
-                  'Open system settings and enable the microphone permission '
-                  'for this app to continue.',
+                  'Ранее вы отказали в доступе к микрофону навсегда. '
+                  'Откройте системные настройки и включите разрешение '
+                  'микрофона для этого приложения, чтобы продолжить.',
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 )
               else
                 const Text(
-                  'You can grant microphone access now. We will not start '
-                  'listening until you do.',
+                  'Вы можете выдать доступ к микрофону сейчас. Мы не '
+                  'начнём слушать, пока вы этого не сделаете.',
                 ),
               const Spacer(),
               SizedBox(
@@ -53,8 +54,8 @@ class PermissionDeniedScreen extends StatelessWidget {
                 child: FilledButton.icon(
                   icon: const Icon(Icons.mic),
                   label: Text(permanentlyDenied
-                      ? 'Open system settings'
-                      : 'Grant microphone access'),
+                      ? 'Открыть системные настройки'
+                      : 'Выдать доступ к микрофону'),
                   onPressed: () async {
                     if (permanentlyDenied) {
                       await openAppSettings();

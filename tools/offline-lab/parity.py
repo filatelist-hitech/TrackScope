@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Standalone Python ↔ Rust DSP parity check.
+"""Автономная проверка parity Python ↔ Rust DSP.
 
-Generates the canonical fixture inventory, runs both the Python reference
-analyzer and the Rust ``analyze_wav`` binary on the *same* WAV bytes, and
-reports drift per fixture. Exits non-zero when any fixture violates the
-documented tolerances.
+Генерирует канонический инвентарь фикстур, запускает и Python-референсный
+анализатор, и Rust-бинарник ``analyze_wav`` на одних и тех же WAV-байтах,
+и сообщает о дрифте по каждой фикстуре. Завершается с не-нулевым кодом,
+если любая фикстура нарушает задокументированные допуски.
 
-This tool is intentionally separate from ``cargo test`` so the Rust test
-suite stays hermetic.
+Этот инструмент намеренно отделён от ``cargo test``, чтобы Rust-тест-сюит
+оставался герметичным.
 """
 
 from __future__ import annotations
