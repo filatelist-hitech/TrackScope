@@ -27,15 +27,22 @@ import 'package:ffi/ffi.dart' as pffi;
 import 'bindings.dart';
 import 'dsp_result.dart';
 
-/// Имя файла shared library по умолчанию на каждой платформе. Ищется
-/// относительно пути поиска процесса, если [DspEngine.open] не получил
-/// явный путь.
-String defaultLibraryName() {
-  if (Platform.isMacOS) return 'libhitech_bpm_ffi.dylib';
-  if (Platform.isIOS) return 'hitech_bpm_ffi.framework/hitech_bpm_ffi';
-  if (Platform.isAndroid) return 'libhitech_bpm_ffi.so';
-  if (Platform.isLinux) return 'libhitech_bpm_ffi.so';
-  if (Platform.isWindows) return 'hitech_bpm_ffi.dll';
+/// Открывает нативную библиотеку под текущую платформу.
+///
+/// iOS использует статическую линковку — символы уже в процессе после
+/// того, как `libhitech_bpm_ffi.a` слинкован в Runner через Xcode.
+/// Все остальные платформы грузят shared library по имени.
+///
+/// Явный [libraryPath] всегда имеет приоритет (удобно для тестов и
+/// нестандартных сборок).
+ffi.DynamicLibrary _openLibrary(String? libraryPath) {
+  if (libraryPath != null) return ffi.DynamicLibrary.open(libraryPath);
+  // На iOS .a статически вшита в бинарник Runner — open() не нужен.
+  if (Platform.isIOS) return ffi.DynamicLibrary.process();
+  if (Platform.isMacOS) return ffi.DynamicLibrary.open('libhitech_bpm_ffi.dylib');
+  if (Platform.isAndroid) return ffi.DynamicLibrary.open('libhitech_bpm_ffi.so');
+  if (Platform.isLinux) return ffi.DynamicLibrary.open('libhitech_bpm_ffi.so');
+  if (Platform.isWindows) return ffi.DynamicLibrary.open('hitech_bpm_ffi.dll');
   throw UnsupportedError('Неподдерживаемая платформа: ${Platform.operatingSystem}');
 }
 
@@ -50,15 +57,16 @@ class DspEngine {
     );
   }
 
-  /// Открывает shared library по пути [libraryPath] (или по дефолтному
-  /// пути поиска платформы) и выделяет новый handle движка.
+  /// Открывает нативную библиотеку и выделяет новый handle движка.
+  ///
+  /// [libraryPath] — явный путь к .dylib/.so; если не передан,
+  /// используется платформенный дефолт (для iOS — статический линкаж
+  /// через [ffi.DynamicLibrary.process]).
   factory DspEngine.open({
     String? libraryPath,
     Duration pollInterval = const Duration(milliseconds: 50),
   }) {
-    final dylib = libraryPath != null
-        ? ffi.DynamicLibrary.open(libraryPath)
-        : ffi.DynamicLibrary.open(defaultLibraryName());
+    final dylib = _openLibrary(libraryPath);
     return DspEngine.fromBindings(HitechBpmFfi(dylib),
         pollInterval: pollInterval);
   }

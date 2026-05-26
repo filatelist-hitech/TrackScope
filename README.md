@@ -34,14 +34,16 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 
 ## Текущая фаза
 
-Phase 3, шаг 2 (мобильный мост в эфире): Flutter-приложение захватывает звук с микрофона через `package:record`, отправляет PCM в отдельный изолят DSP-воркера, который владеет Rust-FFI-хэндлом, и рендерит скользящие снэпшоты `DspResult` через `StreamBuilder` на живом BPM-экране + отладочном экране.
+**Phase 3 завершена** (подтверждено на iPhone 11, 2026-05-26). Flutter-приложение захватывает звук с микрофона через `package:record 6.x`, отправляет PCM в отдельный изолят DSP-воркера, который владеет Rust-FFI-хэндлом (статическая `.a` на iOS), и рендерит скользящие снэпшоты `DspResult` через `StreamBuilder` на живом BPM-экране + отладочном экране.
 
-Rust-крейт в `core/dsp/` — продакшен-источник истины: он содержит извлечение онсетов, оценку темпа автокорреляцией, hitech-нормализацию кандидатов, скоринг уверенности и классификацию состояния захвата на нативном Rust. `core/dsp/tempo.py` и `core/dsp/synthetic.py` остаются как читаемая алгоритмическая референс-реализация и продолжают обслуживать офлайн-отчёт Python.
+Следующая фаза — **Phase 4: закалка** (адаптивные пороги, сглаживание BPM, реальные тестовые записи, цель ±2–4 BPM через живой микрофон).
 
-### Запуск мобильного приложения
+Rust-крейт в `core/dsp/` — продакшен-источник истины: извлечение онсетов, оценка темпа автокорреляцией, hitech-нормализация кандидатов, скоринг уверенности и классификация состояния захвата на нативном Rust. `core/dsp/tempo.py` и `core/dsp/synthetic.py` остаются как читаемая алгоритмическая референс-реализация.
+
+### Запуск мобильного приложения (Android / macOS)
 
 ```sh
-# 1. Собрать Rust FFI dylib (один раз на машину, дальше кэшируется cargo)
+# 1. Собрать Rust FFI dylib
 /opt/homebrew/opt/rust/bin/cargo build --release -p hitech-bpm-ffi
 
 # 2. Подтянуть Flutter-зависимости
@@ -52,13 +54,34 @@ cd apps/mobile
 /opt/homebrew/bin/flutter analyze
 /opt/homebrew/bin/flutter test
 
-# 4. Запуск на подключённом устройстве или работающем симуляторе/эмуляторе
+# 4. Запуск
 /opt/homebrew/bin/flutter run
 ```
 
-Rust dylib подтягивается в Android/iOS-приложение через пайплайн плагинов платформы (`record_darwin`, `permission_handler_apple` подхватываются Flutter автоматически). Для тестового раннера `apps/mobile/test/helpers/native_library.dart` сам вызывает `cargo build`, если dylib отсутствует.
+### Запуск на физическом iPhone
 
-Перед мерджем мобильного моста в `stage` пройдите чеклист устройств в [docs/MANUAL_TEST_CHECKLIST.md](docs/MANUAL_TEST_CHECKLIST.md).
+Требования: Xcode, rustup (через `brew install rustup`), iPhone в Developer Mode.
+
+```sh
+# 1. Собрать статическую библиотеку для iOS
+bash scripts/build_ios_native.sh
+
+# 2. Однократная Xcode-конфигурация (первый раз):
+#    - Link Binary With Libraries → добавить apps/mobile/ios/Frameworks/libhitech_bpm_ffi.a
+#    - Build Settings → Library Search Paths → $(PROJECT_DIR)/Frameworks
+#    - Build Settings → OTHER_LDFLAGS → -force_load $(PROJECT_DIR)/Frameworks/libhitech_bpm_ffi.a
+#    - Signing & Capabilities → Team → выбрать Apple ID
+
+# 3. Подтянуть CocoaPods
+cd apps/mobile
+flutter pub get
+cd ios && pod install && cd ..
+
+# 4. Запустить на подключённом iPhone
+flutter run --release
+```
+
+Подробности в [docs/MOBILE_AUDIO.md](docs/MOBILE_AUDIO.md) и [docs/MANUAL_TEST_CHECKLIST.md](docs/MANUAL_TEST_CHECKLIST.md).
 
 ### Воркфлоу тестов
 

@@ -6,7 +6,27 @@
 
 ## [Unreleased]
 
+### Added
+- `scripts/build_ios_native.sh` — bash-скрипт для кросс-компиляции `libhitech_bpm_ffi.a` под `aarch64-apple-ios` через rustup. Разрешает конфликт двух Rust-тулчейнов: явно переставляет PATH на `~/.rustup/toolchains/stable-aarch64-apple-darwin/bin`, чтобы cargo использовал rustup-управляемый тулчейн с iOS-таргетом, а не Homebrew-rustc. Копирует `.a` в `apps/mobile/ios/Frameworks/`.
+
+### Fixed
+- **iOS: `dlsym symbol not found` при запуске** — iOS линкер выкидывал Rust-символы из `.a` через dead-code stripping; `DynamicLibrary.process()` не находил их. Исправлено добавлением `-force_load $(PROJECT_DIR)/Frameworks/libhitech_bpm_ffi.a` в `OTHER_LDFLAGS` для Debug и Release конфигураций Runner в `apps/mobile/ios/Runner.xcodeproj/project.pbxproj`.
+- **iOS: микрофонное разрешение молча denied** — `permission_handler` 12.x требует compile-time флага `PERMISSION_MICROPHONE=1` в `GCC_PREPROCESSOR_DEFINITIONS`; без него `Permission.microphone.request()` возвращает `denied`, не показывая системный диалог. Исправлено добавлением флага в `post_install` в `apps/mobile/ios/Podfile`.
+- **iOS: `DynamicLibrary.process()` вместо `DynamicLibrary.open()`** — для статически слинкованной `.a` библиотеки нужно открывать символы из текущего процесса, а не из файла. `apps/mobile/lib/dsp/engine.dart` теперь вызывает `DynamicLibrary.process()` для iOS через приватную функцию `_openLibrary(libraryPath)`.
+
 ### Changed
+- `record` обновлён с `^5.1.2` до `^6.0.0` (resolved: 6.2.1) — исправляет несовместимость `record_linux 0.7.2` с `record_platform_interface 1.6.0`, которая вызывала ошибку компиляции даже при сборке под iOS (Dart компилирует все platform implementations).
+- `permission_handler` обновлён с `^11.3.1` до `^12.0.0` (resolved: 12.0.1) — aligned с требованиями Podfile compile-time flags.
+- `docs/MOBILE_AUDIO.md` дополнен разделами: сборка нативной библиотеки для iOS, Xcode-конфигурация (`-force_load`, Library Search Paths), `PERMISSION_MICROPHONE=1` в Podfile, результаты реального устройства Phase 3.
+- `docs/ROADMAP.md` — Phase 1, 2, 3 помечены как ЗАВЕРШЕНО; Phase 4 расширена конкретными задачами по наблюдениям с iPhone 11.
+
+### Phase 3: подтверждено на реальном устройстве
+
+iPhone 11, iOS 26.3.1, 2026-05-26. Треки hitech-psytrance 192/200/207 BPM, комнатный микрофон (~1 м). Детектировано ~187–196 BPM, уровень -10 до -12 dBFS, lock_state `LOCKING` при 52–62% уверенности. Пайплайн конца в конец подтверждён работающим; точность ±5–8 BPM через комнатный микрофон — Phase 4 задача.
+
+---
+
+### Changed (translations)
 - Полный перевод человекочитаемой поверхности репозитория на русский: документация (`docs/`, корневые `README.md`, `AGENTS.md`, `CLAUDE.md`), все per-module `README.md`, `CHANGELOG.md`, тела субагентов и навыков `.claude/agents/*.md`, `.claude/skills/*/SKILL.md`, `.claude/commands/*.md`, UI-строки в `apps/mobile/lib/`, `NSMicrophoneUsageDescription` в `apps/mobile/ios/Runner/Info.plist`, комментарии в Rust / Python / Dart / JS-коде. Идентификаторы, JSON-ключи контракта, значения enum `LockState`, имена фикстур, лог-сообщения и slash-команды остались английскими — поведение и тесты сохраняются. Глоссарий: `docs/GLOSSARY.md`. План: `docs/plans/translations-russian.md`.
 
 ### Added
