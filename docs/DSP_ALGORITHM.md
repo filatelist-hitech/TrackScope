@@ -1,12 +1,12 @@
-# DSP Algorithm
+# DSP-алгоритм
 
-## Scope
+## Область применения
 
-The DSP core detects BPM automatically from PCM audio. The primary genre target is hitech / psytrance at 170-230 BPM. Tap tempo is not the main mechanism.
+DSP-ядро автоматически определяет BPM по PCM-аудио. Основной жанровый таргет — hitech / psytrance в диапазоне 170–230 BPM. Tap-tempo не является основным механизмом.
 
-The first implementation should be deterministic DSP. Machine learning is not part of the initial plan because the project needs explainable candidates, synthetic regression tests, and predictable mobile CPU behavior.
+Первая имплементация — детерминированный DSP. Машинное обучение не входит в первоначальный план, потому что проекту нужны объяснимые кандидаты, синтетические регрессионные тесты и предсказуемое поведение CPU на мобильном.
 
-## Result Contract
+## Контракт результата
 
 ```ts
 type LockState =
@@ -81,117 +81,117 @@ interface DspDebug {
 }
 ```
 
-Contract rules:
+Правила контракта:
 
-- `primary_bpm` is `null` until confidence clears the current lock threshold.
-- `confidence` is always in the range `0.0..1.0`.
-- `candidates` preserves raw and normalized options with relation metadata.
-- Hitech mode prefers 170-230 BPM but does not hide ambiguity.
-- A raw 100 BPM candidate can yield a normalized 200 BPM candidate, but both remain visible.
-- A raw 400 BPM candidate can yield a normalized 200 BPM candidate, but both remain visible.
+- `primary_bpm` равен `null`, пока уверенность не превысит текущий порог захвата.
+- `confidence` всегда в диапазоне `0.0..1.0`.
+- `candidates` сохраняет raw- и нормализованные варианты с relation-метаданными.
+- Hitech-режим предпочитает 170–230 BPM, но не скрывает неоднозначность.
+- raw-кандидат 100 BPM может породить нормализованного кандидата 200 BPM, но оба остаются видимыми.
+- raw-кандидат 400 BPM может породить нормализованного кандидата 200 BPM, но оба остаются видимыми.
 
-## Pipeline
+## Пайплайн
 
-1. Accept PCM audio chunks.
-2. Convert to mono floating-point samples.
-3. Normalize sample format and resample to the DSP rate if needed.
-4. Preprocess with level tracking, silence detection, clipping detection, and kick-relevant filtering.
-5. Compute multiband onset evidence:
-   - broadband spectral flux
-   - low-frequency energy flux for kick pulse
-   - high-frequency transient flux for noisy recordings
-6. Maintain onset history in rolling windows.
-7. Estimate tempo candidates using autocorrelation, comb matching, and inter-onset interval support.
-8. Normalize hitech half-time and double-time candidates.
-9. Score candidates using tempo evidence, hitech range fit, harmonic support, recent stability, and signal quality.
-10. Classify lock state.
-11. Emit a `DspResult` snapshot.
+1. Принять PCM-аудио-чанки.
+2. Конвертировать в моно с плавающей точкой.
+3. Нормализовать формат сэмплов и при необходимости ресэмплировать к DSP-частоте.
+4. Препроцессинг с трекингом уровня, детекцией тишины, детекцией клиппинга и фильтрацией, релевантной kick'у.
+5. Вычислить многополосный onset-evidence:
+   - широкополосный spectral flux;
+   - flux низкочастотной энергии для kick-пульса;
+   - flux высокочастотных транзиентов для шумных записей.
+6. Поддерживать историю онсетов в скользящих окнах.
+7. Оценивать BPM-кандидатов через автокорреляцию, comb matching и поддержку межонсетных интервалов.
+8. Нормализовывать hitech half-time- и double-time-кандидатов.
+9. Скорить кандидатов по темповому evidence, попаданию в hitech-диапазон, гармонической поддержке, недавней стабильности и качеству сигнала.
+10. Классифицировать состояние захвата.
+11. Эмитировать снэпшот `DspResult`.
 
-## Candidate Normalization
+## Нормализация кандидатов
 
-Search a broad internal range, such as 80-460 BPM, so traps are observable before normalization.
+Поиск ведётся в широком внутреннем диапазоне, например 80–460 BPM, чтобы ловушки были видны до нормализации.
 
-Rules:
+Правила:
 
-- If a raw candidate is below 130 BPM, also create `bpm * 2` with relation `normalized_from_half`.
-- If a raw candidate is above 260 BPM, also create `bpm / 2` with relation `normalized_from_double`.
-- Keep raw, half-time, double-time, and normalized candidates in the candidate list.
-- Choose the primary candidate by combined score, not by range alone.
-- Do not finalize 100 BPM in hitech mode if normalized 200 BPM has stronger evidence.
+- Если raw-кандидат ниже 130 BPM, дополнительно создаём `bpm * 2` с relation `normalized_from_half`.
+- Если raw-кандидат выше 260 BPM, дополнительно создаём `bpm / 2` с relation `normalized_from_double`.
+- Сохраняем raw, half-time, double-time и нормализованные кандидаты в списке.
+- Выбираем основного кандидата по совокупному score, а не только по диапазону.
+- Не финализируем 100 BPM в hitech-режиме, если нормализованный 200 BPM имеет более сильное evidence.
 
-## Confidence Engine
+## Движок уверенности
 
-Confidence is a composite of:
+Уверенность — это композит:
 
-- onset clarity
-- tempo peak prominence
-- harmonic support
-- recent candidate stability
-- hitech range score
-- signal quality
-- amount of audio observed
-- ambiguity penalty between close candidates
+- чёткости онсетов;
+- prominence темпового пика;
+- гармонической поддержки;
+- недавней стабильности кандидата;
+- score попадания в hitech-диапазон;
+- качества сигнала;
+- объёма наблюдённого аудио;
+- штрафа за неоднозначность между близкими кандидатами.
 
-Silence, clipping, weak onset density, noise-only structure, and breakdown sections must suppress confidence.
+Тишина, клиппинг, слабая плотность онсетов, шум-без-сигнала и брейкдаун-секции обязаны подавлять уверенность.
 
-## Lock States
+## Состояния захвата
 
-- `SEARCHING`: not enough usable signal or history.
-- `LOCKING`: candidate exists, but stability or duration is not yet sufficient.
-- `STABLE`: high confidence, stable primary candidate, and acceptable signal quality.
-- `UNSTABLE`: candidates jump or confidence drops while signal remains musical.
-- `BREAKDOWN`: a previous tempo existed, but current onset density or kick pulse collapsed.
-- `CLIPPED_MIC`: clipping ratio is high enough to compromise analysis.
-- `NOISE_ONLY`: signal exists, but there is no reliable periodic onset structure.
+- `SEARCHING`: недостаточно пригодного сигнала или истории.
+- `LOCKING`: кандидат существует, но стабильности или продолжительности пока недостаточно.
+- `STABLE`: высокая уверенность, стабильный основной кандидат и приемлемое качество сигнала.
+- `UNSTABLE`: кандидаты скачут или уверенность падает, при этом сигнал остаётся музыкальным.
+- `BREAKDOWN`: ранее существовавший темп есть в истории, но текущая плотность онсетов или kick-пульс схлопнулись.
+- `CLIPPED_MIC`: отношение клиппинга достаточно велико, чтобы скомпрометировать анализ.
+- `NOISE_ONLY`: сигнал есть, но надёжной периодической структуры онсетов нет.
 
-Silence and noise-only input must never become `STABLE`.
+Тишина и шум-без-сигнала никогда не должны становиться `STABLE`.
 
-## Streaming And Offline Boundaries
+## Границы streaming и offline
 
-The streaming core processes small chunks, maintains ring buffers, and emits periodic snapshots. It must support session reset.
+Потоковое ядро обрабатывает небольшие чанки, поддерживает кольцевые буферы и эмитит периодические снэпшоты. Оно обязано поддерживать сброс сессии.
 
-The offline analyzer feeds decoded audio into the same engine in deterministic chunks. It may produce richer reports, but it must not use a separate tempo algorithm after Rust parity.
+Офлайн-анализатор подаёт декодированное аудио в тот же движок детерминированными чанками. Он может выдавать более богатые отчёты, но не должен использовать отдельный темповый алгоритм после Rust-parity.
 
-### Rolling Onset History (Phase 2)
+### Скользящая история онсетов (Phase 2)
 
-`DspEngine` does **not** re-run onset extraction over the full PCM window on every `push_samples` call. It holds three pieces of streaming state:
+`DspEngine` **не** перезапускает извлечение онсетов поверх полного PCM-окна при каждом вызове `push_samples`. Он хранит три фрагмента streaming-состояния:
 
-- `pcm_window: VecDeque<f32>` — bounded by `analysis_window_seconds * sample_rate`. Used by `measure_signal` and not for onset extraction.
-- `pcm_pending: Vec<f32>` — buffers the trailing PCM at the frame boundary so a frame that straddles two pushes is emitted exactly once.
-- `onset_history: VecDeque<f32>` — bounded ring of raw spectral-flux samples (one per onset frame), capacity `analysis_window_seconds / hop_sec`. Default hop is 2.5 ms, so the default capacity is ~4800 samples.
-- `prev_frame_rms: Option<f32>` — last frame RMS, used to continue the spectral-flux differencing across pushes.
+- `pcm_window: VecDeque<f32>` — ограничен `analysis_window_seconds * sample_rate`. Используется `measure_signal`, а не для извлечения онсетов.
+- `pcm_pending: Vec<f32>` — буферизует хвостовой PCM на границе кадра, чтобы кадр, разделяющий два push'а, эмитился ровно один раз.
+- `onset_history: VecDeque<f32>` — ограниченное кольцо raw-сэмплов spectral-flux (один на onset-кадр), вместимость `analysis_window_seconds / hop_sec`. Шаг по умолчанию 2.5 мс, поэтому вместимость по умолчанию ~4800 сэмплов.
+- `prev_frame_rms: Option<f32>` — RMS последнего кадра, используется для продолжения дифференцирования spectral-flux через push'и.
 
-On each `push_samples`, the engine drains full onset frames from `pcm_pending` into `onset_history`, evicting the oldest entries when the bound is reached. The per-call CPU cost is proportional to the *new* PCM region, not the elapsed stream duration — running the engine for an hour does not slow `push_samples` down.
+На каждом `push_samples` движок вычерпывает полные onset-кадры из `pcm_pending` в `onset_history`, вытесняя самые старые записи при достижении границы. CPU-стоимость на вызов пропорциональна *новой* PCM-области, а не пройденному времени стрима — движок, работающий час, не замедляет `push_samples`.
 
-On `analyze`, the engine clones the bounded onset history, applies the median-floor + peak-normalize pass (`finalize_envelope`), and runs `analyze_from_envelope` — the shared post-onset pipeline used by both `analyze_pcm` (offline batch) and `DspEngine::analyze` (streaming). Tempo autocorrelation runs over the bounded envelope, so its cost is also independent of stream length.
+На `analyze` движок клонирует ограниченную историю онсетов, применяет проход median-floor + peak-normalize (`finalize_envelope`) и запускает `analyze_from_envelope` — общий пост-онсетный пайплайн, используемый и `analyze_pcm` (офлайн-пакет), и `DspEngine::analyze` (streaming). Темповая автокорреляция работает поверх ограниченной огибающей, поэтому её стоимость тоже независима от длины стрима.
 
-Steady-state output is equivalent to the offline `analyze_pcm` path within parity tolerance: the `streaming_engine_matches_batch_analysis` test in `core/dsp/tests/offline_contract.rs` enforces this. Tail/transient behavior differs slightly because streaming carries `prev_frame_rms` across pushes rather than re-zeroing it at the window boundary; this is the *desired* behavior because it preserves continuity of the spectral-flux signal as old PCM falls off the front.
+Установившийся вывод эквивалентен офлайн-пути `analyze_pcm` в пределах parity-допуска: это обеспечивает тест `streaming_engine_matches_batch_analysis` в `core/dsp/tests/offline_contract.rs`. Хвостовое/транзиентное поведение немного отличается, поскольку streaming переносит `prev_frame_rms` через push'и, а не зануляет его на границе окна; это *желаемое* поведение, потому что оно сохраняет непрерывность spectral-flux-сигнала, когда старый PCM выпадает с фронта.
 
-### FFI Boundary (Phase 2)
+### Граница FFI (Phase 2)
 
-The `core/ffi` crate exposes the streaming engine to non-Rust callers (Flutter, native iOS/Android audio bridges). Only six symbols cross the boundary; none lets the caller compute BPM on its own:
+Крейт `core/ffi` экспонирует потоковый движок не-Rust-вызывающим (Flutter, нативные iOS/Android аудио-мосты). Границу пересекают всего шесть символов; ни один из них не позволяет вызывающему считать BPM самостоятельно:
 
-- `hitech_bpm_engine_new` / `hitech_bpm_engine_free` — handle lifetime.
-- `hitech_bpm_engine_reset` — drop rolling state in place.
-- `hitech_bpm_engine_push_samples(samples, len, sample_rate) -> bool` — audio-thread ingress; allocation-light.
-- `hitech_bpm_engine_analyze_json(engine) -> *mut c_char` — UI-rate poll. Serializes the rolling `DspResult` to UTF-8 JSON owned by the caller. JSON keys match the contract above. Recommended poll rate ~10–30 Hz; do not call from the audio thread.
-- `hitech_bpm_string_free(ptr)` — release the JSON buffer.
+- `hitech_bpm_engine_new` / `hitech_bpm_engine_free` — время жизни хэндла.
+- `hitech_bpm_engine_reset` — сбросить скользящее состояние на месте.
+- `hitech_bpm_engine_push_samples(samples, len, sample_rate) -> bool` — вход с аудио-потока; легковесно по аллокациям.
+- `hitech_bpm_engine_analyze_json(engine) -> *mut c_char` — опрос на UI-частоте. Сериализует текущий `DspResult` в UTF-8 JSON, владелец — вызывающий. JSON-ключи соответствуют контракту выше. Рекомендуемая частота опроса ~10–30 Гц; не вызывать с аудио-потока.
+- `hitech_bpm_string_free(ptr)` — освободить JSON-буфер.
 
-Internal buffers (`pcm_window`, `pcm_pending`, `onset_history`, `prev_frame_rms`, autocorrelation arrays) never cross the FFI boundary. End-to-end coverage lives in `core/ffi/tests/ffi_contract.rs`.
+Внутренние буферы (`pcm_window`, `pcm_pending`, `onset_history`, `prev_frame_rms`, массивы автокорреляции) никогда не пересекают границу FFI. End-to-end-покрытие — в `core/ffi/tests/ffi_contract.rs`.
 
-### Streaming Tests (Phase 2)
+### Тесты streaming (Phase 2)
 
-`core/dsp/tests/streaming.rs` exercises the streaming path with 100 ms chunks:
+`core/dsp/tests/streaming.rs` прогоняет потоковый путь чанками по 100 мс:
 
-- `streaming_first_lock_under_six_seconds_for_200_bpm` — engine leaves `SEARCHING` within `lock_min_seconds` (default 6 s) on a clean 200 BPM pulse.
-- `streaming_stable_lock_under_twelve_seconds_for_200_bpm` — engine reaches `STABLE` with `primary_bpm` within ±2 BPM within `stable_min_seconds` (default 12 s).
-- `streaming_reflects_mid_stream_tempo_change_within_one_window` — concatenated 180 BPM (12 s) + 200 BPM (12 s) stream. Engine locks to 180 BPM in segment 1; after the transition, `primary_bpm` reaches ~200 BPM within one analysis window; the lock state passes through a non-`STABLE` state during the change rather than silently swapping numbers.
+- `streaming_first_lock_under_six_seconds_for_200_bpm` — движок покидает `SEARCHING` в пределах `lock_min_seconds` (по умолчанию 6 с) на чистом пульсе 200 BPM.
+- `streaming_stable_lock_under_twelve_seconds_for_200_bpm` — движок достигает `STABLE` с `primary_bpm` в пределах ±2 BPM в `stable_min_seconds` (по умолчанию 12 с).
+- `streaming_reflects_mid_stream_tempo_change_within_one_window` — конкатенированный поток 180 BPM (12 с) + 200 BPM (12 с). Движок захватывает 180 BPM в первом сегменте; после перехода `primary_bpm` достигает ~200 BPM в пределах одного окна анализа; состояние захвата проходит через не-`STABLE` состояние во время изменения, а не молча подменяет числа.
 
-Current implementation state:
+Текущее состояние имплементации:
 
-- Rust `core/dsp` is the production source of truth: it contains the typed contract, signal-quality measurement, multiband onset envelope, autocorrelation tempo estimation, hitech candidate normalization, confidence scoring, and lock-state gates as native code (no FFI, no subprocess).
-- `core/dsp/tempo.py` and `core/dsp/synthetic.py` remain as the readable algorithmic reference and are exercised by the Python suite and the offline-lab report; they are no longer a runtime dependency of `cargo test`.
-- `cargo test --workspace` is hermetic: Rust DSP regression coverage lives in `core/dsp/tests/offline_contract.rs` (using the shared deterministic fixture module `core/dsp/tests/common/mod.rs`) and asserts the contract directly, without invoking Python.
-- Cross-language parity is an opt-in tool: `python3 tools/offline-lab/parity.py` generates the canonical fixture inventory, runs both the Python analyzer and the Rust `analyze_wav` binary on the same WAV bytes, and reports per-fixture drift. It is not part of `cargo test`.
-- Python signal quality emits `snr_estimate_db: null` until a real noise-floor estimator exists; current noise gating uses level, clipping, crest, and onset-periodicity evidence instead of a fake SNR value.
-- Clipping is graded by clipped-frame ratio: mild clipping caps confidence below `STABLE` while keeping candidates visible; severe clipping (>= 5% of frames) forces `CLIPPED_MIC` and suppresses `primary_bpm`.
+- Rust `core/dsp` — продакшен-источник истины: содержит типизированный контракт, измерение качества сигнала, многополосную огибающую онсетов, автокорреляционную оценку темпа, hitech-нормализацию кандидатов, скоринг уверенности и гейты состояния захвата как нативный код (без FFI, без сабпроцесса).
+- `core/dsp/tempo.py` и `core/dsp/synthetic.py` остаются как читаемый алгоритмический референс и прогоняются Python-обвязкой и offline-lab-отчётом; они больше не runtime-зависимость `cargo test`.
+- `cargo test --workspace` герметичен: Rust DSP-регрессионное покрытие живёт в `core/dsp/tests/offline_contract.rs` (используя общий детерминированный фикстурный модуль `core/dsp/tests/common/mod.rs`) и проверяет контракт напрямую, без вызова Python.
+- Кросс-языковой parity — opt-in-инструмент: `python3 tools/offline-lab/parity.py` генерирует канонический инвентарь фикстур, запускает и Python-анализатор, и Rust-бинарник `analyze_wav` на одних и тех же WAV-байтах и репортит дрифт по каждой фикстуре. Это не часть `cargo test`.
+- Python-качество сигнала эмитит `snr_estimate_db: null`, пока нет реального оценщика noise-floor; текущее шумовое гейтирование использует evidence уровня, клиппинга, crest и периодичности онсетов вместо фейкового SNR-значения.
+- Клиппинг градирован по отношению клиппированных кадров: мягкий клиппинг ограничивает уверенность ниже `STABLE`, оставляя кандидатов видимыми; сильный клиппинг (>= 5% кадров) форсит `CLIPPED_MIC` и подавляет `primary_bpm`.

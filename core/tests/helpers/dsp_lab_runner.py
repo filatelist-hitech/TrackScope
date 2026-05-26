@@ -1,4 +1,4 @@
-"""Public offline DSP lab CLI adapter used by regression tests."""
+"""Публичный адаптер CLI офлайн-DSP-лаба, используемый в регрессионных тестах."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ PYTHON_OFFLINE_LAB = REPO_ROOT / "tools" / "offline-lab" / "offline_lab.py"
 
 
 class DspLabRunner:
-    """Runs the public offline analyzer and returns its JSON result."""
+    """Запускает публичный офлайн-анализатор и возвращает его JSON-результат."""
 
     def __init__(self, command_template: str | None = None) -> None:
         self.command_template = command_template or os.environ.get("DSP_LAB_CMD")

@@ -5,7 +5,7 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Hitech BPM Radar listens through the microphone to detect the BPM of the music around you. Audio stays on your device and is never recorded or sent anywhere.</string>
+	<string>Hitech BPM Radar слушает через микрофон, чтобы определять BPM музыки вокруг вас. Аудио остаётся на устройстве и никогда не записывается и никуда не отправляется.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

@@ -1,126 +1,127 @@
 # CLAUDE.md — hitech-bpm-radar
 
-DSP-first mobile BPM detector for hitech / psytrance (170–230 BPM target). Microphone input, no tap tempo.
+DSP-first мобильный детектор BPM для hitech / psytrance (целевой диапазон 170–230 BPM). Вход — микрофон, без tap-tempo.
 
-## Stack & layout
+## Стек и раскладка
 
-- `core/dsp/`         — Rust DSP crate (source of truth) + Python reference (`tempo.py`, `synthetic.py`) used by Phase 1 tests.
-- `core/ffi/`         — Native C ABI for Flutter ↔ Rust DSP.
-- `core/tests/`       — Python regression and parity tests, synthetic fixtures.
-- `tools/offline-lab/` — Python CLI analyzer, fixture generator, QA report.
-- `apps/mobile/`      — Flutter shell (microphone, debug screen, history). No BPM math here.
-- `datasets/`         — synthetic / hitech / noisy_club / clipped_mic / breakdowns fixtures.
-- `docs/`             — architecture, DSP algorithm, QA matrix, roadmap, mobile audio notes.
+- `core/dsp/`         — Rust DSP-крейт (источник истины) + Python-референс (`tempo.py`, `synthetic.py`), используется в тестах Phase 1.
+- `core/ffi/`         — Нативный C ABI для моста Flutter ↔ Rust DSP.
+- `core/tests/`       — Python-регрессия, parity-тесты, синтетические фикстуры.
+- `tools/offline-lab/` — Python-CLI-анализатор, генератор фикстур, QA-отчёт.
+- `apps/mobile/`      — Flutter-оболочка (микрофон, отладочный экран, история). Никакой BPM-математики здесь.
+- `datasets/`         — фикстуры synthetic / hitech / noisy_club / clipped_mic / breakdowns.
+- `docs/`             — архитектура, DSP-алгоритм, QA-матрица, roadmap, заметки по мобильному аудио.
 
-## DspResult contract (do not break)
+## Контракт DspResult (не ломать)
 
 ```ts
 type LockState = "SEARCHING" | "LOCKING" | "STABLE" | "UNSTABLE" | "BREAKDOWN" | "CLIPPED_MIC" | "NOISE_ONLY";
 type TempoRelation = "raw" | "main" | "half_time" | "double_time" | "normalized_from_half" | "normalized_from_double";
 
 interface DspResult {
-  primary_bpm: number | null;   // null when signal is silence/noise/clipped/untrustworthy
+  primary_bpm: number | null;   // null, если сигнал — тишина/шум/клиппинг/недостоверен
   confidence: number;            // 0.0..1.0
   lock_state: LockState;
   signal_quality: SignalQuality; // input_level_dbfs, clipping, clipped_frame_ratio, noise_level, snr_estimate_db, silence, breakdown_likely
-  candidates: TempoCandidate[];  // raw + normalized, with score, raw_score, stability_score, range_score, relation, source_bpm
+  candidates: TempoCandidate[];  // raw + нормализованные, со score, raw_score, stability_score, range_score, relation, source_bpm
   timing: DspTiming;
   debug?: DspDebug;
 }
 ```
 
-Rules:
-- `primary_bpm` is `null` until confidence clears the lock threshold.
-- Silence and noise-only input must NEVER reach `STABLE`.
-- Clipped input must flag `clipping: true`; if severe, suppress `primary_bpm` and prefer `CLIPPED_MIC`.
-- Breakdown sections decay confidence; do not preserve stale `STABLE`.
+Правила:
+- `primary_bpm` остаётся `null`, пока уверенность не превысит порог захвата.
+- Тишина и шум-без-сигнала НИКОГДА не должны достигать `STABLE`.
+- Вход с клиппингом обязан выставить `clipping: true`; при сильном клиппинге — подавить `primary_bpm` и предпочесть `CLIPPED_MIC`.
+- Брейкдауны проседают уверенность; не сохраняйте устаревший `STABLE`.
 
-Full spec: @docs/DSP_ALGORITHM.md
+Полная спецификация: @docs/DSP_ALGORITHM.md
 
-## Hitech candidate normalization
+## Hitech-нормализация кандидатов
 
-- Search internal range ~80–460 BPM so half/double traps are observable pre-normalization.
-- If raw candidate < 130 BPM → also emit `bpm * 2` with relation `normalized_from_half`.
-- If raw candidate > 260 BPM → also emit `bpm / 2` with relation `normalized_from_double`.
-- Keep raw, half-time, double-time, and normalized candidates in the list.
-- Primary chosen by combined score (evidence + range fit + stability + signal quality), not range alone.
-- In hitech mode a raw 100 BPM must not finalize if normalized 200 BPM has stronger evidence.
+- Внутренний поисковый диапазон ~80–460 BPM, чтобы half/double-ловушки были видны до нормализации.
+- Если raw-кандидат < 130 BPM — также эмитим `bpm * 2` с relation `normalized_from_half`.
+- Если raw-кандидат > 260 BPM — также эмитим `bpm / 2` с relation `normalized_from_double`.
+- Сохраняем raw, half-time, double-time и нормализованные кандидаты в списке.
+- Основной кандидат выбирается по совокупному score (evidence + range fit + stability + signal quality), а не только по диапазону.
+- В hitech-режиме raw 100 BPM не должен финализироваться, если нормализованный 200 BPM имеет более сильное evidence.
 
-## Anti-fake rules (non-negotiable)
+## Anti-fake правила (не подлежат обсуждению)
 
-- NO hardcoded production BPM values.
-- NO random BPM, NO timer-based fake pulse, NO demo BPM in production paths.
-- NO `STABLE` without onset/tempo evidence and signal-quality gating.
-- NEVER hide half-time / double-time candidates — always keep them visible.
-- NEVER return a single BPM without an associated confidence.
-- Confidence must be derived from evidence (onset clarity, peak prominence, harmonic support, stability, range fit, signal quality, ambiguity penalty).
-- Mobile/UI must never compute BPM — only render the DSP contract.
+- НЕТ хардкодных продакшен-значений BPM.
+- НЕТ случайных BPM, НЕТ фейкового пульса по таймеру, НЕТ демо-BPM в продакшен-путях.
+- НЕТ `STABLE` без онсет/темпо-доказательств и гейта качества сигнала.
+- НИКОГДА не скрывать half-time / double-time кандидатов — они всегда видимы.
+- НИКОГДА не возвращать одно BPM без сопровождающей уверенности.
+- Уверенность вычисляется из evidence (чёткость онсетов, prominence пика, гармоническая поддержка, стабильность, попадание в диапазон, качество сигнала, штраф за неоднозначность).
+- Mobile/UI никогда не считает BPM — только рендерит DSP-контракт.
 
-## Workflow for any task
+## Воркфлоу любой задачи
 
-1. Read @AGENTS.md and this file before doing anything.
-2. Classify complexity (low / medium / high) and domains (dsp / mobile / ui / qa / docs / performance / security).
-3. For medium/high: produce a plan using @.codex/plans/PLANS.md before implementation. The `/plan` command scaffolds it.
-4. Pick subagents and skills explicitly by relevance:
-   - DSP work → `@dspman`, skill `dsp-tempo-analysis`.
-   - Mobile/Flutter/FFI → `@mobileman`, skill `mobile-audio-input`.
-   - Test/QA/datasets → `@qaman`, skill `qa-audio-dataset`.
-   - Architecture or contracts → `@archman`.
-   - Perf/latency/CPU → `@perfman`.
-   - Docs/release notes → `@docman`.
-   - Before merging → `@reviewman` + skill `review-gate`.
-5. Implement minimally; add/update tests next to the change. DSP changes require synthetic coverage.
-6. Run the relevant validation commands before reporting done.
-7. Final report: changed files, what was implemented, how it was tested, known limitations, recommended next patch.
+1. Прочитайте @AGENTS.md и этот файл перед началом.
+2. Классифицируйте сложность (low / medium / high) и домены (dsp / mobile / ui / qa / docs / performance / security).
+3. Для medium/high — сначала план по шаблону @.codex/plans/PLANS.md. Команда `/plan` скаффолдит его.
+4. Выбирайте субагентов и навыки явно по релевантности:
+   - DSP-работа → `@dspman`, навык `dsp-tempo-analysis`.
+   - Mobile/Flutter/FFI → `@mobileman`, навык `mobile-audio-input`.
+   - Test/QA/датасеты → `@qaman`, навык `qa-audio-dataset`.
+   - Архитектура и контракты → `@archman`.
+   - Perf/задержка/CPU → `@perfman`.
+   - Документация / релиз-ноты → `@docman`.
+   - Перед мерджем → `@reviewman` + навык `review-gate`.
+5. Имплементируйте минимально; тесты добавляются/обновляются рядом с изменением. DSP-изменения требуют синтетического покрытия.
+6. Прогоните релевантные валидационные команды до отчёта о готовности.
+7. Финальный отчёт: изменённые файлы, что реализовано, как тестировалось, известные ограничения, рекомендуемый следующий патч.
 
-## Toolchain
+## Тулчейн
 
-Use the explicit binaries (see @AGENTS.md):
+Используйте явные бинарники (см. @AGENTS.md):
 
 - `/opt/homebrew/opt/nodejs/bin/node`
 - `/opt/homebrew/opt/rust/bin/cargo`
 
-## Build & test commands
+## Команды сборки и тестов
 
 ```sh
-# Python unit + parity + offline-DSP regression
+# Python-юнит + parity + офлайн-DSP-регрессия
 python3 -m unittest discover core/tests
 
-# Rust workspace (DSP + FFI + python parity)
+# Rust-воркспейс (DSP + FFI + python parity)
 /opt/homebrew/opt/rust/bin/cargo test --workspace
 
-# Node offline analyzer parity
+# Node-офлайн-анализатор parity
 /opt/homebrew/opt/nodejs/bin/node --test core/dsp/index.test.js
 
-# Deterministic offline QA report (exit-non-zero on regression)
+# Детерминированный офлайн-QA-отчёт (выход с не-нулевым кодом при регрессии)
 python3 tools/offline-lab/offline_lab.py report
 
-# Flutter (becomes required once mobile bridge lands)
+# Flutter (становится обязательным после интеграции мобильного моста)
 flutter test
 flutter analyze
 ```
 
-## References
+## Ссылки
 
 - @AGENTS.md
 - @docs/ARCHITECTURE.md
 - @docs/DSP_ALGORITHM.md
 - @docs/QA_MATRIX.md
 - @docs/ROADMAP.md
+- @docs/GLOSSARY.md
 - @.codex/plans/PLANS.md
 
-## Codex ↔ Claude Code agent mapping
+## Маппинг Codex ↔ Claude Code
 
-The legacy Codex agents in `.codex/agents/*.toml` map 1:1 to Claude Code subagents in `.claude/agents/*.md`:
+Легаси Codex-агенты в `.codex/agents/*.toml` маппятся 1:1 на субагентов Claude Code в `.claude/agents/*.md`:
 
-| Codex (TOML)  | Claude Code (md) | Focus                                         |
-| ------------- | ---------------- | --------------------------------------------- |
-| ARCHMAN       | archman          | architecture, module boundaries, contracts    |
-| DSPMAN        | dspman           | DSP algorithms, parity Rust ↔ Python          |
-| MOBILEMAN     | mobileman        | Flutter shell, FFI, microphone capture        |
-| QAMAN         | qaman            | offline-lab, dataset matrix, regression tests |
-| PERFMAN       | perfman          | latency, CPU, allocations, mobile battery     |
-| REVIEWMAN     | reviewman        | pre-merge review gate                         |
-| DOCMAN        | docman           | docs, changelog, release notes                |
+| Codex (TOML)  | Claude Code (md) | Фокус                                            |
+| ------------- | ---------------- | ------------------------------------------------ |
+| ARCHMAN       | archman          | архитектура, границы модулей, контракты          |
+| DSPMAN        | dspman           | DSP-алгоритмы, parity Rust ↔ Python              |
+| MOBILEMAN     | mobileman        | Flutter-оболочка, FFI, захват микрофона          |
+| QAMAN         | qaman            | offline-lab, матрица датасетов, регрессионные    |
+| PERFMAN       | perfman          | задержка, CPU, аллокации, батарея на мобильном   |
+| REVIEWMAN     | reviewman        | review-гейт перед мерджем                        |
+| DOCMAN        | docman           | документация, changelog, релиз-ноты              |
 
-`.codex/` and `.agents/` are preserved as legacy reference from the original OpenAI Codex environment — do not delete or modify them.
+`.codex/` и `.agents/` сохранены как легаси-референс из исходного окружения OpenAI Codex — не удаляйте и не модифицируйте.

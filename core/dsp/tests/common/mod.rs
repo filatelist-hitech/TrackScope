@@ -1,8 +1,8 @@
-//! Deterministic synthetic fixtures for Rust DSP regression tests.
+//! Детерминированные синтетические фикстуры для регрессионных тестов Rust DSP.
 //!
-//! Mirrors `core/tests/helpers/synthetic_fixtures.py`. Generators are
-//! seeded so test output is reproducible across runs and platforms; no
-//! reliance on `std::time` or thread-local RNGs.
+//! Зеркалируют `core/tests/helpers/synthetic_fixtures.py`. Генераторы
+//! сидированы так, что вывод тестов воспроизводим на разных прогонах и
+//! платформах; никакой зависимости от `std::time` или thread-local RNG.
 
 #![allow(dead_code)]
 
@@ -181,7 +181,7 @@ impl Lcg {
     }
 }
 
-/// Canonical fixture inventory, mirroring core/tests/helpers/synthetic_fixtures.py.
+/// Канонический инвентарь фикстур, зеркалирующий core/tests/helpers/synthetic_fixtures.py.
 pub fn fixture_samples(name: &str) -> Vec<f32> {
     match name {
         "clean_170" => pulse_track(170.0, DEFAULT_DURATION_SEC, 0.9),

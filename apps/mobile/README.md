@@ -1,45 +1,45 @@
 # apps/mobile
 
-Flutter mobile application boundary.
+Граница Flutter-мобильного приложения.
 
-This app owns microphone permissions, native audio bridge integration, live result rendering, debug output, and session history. It must not calculate BPM outside `core/dsp`.
+Это приложение владеет разрешениями микрофона, интеграцией нативного аудио-моста, рендером живого результата, отладочным выводом и историей сессий. Оно не должно считать BPM вне `core/dsp`.
 
-## Current state (Phase 3, step 1)
+## Текущее состояние (Phase 3, шаг 1)
 
-- `pubspec.yaml` defines the Flutter shell and the `ffigen` config that regenerates the Dart bindings from `core/ffi/include/hitech_bpm_ffi.h`.
-- `lib/main.dart` renders a contract-gated placeholder with no fake BPM.
-- `lib/dsp/bindings.dart` exposes the C ABI as `HitechBpmFfi`.
-- `lib/dsp/dsp_result.dart` is a typed view over the JSON snapshot the Rust DSP emits — no BPM math on this side.
-- `lib/dsp/engine.dart` owns the native handle, accepts mono `Float32List` PCM, and exposes a broadcast `Stream<DspResult>` polled at UI rate.
-- Microphone capture and platform plugin code are intentionally not generated yet — they land in step 2.
+- `pubspec.yaml` задаёт Flutter-оболочку и конфиг `ffigen`, регенерирующий Dart-биндинги из `core/ffi/include/hitech_bpm_ffi.h`.
+- `lib/main.dart` рендерит placeholder без фейкового BPM, ограниченный контрактом.
+- `lib/dsp/bindings.dart` отдаёт C ABI как `HitechBpmFfi`.
+- `lib/dsp/dsp_result.dart` — типизированный взгляд на JSON-снэпшот, который эмитит Rust DSP — никакой BPM-математики здесь.
+- `lib/dsp/engine.dart` владеет нативным хэндлом, принимает моно `Float32List` PCM и отдаёт broadcast-`Stream<DspResult>`, опрашиваемый на UI-частоте.
+- Захват микрофона и платформенный код плагинов намеренно ещё не сгенерированы — они приходят на шаге 2.
 
-## Running the FFI test
+## Запуск FFI-теста
 
-The Flutter test suite drives the real Rust DSP through the FFI layer:
+Flutter-тест-сьют гоняет настоящий Rust DSP через FFI-слой:
 
 ```sh
-# from the workspace root, build the shared library once
+# из корня воркспейса собрать shared library один раз
 /opt/homebrew/opt/rust/bin/cargo build --release -p hitech-bpm-ffi
 
-# from apps/mobile/
+# из apps/mobile/
 /opt/homebrew/bin/flutter pub get
 /opt/homebrew/bin/flutter test
 ```
 
-`test/helpers/native_library.dart` invokes `cargo build --release -p hitech-bpm-ffi` automatically if the dylib is missing, so a bare `flutter test` is enough on a clean checkout (provided the Rust toolchain is installed at the path documented in `AGENTS.md`).
+`test/helpers/native_library.dart` сам вызывает `cargo build --release -p hitech-bpm-ffi`, если dylib отсутствует, поэтому голого `flutter test` достаточно на чистом чек-ауте (при условии, что Rust-тулчейн установлен по пути из `AGENTS.md`).
 
-## Regenerating the bindings
+## Регенерация биндингов
 
-`lib/dsp/bindings.dart` is checked in so contributors don't need libclang locally just to build. To regenerate after changing the C header:
+`lib/dsp/bindings.dart` закоммичен, чтобы контрибьюторам не приходилось ставить libclang локально просто для сборки. Чтобы перегенерировать после изменения C-хедера:
 
 ```sh
-# from apps/mobile/
+# из apps/mobile/
 /opt/homebrew/bin/flutter pub run ffigen --config pubspec.yaml
 ```
 
-## Next mobile patch
+## Следующий мобильный патч
 
-1. Generate Android/iOS platform files with Flutter.
-2. Add microphone permissions (`NSMicrophoneUsageDescription`, `RECORD_AUDIO`).
-3. Bind native audio capture to `DspEngine.pushSamples`.
-4. Render only verified `DspResult` values from Rust (main + debug screens).
+1. Сгенерировать платформенные файлы Android/iOS через Flutter.
+2. Добавить разрешения микрофона (`NSMicrophoneUsageDescription`, `RECORD_AUDIO`).
+3. Подключить нативный захват аудио к `DspEngine.pushSamples`.
+4. Рендерить только проверенные значения `DspResult` из Rust (главный + отладочный экраны).

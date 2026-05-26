@@ -1,25 +1,25 @@
 ---
-description: Run cross-language parity tests — Python reference vs Rust DSP — and report any drift in primary_bpm or confidence.
+description: Запустить кросс-языковые parity-тесты — Python-референс против Rust DSP — и отчитаться о любом дрифте в primary_bpm или confidence.
 allowed-tools: Bash(/opt/homebrew/opt/rust/bin/cargo test:*), Bash(cargo test:*), Bash(python3:*)
 ---
 
-Run cross-language parity:
+Запустить кросс-языковой parity:
 
 !`/opt/homebrew/opt/rust/bin/cargo test --workspace`
 
 !`python3 -m unittest discover core/tests`
 
-Then:
+Затем:
 
-1. Report pass/fail counts for both runs.
-2. If any parity test failed, extract the failing case names (look for `python_parity` or `parity` in the test names) and show:
-   - the fixture / input it tested,
-   - the expected `primary_bpm` and `confidence`,
-   - the actual values from each side,
-   - the absolute diff.
-3. Identify whether the drift is in tempo math (autocorrelation, normalization), confidence scoring, or signal-quality measurement.
-4. Recommend whether the Rust side or the Python reference should be the one updated, and delegate to `@dspman`.
+1. Отчитаться о pass/fail-счётчиках обоих прогонов.
+2. Если какой-либо parity-тест упал, извлечь имена упавших кейсов (искать `python_parity` или `parity` в именах тестов) и показать:
+   - фикстуру / вход, который тестировался;
+   - ожидаемый `primary_bpm` и `confidence`;
+   - фактические значения с каждой стороны;
+   - абсолютную разницу.
+3. Определить, в чём дрифт: в темповой математике (автокорреляция, нормализация), в скоринге уверенности или в измерении качества сигнала.
+4. Рекомендовать, какую сторону обновлять — Rust или Python-референс, — и делегировать `@dspman`.
 
-Hard rule: parity must not be "fixed" by relaxing assertions. Either Rust or Python is wrong — find which.
+Жёсткое правило: parity не «чинится» ослаблением assertion'ов. Либо Rust, либо Python неправ — найти, кто.
 
-References: @CLAUDE.md, @docs/DSP_ALGORITHM.md
+Ссылки: @CLAUDE.md, @docs/DSP_ALGORITHM.md

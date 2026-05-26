@@ -1,27 +1,27 @@
 # tools/offline-lab
 
-Offline analyzer and fixture generator boundary.
+Граница офлайн-анализатора и генератора фикстур.
 
-The offline lab must feed audio into the same `core/dsp` engine used by mobile. It may decode files, generate fixtures, and write reports, but it must not implement a separate BPM detector.
+Офлайн-лаб обязан подавать аудио в тот же движок `core/dsp`, который использует mobile. Он может декодировать файлы, генерировать фикстуры и писать отчёты, но не должен реализовывать отдельный BPM-детектор.
 
-## Commands
+## Команды
 
-Generate the deterministic WAV fixture suite:
+Сгенерировать детерминированный набор WAV-фикстур:
 
 ```sh
 python3 tools/offline-lab/offline_lab.py generate-suite --out-dir datasets/synthetic/offline-lab
 ```
 
-Analyze one 16-bit PCM WAV fixture:
+Проанализировать одну 16-битную PCM-WAV-фикстуру:
 
 ```sh
 python3 tools/offline-lab/offline_lab.py analyze datasets/synthetic/offline-lab/pulse_200bpm.wav
 ```
 
-Run the in-memory QA report for the required first-lab matrix:
+Запустить in-memory QA-отчёт по обязательной матрице первого лаба:
 
 ```sh
 python3 tools/offline-lab/offline_lab.py report
 ```
 
-Each report row includes fixture name, expected BPM, detected BPM, BPM error, confidence, lock state, signal quality, candidates, pass/fail, and notes. Expected BPM metadata is used only by the offline QA report; the analyzer still computes tempo from PCM onset evidence. The command exits non-zero if any row fails, so it can be used as a validation gate. Trap rows require the raw candidate plus the normalized relation and `source_bpm`.
+Каждая строка отчёта содержит имя фикстуры, ожидаемый BPM, определённый BPM, ошибку BPM, уверенность, состояние захвата, качество сигнала, кандидатов, pass/fail и заметки. Метаданные ожидаемого BPM используются только в офлайн-QA-отчёте; анализатор всё равно считает темп из PCM-онсет-данных. Команда выходит с не-нулевым кодом, если какая-либо строка падает, поэтому её можно использовать как валидационный гейт. Строки-ловушки требуют видимости raw-кандидата плюс нормализованного relation и `source_bpm`.

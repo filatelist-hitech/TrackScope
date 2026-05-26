@@ -1,4 +1,4 @@
-"""Synthetic PCM fixtures for deterministic tempo regression tests."""
+"""Синтетические PCM-фикстуры для детерминированных регрессионных тестов темпа."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def generate_pulse_track(
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     amplitude: float = 0.85,
 ) -> list[float]:
-    """Generate a mono kick-like pulse train without encoding the BPM in metadata."""
+    """Генерировать моно импульсный трейн, похожий на kick, без кодирования BPM в метаданные."""
 
     total_samples = int(duration_sec * sample_rate)
     samples = [0.0] * total_samples
@@ -160,7 +160,7 @@ def generate_unstable_club_simulation(
 
 
 def write_wav(path: str | Path, samples: Iterable[float], sample_rate: int = DEFAULT_SAMPLE_RATE) -> None:
-    """Write mono 16-bit PCM WAV for offline inspection and CLI fixtures."""
+    """Записать моно 16-битный PCM WAV для офлайн-проверки и CLI-фикстур."""
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -177,7 +177,7 @@ def write_wav(path: str | Path, samples: Iterable[float], sample_rate: int = DEF
 
 
 def read_wav(path: str | Path) -> tuple[list[float], int]:
-    """Read a mono/stereo 16-bit PCM WAV into normalized mono floats."""
+    """Прочитать моно/стерео 16-битный PCM WAV в нормализованные моно-флоаты."""
 
     with wave.open(str(path), "rb") as handle:
         channels = handle.getnchannels()

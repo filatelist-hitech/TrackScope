@@ -1,38 +1,38 @@
 ---
 name: qa-audio-dataset
-description: Use for creating or maintaining synthetic audio fixtures, regression datasets, noisy/clipped/breakdown cases, and offline-lab QA reports for hitech-bpm-radar. Trigger when editing core/tests/helpers/synthetic_fixtures.py, datasets/**, tools/offline-lab/, when adding a new acceptance row to docs/QA_MATRIX.md, or when the user says "fixture", "dataset", "QA report", "regression test", "acceptance".
+description: Используй для создания или поддержки синтетических аудио-фикстур, регрессионных датасетов, шумных / клиппинг / брейкдаун-случаев и QA-отчётов offline-lab hitech-bpm-radar. Триггерь при редактировании core/tests/helpers/synthetic_fixtures.py, datasets/**, tools/offline-lab/, при добавлении новой acceptance-строки в docs/QA_MATRIX.md, или когда пользователь говорит «фикстура», «датасет», «QA-отчёт», «регрессионный тест», «приёмка».
 ---
 
-# QA Audio Dataset
+# QA-аудио-датасет
 
-Required deterministic fixtures (must always be present and green):
+Обязательные детерминированные фикстуры (всегда должны присутствовать и быть зелёными):
 
-- Clean synthetic at 170, 180, 190, 200, 220 BPM.
-- 100 BPM half-time trap → expects normalized 200 BPM as primary, raw 100 still visible.
-- 400 BPM double-time trap → expects normalized 200 BPM as primary, raw 400 still visible.
-- Silence → `primary_bpm: null`, state `SEARCHING` or `NOISE_ONLY`, no false lock.
-- White noise → `primary_bpm: null` or low confidence, no `STABLE`.
-- Pink noise → `primary_bpm: null` or low confidence, no `STABLE`.
-- Clipped microphone (severe) → `primary_bpm: null`, state `CLIPPED_MIC`, clipping flag true.
-- Clipped microphone (recoverable) → BPM within ±2–4 BPM if SNR adequate, clipping flag still true.
-- Breakdown / no-kick after a stable section → state `BREAKDOWN` or `UNSTABLE`, confidence decays.
-- Dense hitech bassline at ~200 BPM → ±2 clean, ±4 noisy.
-- Unstable club simulation → low-confidence or `UNSTABLE`, uncertainty visible.
+- Чистая синтетика на 170, 180, 190, 200, 220 BPM.
+- 100 BPM half-time-ловушка → ожидается нормализованный 200 BPM как основной, raw 100 остаётся видимым.
+- 400 BPM double-time-ловушка → ожидается нормализованный 200 BPM как основной, raw 400 остаётся видимым.
+- Тишина → `primary_bpm: null`, состояние `SEARCHING` или `NOISE_ONLY`, нет ложного захвата.
+- Белый шум → `primary_bpm: null` или низкая уверенность, никакого `STABLE`.
+- Розовый шум → `primary_bpm: null` или низкая уверенность, никакого `STABLE`.
+- Клиппинг микрофона (сильный) → `primary_bpm: null`, состояние `CLIPPED_MIC`, флаг клиппинга true.
+- Клиппинг микрофона (восстановимый) → BPM в пределах ±2–4 BPM при адекватном SNR, флаг клиппинга остаётся true.
+- Брейкдаун / без kick'а после стабильной секции → состояние `BREAKDOWN` или `UNSTABLE`, уверенность проседает.
+- Плотный hitech-басс ~200 BPM → ±2 чистый, ±4 шумный.
+- Нестабильная клубная симуляция → низкая уверенность или `UNSTABLE`, неопределённость видима.
 
-Report rows must include: fixture name, expected BPM, detected BPM, error, confidence, lock state, signal quality, candidate list (with relation and source_bpm for half/double), pass/fail, notes.
+Строки отчёта обязаны включать: имя фикстуры, ожидаемый BPM, детектированный BPM, ошибку, уверенность, состояние захвата, качество сигнала, список кандидатов (с relation и source_bpm для half/double), pass/fail, заметки.
 
-Hard rules:
+Жёсткие правила:
 
-- Expected BPM is metadata only — never inject it into the analyzer.
-- Half/double rows must assert `relation` + `source_bpm` of the normalized candidate, not only the numeric BPM.
-- A regression that fails an existing row must be fixed in the algorithm, not by relaxing the fixture.
+- Ожидаемый BPM — только метаданные, никогда не вкладывать его в анализатор.
+- Строки half/double обязаны проверять `relation` + `source_bpm` нормализованного кандидата, а не только числовое значение BPM.
+- Регрессия, проваливающая существующую строку, чинится в алгоритме, а не ослаблением фикстуры.
 
-Run with:
+Запуск:
 
 ```sh
 python3 tools/offline-lab/offline_lab.py report
 ```
 
-Exits non-zero on any regression.
+Завершается с не-нулевым кодом на любой регрессии.
 
-References: @CLAUDE.md, @docs/QA_MATRIX.md
+Ссылки: @CLAUDE.md, @docs/QA_MATRIX.md

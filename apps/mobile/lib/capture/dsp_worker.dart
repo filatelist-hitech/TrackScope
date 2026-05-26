@@ -1,15 +1,15 @@
-// Background isolate entry point.
+// Точка входа фонового изолята.
 //
-// Owns the `DspEngine` FFI handle and the PCM → f32 conversion that
-// must NOT run on the UI thread. Receives raw PCM byte chunks from the
-// main isolate, converts them to `Float32List` mono, pushes into the
-// engine, polls rolling `DspResult` JSON snapshots, and ships them
-// back to the main isolate which decodes them into typed objects for
-// UI consumption.
+// Владеет FFI-handle `DspEngine` и преобразованием PCM → f32, которое
+// НЕ должно выполняться на UI-потоке. Получает сырые куски PCM-байтов
+// от главного изолята, преобразует их в моно `Float32List`, кладёт в
+// движок, опрашивает скользящие JSON-снапшоты `DspResult` и отправляет
+// их обратно главному изоляту, который декодирует их в типизированные
+// объекты для UI.
 //
-// This file imports `dsp/engine.dart` directly because Dart isolates
-// can each open the same shared library — `DspEngine.open` is safe to
-// call once per isolate.
+// Этот файл импортирует `dsp/engine.dart` напрямую, потому что каждый
+// Dart-изолят может открыть одну и ту же shared library — `DspEngine.open`
+// безопасно вызывать по одному разу на изолят.
 
 import 'dart:async';
 import 'dart:isolate';
@@ -18,8 +18,8 @@ import 'dart:typed_data';
 import '../dsp/engine.dart';
 import 'capture_messages.dart';
 
-/// Entry point passed to `Isolate.spawn`. The init message carries the
-/// main isolate's reply port and library configuration.
+/// Точка входа, передаваемая в `Isolate.spawn`. Init-сообщение несёт
+/// reply-порт главного изолята и конфигурацию библиотеки.
 void dspWorkerEntry(WorkerInit init) {
   final ReceivePort inbox = ReceivePort();
   final SendPort reply = init.replyPort as SendPort;
@@ -29,19 +29,20 @@ void dspWorkerEntry(WorkerInit init) {
   try {
     engine = DspEngine.open(
       libraryPath: init.libraryPath,
-      // The worker polls FFI itself, so the engine's own stream timer
-      // is disabled by giving it a long interval — we never subscribe.
+      // Воркер сам опрашивает FFI, так что встроенный таймер потока
+      // движка отключаем длинным интервалом — мы на него не подписываемся.
       pollInterval: const Duration(hours: 1),
     );
   } catch (e, st) {
-    reply.send(WorkerError('failed to open native DSP: $e', st));
+    reply.send(WorkerError('не удалось открыть нативный DSP: $e', st));
     inbox.close();
     return;
   }
 
-  // The worker drives its own poll cadence and forwards raw JSON. This
-  // avoids parsing on the worker and re-encoding for the wire: parsing
-  // happens once, on the main isolate, when the UI consumes it.
+  // Воркер задаёт свой ритм опроса и пересылает сырой JSON. Так мы
+  // избегаем парсинга на воркере и повторной сериализации на провод:
+  // парсинг происходит однократно, в главном изоляте, когда UI его
+  // потребляет.
   Timer? poll;
   void startPolling() {
     poll ??= Timer.periodic(Duration(milliseconds: init.pollIntervalMs),
@@ -49,7 +50,7 @@ void dspWorkerEntry(WorkerInit init) {
       try {
         reply.send(DspResultMessage(engine.analyzeJson()));
       } catch (e, st) {
-        reply.send(WorkerError('analyze failed: $e', st));
+        reply.send(WorkerError('сбой анализа: $e', st));
       }
     });
   }
@@ -65,13 +66,13 @@ void dspWorkerEntry(WorkerInit init) {
           engine.pushSamples(samples, message.sampleRate);
         }
       } catch (e, st) {
-        reply.send(WorkerError('push failed: $e', st));
+        reply.send(WorkerError('сбой push: $e', st));
       }
     } else if (message is ResetEngine) {
       try {
         engine.reset();
       } catch (e, st) {
-        reply.send(WorkerError('reset failed: $e', st));
+        reply.send(WorkerError('сбой reset: $e', st));
       }
     } else if (message is StopWorker) {
       poll?.cancel();
@@ -82,11 +83,11 @@ void dspWorkerEntry(WorkerInit init) {
   });
 }
 
-/// Decode an incoming raw PCM chunk into mono `Float32List` ready for
-/// `DspEngine.pushSamples`. The `record` plugin's `pcm16bits` encoding
-/// is signed little-endian 16-bit interleaved samples; mono capture
-/// keeps interleaving moot. Future encodings can be added here without
-/// touching the DSP.
+/// Декодирует входящий сырой PCM-кусок в моно `Float32List`, готовый
+/// для `DspEngine.pushSamples`. Кодировка `pcm16bits` плагина `record`
+/// — это signed little-endian 16-bit interleaved сэмплы; моно-захват
+/// делает interleaving бессодержательным. Новые кодировки можно
+/// добавлять здесь, не трогая DSP.
 Float32List _decodeMono(PushPcm chunk) {
   switch (chunk.encoding) {
     case 'pcm16':
@@ -95,13 +96,13 @@ Float32List _decodeMono(PushPcm chunk) {
     case 'pcm_f32le':
       return _decodeF32(chunk.bytes);
     default:
-      throw ArgumentError('unsupported PCM encoding: ${chunk.encoding}');
+      throw ArgumentError('неподдерживаемая кодировка PCM: ${chunk.encoding}');
   }
 }
 
 Float32List _decodePcm16Mono(Uint8List bytes) {
-  // Floor to whole sample pairs in case the platform delivered an odd
-  // tail (unlikely for pcm16 but cheap to guard).
+  // Округляем вниз до целых сэмпл-пар на случай, если платформа выдала
+  // нечётный хвост (для pcm16 маловероятно, но защита дешёвая).
   final sampleCount = bytes.length ~/ 2;
   final out = Float32List(sampleCount);
   final view = ByteData.sublistView(bytes, 0, sampleCount * 2);

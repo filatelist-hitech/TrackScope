@@ -1,7 +1,7 @@
-// App entry point. Wires the permission gate, the microphone source,
-// the capture bridge (which owns the DSP worker isolate), and the live
-// UI together. No BPM math, no fake values, no fallback to synthetic
-// audio if capture fails — the UI surfaces the error instead.
+// Точка входа приложения. Связывает gate разрешений, источник микрофона,
+// FFI-мост захвата (который владеет изолятом DSP-воркера) и живой UI.
+// Никаких вычислений BPM, никаких фейковых значений, никакого отката на
+// синтетический звук при сбое захвата — UI показывает ошибку.
 
 import 'package:flutter/material.dart';
 
@@ -38,10 +38,10 @@ class HitechBpmRadarApp extends StatelessWidget {
   }
 }
 
-/// Owns the [CaptureBridge] and [MicrophoneSource] for the lifetime of
-/// the live screen. Constructs them in `initState`, tears them down in
-/// `dispose` — kept here (not in app state) so the bridge handle does
-/// not survive a permission revoke.
+/// Владеет [CaptureBridge] и [MicrophoneSource] на время жизни живого
+/// экрана. Создаёт их в `initState`, освобождает в `dispose` — держим
+/// здесь (а не в состоянии приложения), чтобы handle моста не пережил
+/// отзыв разрешения на микрофон.
 class _LiveCaptureScaffold extends StatefulWidget {
   const _LiveCaptureScaffold();
 
@@ -90,7 +90,7 @@ class _LiveCaptureScaffoldState extends State<_LiveCaptureScaffold> {
           padding: const EdgeInsets.all(24),
           child: Center(
             child: Text(
-              'Could not start microphone capture:\n\n$_startupError',
+              'Не удалось запустить захват с микрофона:\n\n$_startupError',
               textAlign: TextAlign.center,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),

@@ -106,7 +106,7 @@ void main() {
 
     expect(find.text('200.0'), findsOneWidget);
     expect(find.text('STABLE'), findsOneWidget);
-    expect(find.text('Confidence 87%'), findsOneWidget);
+    expect(find.text('Уверенность 87%'), findsOneWidget);
   });
 
   testWidgets('MainScreen surfaces capture errors from the error stream',
@@ -127,12 +127,12 @@ void main() {
     ));
     await tester.pump();
 
-    errs.add(const CaptureError('failed to open native DSP'));
+    errs.add(const CaptureError('не удалось открыть нативный DSP'));
     await tester.pump();
     await tester.pump();
 
     expect(
-        find.textContaining('Capture error: failed to open native DSP'),
+        find.textContaining('Ошибка захвата: не удалось открыть нативный DSP'),
         findsOneWidget);
   });
 
@@ -166,7 +166,7 @@ void main() {
     ));
     await tester.pump();
 
-    expect(find.textContaining('Waiting for the first DspResult'),
+    expect(find.textContaining('Ожидание первого снапшота DspResult'),
         findsOneWidget);
   });
 
@@ -207,10 +207,10 @@ void main() {
     ));
     await tester.pump();
 
-    expect(find.text('Open system settings'), findsOneWidget);
+    expect(find.text('Открыть системные настройки'), findsOneWidget);
     expect(
         find.textContaining(
-            'previously denied microphone access permanently'),
+            'Ранее вы отказали в доступе к микрофону навсегда'),
         findsOneWidget);
   });
 
@@ -227,8 +227,8 @@ void main() {
     ));
     await tester.pump();
 
-    expect(find.text('Grant microphone access'), findsOneWidget);
-    await tester.tap(find.text('Grant microphone access'));
+    expect(find.text('Выдать доступ к микрофону'), findsOneWidget);
+    await tester.tap(find.text('Выдать доступ к микрофону'));
     await tester.pump();
     expect(retryCalled, isTrue);
   });

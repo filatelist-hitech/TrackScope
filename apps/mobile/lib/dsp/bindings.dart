@@ -1,11 +1,11 @@
-// Dart bindings for the hitech-bpm-ffi C ABI.
+// Dart-привязки к C ABI hitech-bpm-ffi.
 //
-// Mirrors `core/ffi/include/hitech_bpm_ffi.h`. The intent is that this
-// file is regenerable with package:ffigen (see the `ffigen:` block in
-// `pubspec.yaml`); it is hand-checked-in so contributors can build
-// without needing libclang locally. Keep the shape compatible with
-// ffigen output — if you regenerate, the only churn should be comment
-// formatting.
+// Зеркалит `core/ffi/include/hitech_bpm_ffi.h`. Идея в том, что этот
+// файл регенерируется через package:ffigen (см. блок `ffigen:` в
+// `pubspec.yaml`); он закоммичен вручную, чтобы контрибьюторы могли
+// собирать без локально установленного libclang. Сохраняйте структуру
+// совместимой с выводом ffigen — при регенерации меняться должно
+// только форматирование комментариев.
 //
 // ignore_for_file: camel_case_types, non_constant_identifier_names
 
@@ -45,12 +45,13 @@ typedef HitechBpmEngineAnalyzeJson = ffi.Pointer<ffi.Char> Function(
 typedef _string_free_c = ffi.Void Function(ffi.Pointer<ffi.Char>);
 typedef HitechBpmStringFree = void Function(ffi.Pointer<ffi.Char>);
 
-/// Resolved function table for the loaded `libhitech_bpm_ffi` library.
+/// Разрешённая таблица функций загруженной библиотеки
+/// `libhitech_bpm_ffi`.
 ///
-/// Construct once with a `DynamicLibrary` obtained via
-/// [DynamicLibrary.process], [DynamicLibrary.executable], or
-/// [DynamicLibrary.open] — the [DspEngine] wrapper hides that choice
-/// from UI code.
+/// Создавать один раз из `DynamicLibrary`, полученного через
+/// [DynamicLibrary.process], [DynamicLibrary.executable] или
+/// [DynamicLibrary.open] — обёртка [DspEngine] скрывает этот выбор от
+/// UI-кода.
 final class HitechBpmFfi {
   HitechBpmFfi(ffi.DynamicLibrary dylib)
       : engineNew = dylib

@@ -1,4 +1,4 @@
-"""Deterministic DSP primitives for offline BPM analysis."""
+"""Детерминированные DSP-примитивы для офлайн-анализа BPM."""
 
 from .tempo import (
     DspResult,

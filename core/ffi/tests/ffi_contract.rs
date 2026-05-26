@@ -1,7 +1,7 @@
-//! End-to-end FFI smoke test: drive `push_samples` + `analyze_json` through
-//! the C ABI, then parse the JSON back and assert the rolling `DspResult`
-//! contract holds. This guarantees the FFI boundary preserves the same shape
-//! Flutter / native consumers will read.
+//! End-to-end FFI smoke-тест: прогнать `push_samples` + `analyze_json` через
+//! C ABI, затем распарсить JSON обратно и подтвердить, что контракт скользящего
+//! `DspResult` выполняется. Гарантирует, что FFI-граница сохраняет ту же форму,
+//! которую будут читать Flutter / нативные потребители.
 
 use std::ffi::CStr;
 
@@ -40,9 +40,9 @@ fn ffi_analyze_json_round_trips_dsp_result_contract() {
         let engine = hitech_bpm_engine_new();
         assert!(!engine.is_null(), "engine ctor returned null");
 
-        // Stream 13 s of clean 200 BPM in 100 ms chunks. By the contract the
-        // streaming engine must reach STABLE within 12 s, so 13 s gives us a
-        // small margin.
+        // Стримить 13 с чистого 200 BPM чанками по 100 мс. По контракту
+        // потоковый движок должен достигнуть STABLE в течение 12 с,
+        // так что 13 с дают небольшой запас.
         let chunk_sec = 0.1;
         let chunk_len = (SAMPLE_RATE as f32 * chunk_sec) as usize;
         let pcm = pulse_200_bpm(13.0);
@@ -65,7 +65,7 @@ fn ffi_analyze_json_round_trips_dsp_result_contract() {
         let parsed: serde_json::Value =
             serde_json::from_str(&json).expect("FFI JSON must parse");
 
-        // Contract shape.
+        // Форма контракта.
         for key in [
             "primary_bpm",
             "confidence",
@@ -104,8 +104,8 @@ fn ffi_analyze_json_round_trips_dsp_result_contract() {
         let candidates = parsed["candidates"].as_array().expect("candidates array");
         assert!(!candidates.is_empty(), "candidates must remain visible");
 
-        // Half-time candidate (raw or normalized) must be present for a clean
-        // 200 BPM signal — that's the visibility rule.
+        // Half-time-кандидат (raw или нормализованный) обязан присутствовать
+        // для чистого сигнала 200 BPM — это правило видимости.
         let has_half_evidence = candidates.iter().any(|c| {
             let b = c.get("bpm").and_then(|v| v.as_f64()).unwrap_or(0.0);
             (b - 100.0).abs() < 5.0
@@ -143,7 +143,7 @@ fn ffi_null_handle_returns_null() {
     unsafe {
         let ptr = hitech_bpm_engine_analyze_json(std::ptr::null_mut());
         assert!(ptr.is_null());
-        // string_free on null is a no-op.
+        // string_free на null — no-op.
         hitech_bpm_string_free(std::ptr::null_mut());
     }
 }

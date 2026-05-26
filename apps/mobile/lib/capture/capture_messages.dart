@@ -1,15 +1,16 @@
-// Message envelopes exchanged between the main isolate and the DSP worker
-// isolate. Kept deliberately simple so they round-trip through SendPort
-// without custom codecs.
+// Конверты сообщений, которыми обмениваются главный изолят и изолят
+// DSP-воркера. Сознательно простые, чтобы проходить через SendPort без
+// своих кодеков.
 //
-// The worker isolate owns the FFI handle and the engine poll loop. It
-// never sees Flutter widgets, and the main isolate never sees raw PCM
-// past the point where it ships bytes off via `sendPort.send`.
+// Изолят воркера владеет FFI-handle и циклом опроса движка. Он никогда
+// не видит Flutter-виджетов, а главный изолят никогда не видит сырой
+// PCM после того, как отправил байты через `sendPort.send`.
 
 import 'dart:typed_data';
 
-/// Sent main → worker once, immediately after spawn. Tells the worker
-/// where to find the native library and the main isolate's reply port.
+/// Отправляется main → worker однократно сразу после спавна. Сообщает
+/// воркеру, где искать нативную библиотеку, и reply-порт главного
+/// изолята.
 class WorkerInit {
   const WorkerInit({
     required this.replyPort,
@@ -18,54 +19,54 @@ class WorkerInit {
     required this.pollIntervalMs,
   });
 
-  /// Where the worker should send `DspResultMessage` snapshots and
-  /// `WorkerError` events.
-  final dynamic replyPort; // SendPort, but typed as dynamic to keep this file UI-free.
+  /// Куда воркер должен слать снапшоты `DspResultMessage` и события
+  /// `WorkerError`.
+  final dynamic replyPort; // SendPort, но типизирован как dynamic, чтобы файл оставался без UI-зависимостей.
   final String? libraryPath;
   final int captureSampleRate;
   final int pollIntervalMs;
 }
 
-/// Main → worker: ingest a raw PCM byte chunk. Sample format is assumed
-/// to match the capture config negotiated at start.
+/// Main → worker: принять сырой кусок PCM-байтов. Формат сэмплов
+/// считается соответствующим конфигу захвата, согласованному при старте.
 class PushPcm {
   const PushPcm(this.bytes, {required this.sampleRate, this.encoding = 'pcm16'});
   final Uint8List bytes;
   final int sampleRate;
-  /// Either `pcm16` (little-endian signed 16-bit) or `pcm_f32le`.
-  /// `record` 5.x emits `pcm16bits` by default on Android/iOS; we keep
-  /// the field explicit so the worker rejects any surprise encoding.
+  /// Либо `pcm16` (little-endian signed 16-bit), либо `pcm_f32le`.
+  /// `record` 5.x по умолчанию выдаёт `pcm16bits` на Android/iOS; держим
+  /// поле явным, чтобы воркер отвергал любую неожиданную кодировку.
   final String encoding;
 }
 
-/// Main → worker: drop rolling DSP state in place. Used on capture
-/// restart or session reset.
+/// Main → worker: сбросить скользящее DSP-состояние на месте.
+/// Используется при перезапуске захвата или сбросе сессии.
 class ResetEngine {
   const ResetEngine();
 }
 
-/// Main → worker: tear down. The worker frees the engine handle and
-/// exits.
+/// Main → worker: остановиться. Воркер освобождает handle движка и
+/// завершает работу.
 class StopWorker {
   const StopWorker();
 }
 
-/// Worker → main: a parsed `DspResult` snapshot. The JSON string is
-/// forwarded raw so the typed view is constructed on the main isolate
-/// where UI code lives.
+/// Worker → main: распарсенный снапшот `DspResult`. JSON-строка
+/// пересылается как есть, чтобы типизированное представление строилось
+/// в главном изоляте, где живёт UI-код.
 class DspResultMessage {
   const DspResultMessage(this.json);
   final String json;
 }
 
-/// Worker → main: the worker is alive and ready to receive PCM.
+/// Worker → main: воркер жив и готов принимать PCM.
 class WorkerReady {
   const WorkerReady();
 }
 
-/// Worker → main: the worker hit an unrecoverable error (FFI load
-/// failure, unsupported encoding, etc.). The capture loop must stop on
-/// the main side too.
+/// Worker → main: воркер столкнулся с невосстановимой ошибкой (сбой
+/// загрузки FFI, неподдерживаемая кодировка и т.п.). Цикл захвата
+/// должен остановиться и на главной стороне.
 class WorkerError {
   const WorkerError(this.message, [this.stackTrace]);
   final String message;

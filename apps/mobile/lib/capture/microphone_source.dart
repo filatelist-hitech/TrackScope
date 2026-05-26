@@ -1,16 +1,18 @@
-// Production audio source: opens `package:record` and exposes a raw
-// PCM byte stream the `CaptureBridge` forwards into the DSP worker.
+// Боевой аудио-источник: открывает `package:record` и отдаёт сырой
+// PCM-байтовый поток, который `CaptureBridge` пересылает в DSP-воркер.
 //
-// Format reconciliation (see docs/MOBILE_AUDIO.md):
-//   - Android: `record` uses AudioRecord, emits PCM 16-bit signed
-//     little-endian mono at the requested sample rate (48 kHz here).
-//   - iOS: `record` uses AVAudioEngine with the same wire format.
-//   - The DSP expects mono f32 in [-1, 1]; the bridge worker converts
-//     PCM16 → f32 via `s / 32768.0` per sample. No resampling needed
-//     because we ask the platform for the DSP's preferred 48 kHz.
+// Согласование форматов (см. docs/MOBILE_AUDIO.md):
+//   - Android: `record` использует AudioRecord, выдаёт PCM 16-bit signed
+//     little-endian моно на запрошенной частоте дискретизации (здесь
+//     48 кГц).
+//   - iOS: `record` использует AVAudioEngine с тем же wire-форматом.
+//   - DSP ожидает моно f32 в [-1, 1]; воркер моста конвертирует
+//     PCM16 → f32 как `s / 32768.0` для каждого сэмпла. Ресемплинг не
+//     нужен, потому что у платформы запрашивается предпочитаемая DSP
+//     частота 48 кГц.
 //
-// This file does not import any UI or DSP code — it is a thin wrapper
-// around the recorder package so the bridge can stay UI-free.
+// Этот файл не импортирует ни UI, ни DSP-код — это тонкая обёртка над
+// recorder-пакетом, чтобы мост оставался без UI-зависимостей.
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -26,16 +28,16 @@ class MicrophoneSource {
   StreamSubscription<Uint8List>? _sub;
   StreamController<Uint8List>? _ctrl;
 
-  /// True wire encoding the worker should expect. Kept here so the
-  /// bridge negotiates encoding instead of hardcoding it.
+  /// Реальная wire-кодировка, которую должен ожидать воркер. Хранится
+  /// здесь, чтобы мост согласовывал кодировку, а не хардкодил её.
   static const String encoding = 'pcm16';
 
-  /// Start capture. Caller is responsible for having checked the
-  /// microphone permission first — this method does NOT request it,
-  /// because permission UI belongs in the widget layer.
+  /// Запускает захват. Вызывающий обязан заранее проверить разрешение
+  /// на микрофон — этот метод его НЕ запрашивает, потому что UI для
+  /// разрешений живёт в слое виджетов.
   Future<Stream<Uint8List>> start() async {
     if (_ctrl != null) {
-      throw StateError('MicrophoneSource already started');
+      throw StateError('MicrophoneSource уже запущен');
     }
     final ctrl = StreamController<Uint8List>(
       onCancel: () async => stop(),
@@ -66,7 +68,7 @@ class MicrophoneSource {
         await _recorder.stop();
       }
     } catch (_) {
-      // Recorder may already be torn down; nothing else to do.
+      // Recorder уже мог быть остановлен — больше делать нечего.
     }
     await _ctrl?.close();
     _ctrl = null;

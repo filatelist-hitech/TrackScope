@@ -1,13 +1,13 @@
-//! C ABI boundary for mobile integration.
+//! Граница C ABI для мобильной интеграции.
 //!
-//! The bridge owns handles and sample ingress only. BPM calculation stays in
-//! `hitech_bpm_dsp`; Flutter must not implement a parallel tempo detector.
+//! Мост владеет только хэндлами и приёмом сэмплов. Вычисление BPM остаётся в
+//! `hitech_bpm_dsp`; Flutter не должен реализовывать параллельный детектор темпа.
 //!
-//! State crosses the boundary as a JSON-encoded `DspResult` returned by
-//! `hitech_bpm_engine_analyze_json`. Callers must release the returned buffer
-//! with `hitech_bpm_string_free`. JSON is intended for UI-rate polling
-//! (~10-30 Hz), not for the audio thread — `push_samples` stays allocation-
-//! light; serialization only happens when the consumer asks for state.
+//! Состояние пересекает границу как JSON-кодированный `DspResult`, возвращаемый
+//! `hitech_bpm_engine_analyze_json`. Вызывающая сторона обязана освободить
+//! буфер через `hitech_bpm_string_free`. JSON предназначен для поллинга на
+//! частоте UI (~10–30 Гц), не из аудио-потока — `push_samples` остаётся
+//! лёгким по аллокациям; сериализация происходит только по запросу.
 
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -56,10 +56,10 @@ pub unsafe extern "C" fn hitech_bpm_engine_push_samples(
     true
 }
 
-/// Serialize the current rolling `DspResult` as a null-terminated JSON UTF-8
-/// string. Ownership transfers to the caller; release with
-/// `hitech_bpm_string_free`. Returns null on invalid handle or serialization
-/// failure (the latter should be unreachable given the typed contract).
+/// Сериализовать текущий скользящий `DspResult` как null-terminated JSON UTF-8
+/// строку. Право собственности переходит к вызывающей стороне; освободить через
+/// `hitech_bpm_string_free`. Возвращает null при невалидном хэндле или ошибке
+/// сериализации (последнее должно быть недостижимо при типизированном контракте).
 #[no_mangle]
 pub unsafe extern "C" fn hitech_bpm_engine_analyze_json(
     engine: *mut HitechBpmEngine,
@@ -77,9 +77,9 @@ pub unsafe extern "C" fn hitech_bpm_engine_analyze_json(
     c_string.into_raw()
 }
 
-/// Free a buffer previously returned by `hitech_bpm_engine_analyze_json`.
-/// Passing a null pointer is a no-op. Passing any other pointer is undefined
-/// behavior.
+/// Освободить буфер, ранее возвращённый `hitech_bpm_engine_analyze_json`.
+/// Передача null-указателя — no-op. Передача любого другого указателя —
+/// неопределённое поведение.
 #[no_mangle]
 pub unsafe extern "C" fn hitech_bpm_string_free(ptr: *mut c_char) {
     if ptr.is_null() {

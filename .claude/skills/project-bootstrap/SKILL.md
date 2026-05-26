@@ -1,22 +1,22 @@
 ---
 name: project-bootstrap
-description: Use whenever you are creating, restructuring, or auditing the repository layout for hitech-bpm-radar — including adding new modules under core/, apps/, tools/, datasets/, docs/, or .claude/. Trigger when the user asks to "scaffold", "bootstrap", "set up the project", "add a new module", "restructure", or when phase gates (Phase 0 → 1 → 2 → 3 → 4 → 5) advance. Also trigger before any first commit on a new branch that touches multiple top-level directories.
+description: Используй всякий раз, когда создаёшь, реструктурируешь или аудируешь раскладку репозитория hitech-bpm-radar — включая добавление новых модулей под core/, apps/, tools/, datasets/, docs/ или .claude/. Триггерь, когда пользователь говорит «заскаффолдить», «забутстрапить», «настроить проект», «добавить новый модуль», «реструктурировать», или когда фазовые ворота (Phase 0 → 1 → 2 → 3 → 4 → 5) продвигаются. Также триггерь перед первым коммитом на новой ветке, который трогает несколько top-level директорий.
 ---
 
-# Project Bootstrap
+# Bootstrap проекта
 
-Goal: keep the DSP-first layout intact while extending the project.
+Цель: сохранить DSP-first-раскладку, расширяя проект.
 
-1. Inspect the existing tree before writing files. Do not overwrite work without reading it.
-2. Preserve all existing DSP tests, fixtures, and docs. Never weaken a test to pass a refactor.
-3. Create missing directories with a `README.md` or `.gitkeep` if they are intentionally empty (e.g. `datasets/*/`).
-4. Phase 0/1 stays DSP-first. Do not create mobile BPM behavior — `apps/mobile/` is a shell until the Rust DSP is ready.
-5. When boundaries change, update in the same change:
-   - `README.md` (repository map, current phase, acceptance targets)
-   - `docs/ARCHITECTURE.md` (dependency direction, module ownership)
-   - `docs/ROADMAP.md` (phase deliverables and exit criteria)
-   - `docs/QA_MATRIX.md` (any new test case row)
-6. Run the validation commands listed in @CLAUDE.md "Build & test commands" and report which passed.
-7. Preserve `.codex/` and `.agents/` as legacy reference — do not delete or rename them.
+1. Осмотреть существующее дерево перед записью файлов. Не перезаписывать работу, не прочитав её.
+2. Сохранять все существующие DSP-тесты, фикстуры и документацию. Никогда не ослаблять тест ради рефакторинга.
+3. Создавать отсутствующие директории с `README.md` или `.gitkeep`, если они намеренно пусты (например, `datasets/*/`).
+4. Phase 0/1 остаётся DSP-first. Не создавать мобильное BPM-поведение — `apps/mobile/` остаётся оболочкой, пока Rust DSP не готов.
+5. Когда границы меняются, в том же изменении обновлять:
+   - `README.md` (карта репозитория, текущая фаза, цели приёмки);
+   - `docs/ARCHITECTURE.md` (направление зависимостей, владение модулем);
+   - `docs/ROADMAP.md` (артефакты фазы и критерии выхода);
+   - `docs/QA_MATRIX.md` (любая новая строка тест-кейса).
+6. Прогонять команды валидации, перечисленные в @CLAUDE.md «Команды сборки и тестов», и репортить, какие прошли.
+7. Сохранять `.codex/` и `.agents/` как легаси-референс — не удалять и не переименовывать.
 
-References: @CLAUDE.md, @docs/ARCHITECTURE.md, @docs/ROADMAP.md
+Ссылки: @CLAUDE.md, @docs/ARCHITECTURE.md, @docs/ROADMAP.md

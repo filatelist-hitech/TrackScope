@@ -1,22 +1,22 @@
 ---
-description: Run the offline-lab deterministic QA report and summarize lock states, candidate normalization, and any regressions.
+description: Запустить детерминированный QA-отчёт offline-lab и суммировать состояния захвата, нормализацию кандидатов и любые регрессии.
 allowed-tools: Bash(python3 tools/offline-lab/offline_lab.py:*), Read
 ---
 
-Run the deterministic offline QA report and summarize the result.
+Запустить детерминированный офлайн-QA-отчёт и суммировать результат.
 
 !`python3 tools/offline-lab/offline_lab.py report`
 
-Then:
+Затем:
 
-1. Report the exit code. Non-zero means a regression — list which fixtures failed.
-2. For each row, note: fixture, expected BPM, detected BPM, error, confidence, lock state.
-3. Flag any row where:
-   - `silence`, `white_noise`, `pink_noise`, `unstable_club_simulation` reach `STABLE` (must not happen).
-   - `clipped_*` does not flag `clipping: true`.
-   - `half_time_trap_100` does not show normalized 200 BPM with relation `normalized_from_half` AND raw 100 BPM visible.
-   - `double_time_trap_400` does not show normalized 200 BPM with relation `normalized_from_double` AND raw 400 BPM visible.
-   - `breakdown_200` reaches `STABLE`.
-4. If anything regressed, recommend the next patch (which agent + which fixture + which DSP component).
+1. Отчитаться о коде выхода. Не-ноль означает регрессию — перечислить, какие фикстуры упали.
+2. Для каждой строки указать: фикстуру, ожидаемый BPM, детектированный BPM, ошибку, уверенность, состояние захвата.
+3. Поднять флаг на любой строке, где:
+   - `silence`, `white_noise`, `pink_noise`, `unstable_club_simulation` достигают `STABLE` (так быть не должно);
+   - `clipped_*` не поднимает `clipping: true`;
+   - `half_time_trap_100` не показывает нормализованный 200 BPM с relation `normalized_from_half` И raw 100 BPM видимым;
+   - `double_time_trap_400` не показывает нормализованный 200 BPM с relation `normalized_from_double` И raw 400 BPM видимым;
+   - `breakdown_200` достигает `STABLE`.
+4. Если что-то регрессировало — рекомендовать следующий патч (какой агент + какая фикстура + какой DSP-компонент).
 
-Reference acceptance targets: @docs/QA_MATRIX.md
+Референс целей приёмки: @docs/QA_MATRIX.md

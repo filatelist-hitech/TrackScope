@@ -1,18 +1,20 @@
-// Dart-side wrapper around the hitech-bpm-ffi C ABI.
+// Dart-обёртка над C ABI hitech-bpm-ffi.
 //
-// Responsibilities:
-//   - Own the native `HitechBpmEngine*` handle for its lifetime.
-//   - Marshal `Float32List` PCM frames into pinned native memory and
-//     pass them to `hitech_bpm_engine_push_samples`.
-//   - Poll `hitech_bpm_engine_analyze_json` on a UI-rate timer (default
-//     20 Hz) and emit parsed [DspResult] snapshots on a broadcast
-//     stream.
+// Обязанности:
+//   - Владеть нативным handle `HitechBpmEngine*` на всё время жизни.
+//   - Маршалить PCM-кадры `Float32List` в закреплённую нативную память
+//     и передавать их в `hitech_bpm_engine_push_samples`.
+//   - Опрашивать `hitech_bpm_engine_analyze_json` по таймеру UI-частоты
+//     (по умолчанию 20 Гц) и эмитить распарсенные снапшоты [DspResult]
+//     в broadcast-поток.
 //
-// What this file does NOT do:
-//   - No BPM math. All tempo / confidence / lock-state decisions stay
-//     in the Rust DSP crate — this layer is a pure pass-through.
-//   - No microphone capture. Mic input is the next patch; for now the
-//     caller (test or future audio bridge) supplies PCM.
+// Чего этот файл НЕ делает:
+//   - Никаких вычислений BPM. Все решения о темпе, уверенности и
+//     состоянии захвата остаются в Rust-DSP — этот слой чисто
+//     транзитный.
+//   - Никакого захвата с микрофона. Микрофонный вход — это следующий
+//     патч; пока PCM поставляет вызывающий (тест или будущий
+//     аудио-мост).
 
 import 'dart:async';
 import 'dart:convert';
@@ -25,20 +27,20 @@ import 'package:ffi/ffi.dart' as pffi;
 import 'bindings.dart';
 import 'dsp_result.dart';
 
-/// Default filename of the shared library on each platform. Resolved
-/// relative to the process search path unless [DspEngine.open] is given
-/// an explicit path.
+/// Имя файла shared library по умолчанию на каждой платформе. Ищется
+/// относительно пути поиска процесса, если [DspEngine.open] не получил
+/// явный путь.
 String defaultLibraryName() {
   if (Platform.isMacOS) return 'libhitech_bpm_ffi.dylib';
   if (Platform.isIOS) return 'hitech_bpm_ffi.framework/hitech_bpm_ffi';
   if (Platform.isAndroid) return 'libhitech_bpm_ffi.so';
   if (Platform.isLinux) return 'libhitech_bpm_ffi.so';
   if (Platform.isWindows) return 'hitech_bpm_ffi.dll';
-  throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
+  throw UnsupportedError('Неподдерживаемая платформа: ${Platform.operatingSystem}');
 }
 
-/// Owns one native DSP engine instance and exposes its rolling state as
-/// a broadcast [Stream] of [DspResult] snapshots.
+/// Владеет одним экземпляром нативного DSP-движка и отдаёт его
+/// скользящее состояние как broadcast [Stream] из снапшотов [DspResult].
 class DspEngine {
   DspEngine._(this._ffi, this._handle, {required Duration pollInterval})
       : _pollInterval = pollInterval {
@@ -48,8 +50,8 @@ class DspEngine {
     );
   }
 
-  /// Open the shared library at [libraryPath] (or the platform default
-  /// search path) and allocate a fresh engine handle.
+  /// Открывает shared library по пути [libraryPath] (или по дефолтному
+  /// пути поиска платформы) и выделяет новый handle движка.
   factory DspEngine.open({
     String? libraryPath,
     Duration pollInterval = const Duration(milliseconds: 50),
@@ -61,15 +63,15 @@ class DspEngine {
         pollInterval: pollInterval);
   }
 
-  /// Construct from already-resolved bindings. Useful for tests that
-  /// share a single dylib across multiple engine instances.
+  /// Создание из уже разрешённых привязок. Полезно для тестов, которые
+  /// делят одну dylib между несколькими экземплярами движка.
   factory DspEngine.fromBindings(
     HitechBpmFfi bindings, {
     Duration pollInterval = const Duration(milliseconds: 50),
   }) {
     final handle = bindings.engineNew();
     if (handle == ffi.nullptr) {
-      throw StateError('hitech_bpm_engine_new returned null');
+      throw StateError('hitech_bpm_engine_new вернул null');
     }
     return DspEngine._(bindings, handle, pollInterval: pollInterval);
   }
@@ -81,23 +83,25 @@ class DspEngine {
   Timer? _pollTimer;
   bool _disposed = false;
 
-  /// Broadcast stream of rolling [DspResult] snapshots. The stream emits
-  /// at [pollInterval]; subscribers receive the latest engine state, not
-  /// a per-frame trace.
+  /// Broadcast-поток скользящих снапшотов [DspResult]. Поток эмитит с
+  /// частотой [pollInterval]; подписчики получают последнее состояние
+  /// движка, а не покадровую трассу.
   Stream<DspResult> get results => _resultController.stream;
 
-  /// Drop the rolling DSP state in place. The handle stays valid.
+  /// Сбрасывает скользящее DSP-состояние на месте. Handle остаётся
+  /// валидным.
   void reset() {
     _ensureAlive();
     _ffi.engineReset(_handle);
   }
 
-  /// Push a mono Float32 PCM frame at [sampleRate]. Allocation cost is
-  /// one pinned native buffer per call; the caller may push as fast as
-  /// audio frames arrive.
+  /// Кладёт моно Float32 PCM-кадр с частотой [sampleRate]. Цена аллокаций
+  /// — один закреплённый нативный буфер за вызов; вызывающий может
+  /// пушить так быстро, как приходят аудио-кадры.
   ///
-  /// Returns `false` if the FFI rejected the input (zero length, zero
-  /// sample rate, etc.); the Rust side never panics on bad input.
+  /// Возвращает `false`, если FFI отверг вход (нулевая длина, нулевая
+  /// частота дискретизации и т.п.); Rust-сторона никогда не паникует на
+  /// плохом входе.
   bool pushSamples(Float32List samples, int sampleRate) {
     _ensureAlive();
     if (samples.isEmpty) return false;
@@ -112,18 +116,19 @@ class DspEngine {
     }
   }
 
-  /// Synchronously poll the current rolling [DspResult]. The wrapped
-  /// stream calls this on a timer; tests can call it directly.
+  /// Синхронно опрашивает текущий скользящий [DspResult]. Обёрнутый
+  /// поток вызывает это по таймеру; тесты могут вызывать напрямую.
   DspResult analyze() => DspResult.parse(analyzeJson());
 
-  /// Same as [analyze] but returns the raw JSON string the FFI emits.
-  /// Useful for the DSP worker isolate, which forwards JSON to the main
-  /// isolate without round-tripping through a typed object first.
+  /// То же, что [analyze], но возвращает сырую JSON-строку, которую
+  /// эмитит FFI. Полезно для изолята DSP-воркера, который пересылает
+  /// JSON главному изоляту, минуя предварительный round-trip через
+  /// типизированный объект.
   String analyzeJson() {
     _ensureAlive();
     final cstr = _ffi.engineAnalyzeJson(_handle);
     if (cstr == ffi.nullptr) {
-      throw StateError('hitech_bpm_engine_analyze_json returned null');
+      throw StateError('hitech_bpm_engine_analyze_json вернул null');
     }
     try {
       return _readCString(cstr);
@@ -132,7 +137,7 @@ class DspEngine {
     }
   }
 
-  /// Stop polling, release the native handle, close the stream.
+  /// Останавливает опрос, освобождает нативный handle, закрывает поток.
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
@@ -170,7 +175,7 @@ class DspEngine {
 
   void _ensureAlive() {
     if (_disposed || _handle == ffi.nullptr) {
-      throw StateError('DspEngine has been disposed');
+      throw StateError('DspEngine уже освобождён');
     }
   }
 

@@ -1,10 +1,10 @@
-// Permission flow for microphone access.
+// Сценарий выдачи разрешения на доступ к микрофону.
 //
-// On first build: request `Permission.microphone`. While the request is
-// pending, render a small spinner. On grant, render the live screen
-// builder. On denial (including permanently denied), render the
-// explainer screen with a settings deep-link — the app never silently
-// falls back to a synthetic audio source.
+// На первой сборке: запрашиваем `Permission.microphone`. Пока запрос в
+// процессе — показываем небольшой спиннер. При выдаче — рисуем builder
+// живого экрана. При отказе (в том числе permanently denied) — рисуем
+// экран-объяснение с прямой ссылкой в настройки. Приложение никогда
+// молча не переключается на синтетический аудио-источник.
 
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -18,12 +18,12 @@ class PermissionGate extends StatefulWidget {
     required this.onDenied,
   });
 
-  /// Build the UI shown once microphone access is granted. Typically
-  /// the live BPM screen.
+  /// Строит UI, который показывается после выдачи доступа к микрофону.
+  /// Обычно это живой экран BPM.
   final WidgetBuilder onGranted;
 
-  /// Build the UI shown when access is denied. Receives a retry
-  /// callback the screen can wire to a button.
+  /// Строит UI, который показывается при отказе в доступе. Получает
+  /// retry-callback, который экран может повесить на кнопку.
   final Widget Function(
       BuildContext context, bool permanentlyDenied, Future<void> Function() retry)
       onDenied;
@@ -51,7 +51,8 @@ class _PermissionGateState extends State<PermissionGate>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // If the user came back from system settings after a deny, re-check.
+    // Если пользователь вернулся из системных настроек после отказа —
+    // перепроверяем статус.
     if (state == AppLifecycleState.resumed &&
         _state != _PermState.granted) {
       _request();
