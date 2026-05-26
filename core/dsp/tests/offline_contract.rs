@@ -201,6 +201,81 @@ fn canonical_fixture_inventory_round_trip() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Phase 4 — тесты закалки для шумного клубного микрофона
+// ─────────────────────────────────────────────────────────────
+
+/// Для синтетического чистого пульса между ударами нет фонового шума — шумовой
+/// пол равен нулю, поэтому SNR может быть None (нечего сравнивать с нулём).
+/// Главное: если значение всё же есть, оно не должно указывать на плохой сигнал.
+/// Антифейк-инвариант: STABLE + корректный BPM — они проверяются в других тестах.
+#[test]
+fn snr_is_none_or_high_for_clean_pulse() {
+    for bpm in [170.0, 200.0, 220.0] {
+        let samples = pulse_track(bpm, DEFAULT_DURATION_SEC, 0.9);
+        let result = analyze_pcm(&samples, SAMPLE_RATE, DspConfig::default());
+
+        // Синтетический пульс: между kick-ами тишина → шумовой пол ≈ 0
+        // → estimate_snr_db возвращает None (корректно, см. документацию функции).
+        // Если же значение присутствует — оно обязано указывать на чистый сигнал.
+        if let Some(snr) = result.signal_quality.snr_estimate_db {
+            assert!(
+                snr >= 6.0,
+                "{bpm} BPM: snr_estimate_db = {snr:.1} dB — неожиданно низкий для чистого пульса"
+            );
+        }
+        // Главная детекция должна работать независимо от наличия SNR.
+        assert_eq!(result.lock_state, LockState::Stable, "{bpm} BPM");
+    }
+}
+
+/// Белый шум должен иметь SNR около нуля или отрицательный — нет чёткого
+/// сигнала, выделяющегося над шумом.
+#[test]
+fn snr_is_low_or_none_for_white_noise() {
+    use common::white_noise;
+    let samples = white_noise(170_170, 0.28, DEFAULT_DURATION_SEC);
+    let result = analyze_pcm(&samples, SAMPLE_RATE, DspConfig::default());
+
+    // Широкополосный шум: SNR либо None, либо очень низкий (< 6 dB).
+    if let Some(snr) = result.signal_quality.snr_estimate_db {
+        assert!(
+            snr < 6.0,
+            "белый шум: ожидается snr < 6 dB, получено {snr:.1} dB"
+        );
+    }
+    // Главный антифейк-инвариант остаётся в силе.
+    assert_ne!(result.lock_state, LockState::Stable);
+    assert_eq!(result.primary_bpm, None);
+}
+
+/// Phase 4 регрессионный гейт: добавление SNR-оценки не должно нарушать
+/// детекцию на чистых hitech-фикстурах. Прогоняем все пять опорных BPM.
+#[test]
+fn phase4_snr_does_not_break_clean_hitech_detection() {
+    for bpm in [170.0, 180.0, 190.0, 200.0, 220.0] {
+        let samples = pulse_track(bpm, DEFAULT_DURATION_SEC, 0.9);
+        let result = analyze_pcm(&samples, SAMPLE_RATE, DspConfig::default());
+
+        assert_eq!(result.lock_state, LockState::Stable, "BPM {bpm}: потерян STABLE после Phase 4");
+        assert_bpm(result.primary_bpm, bpm, 1.0);
+        assert!(result.confidence >= 0.72, "{bpm}: confidence = {}", result.confidence);
+    }
+}
+
+/// Phase 4: плотная hitech-линия должна предпочитать основной бит (200 BPM),
+/// а не суб-пульс (100 BPM) — SNR-based signal_factor не должен менять этот выбор.
+#[test]
+fn phase4_dense_hitech_bassline_main_beat_wins() {
+    let samples = dense_hitech_bassline(200.0, DEFAULT_DURATION_SEC);
+    let result = analyze_pcm(&samples, SAMPLE_RATE, DspConfig::default());
+
+    assert_eq!(result.lock_state, LockState::Stable);
+    assert_bpm(result.primary_bpm, 200.0, 2.0);
+    // Суб-пульс 100 BPM должен оставаться видимым как кандидат.
+    assert_candidate_near(&result.candidates, 100.0, 2.0, None);
+}
+
 fn assert_bpm(actual: Option<f32>, expected: f32, tolerance: f32) {
     let Some(actual) = actual else {
         panic!("expected {expected} BPM, got None");
