@@ -203,6 +203,26 @@ pub fn fixture_samples(name: &str) -> Vec<f32> {
     }
 }
 
+/// Пульс заданного BPM с поверх наложенным равномерным шумом.
+///
+/// Используется для тестов адаптивного сглаживания огибающей (Phase 4.2):
+/// сигнал имеет чёткую темповую структуру, но уровень шума достаточно высок,
+/// чтобы `noise_level` был `High` (а не `Medium`).
+///
+/// При `noise_amplitude = 0.60` и нормализации к 0.9 peak:
+/// эффективный RMS шума ≈ 0.22–0.26 > 0.18 → гарантирует `noise_level == High`
+/// (не `NoiseOnly`, так как pik = 0.9 ≥ 0.6 и crest_db ≈ 11–13 dB > 8 dB).
+pub fn noisy_pulse(bpm: f32, duration_sec: f32, noise_amplitude: f32, seed: u64) -> Vec<f32> {
+    let mut rng = Lcg::new(seed);
+    let clean = pulse_track(bpm, duration_sec, 0.9);
+    let noisy: Vec<f32> = clean
+        .into_iter()
+        .map(|s| s + rng.uniform(-noise_amplitude, noise_amplitude))
+        .collect();
+    // Нормализуем к 0.9 peak, чтобы сохранить сравнимый уровень сигнала.
+    normalize(noisy, 0.9)
+}
+
 pub const CANONICAL_FIXTURES: &[&str] = &[
     "clean_170",
     "clean_180",

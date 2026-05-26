@@ -64,7 +64,9 @@ pub unsafe extern "C" fn hitech_bpm_engine_push_samples(
 pub unsafe extern "C" fn hitech_bpm_engine_analyze_json(
     engine: *mut HitechBpmEngine,
 ) -> *mut c_char {
-    let Some(engine) = engine.as_ref() else {
+    // `as_mut` вместо `as_ref`: `DspEngine::analyze` теперь принимает `&mut self`,
+    // чтобы сохранять `prev_lock_state` для адаптивного сглаживания огибающей.
+    let Some(engine) = engine.as_mut() else {
         return std::ptr::null_mut();
     };
     let result = engine.inner.analyze();

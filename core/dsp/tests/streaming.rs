@@ -1,7 +1,7 @@
 mod common;
 
-use common::{pulse_track, SAMPLE_RATE};
-use hitech_bpm_dsp::{DspConfig, DspEngine, LockState};
+use common::{noisy_pulse, pulse_track, unstable_club_simulation, SAMPLE_RATE};
+use hitech_bpm_dsp::{DspConfig, DspEngine, LockState, NoiseLevel};
 
 /// Тайминг первого захвата — после покадровой подачи чистого импульса 200 BPM
 /// движок обязан покинуть `SEARCHING` в течение `config.lock_min_seconds`
@@ -155,4 +155,136 @@ fn streaming_reflects_mid_stream_tempo_change_within_one_window() {
         "primary_bpm caught up to ~200 BPM {catch_up:.2}s after the transition, exceeding the \
          analysis window of {window_sec}s"
     );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4.2 — тесты адаптивного сглаживания огибающей (club-mic low-pass)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Фикстура `noisy_pulse` имеет `noise_level == High` (а не NoiseOnly или Medium).
+/// Это предусловие для адаптивного сглаживания: тест проверяет, что фикстура
+/// создана с правильной амплитудой шума.
+#[test]
+fn noisy_pulse_fixture_has_high_noise_level() {
+    use hitech_bpm_dsp::analyze_pcm;
+    // noise_amplitude=0.60: после нормализации к 0.9 peak, RMS > 0.18 → High.
+    let samples = noisy_pulse(200.0, 14.0, 0.60, 0xABCD);
+    let result = analyze_pcm(&samples, SAMPLE_RATE, DspConfig::default());
+    assert_eq!(
+        result.signal_quality.noise_level,
+        NoiseLevel::High,
+        "noisy_pulse(0.60) должен давать noise_level=High, получено {:?}",
+        result.signal_quality.noise_level
+    );
+}
+
+/// Потоковый движок должен достичь STABLE на шумном консистентном темпе
+/// внутри 16 секунд (допуск +4 с сверх стандартного stable_min_seconds=12 с
+/// для шумного входа). Это проверяет, что адаптивное сглаживание не только
+/// не ломает детекцию, но и позволяет движку сохранять захват в условиях шума.
+#[test]
+fn streaming_noisy_consistent_tempo_reaches_stable() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+    // noise_amplitude=0.60 → noise_level=High → активирует адаптивное
+    // сглаживание огибающей после первого LOCKING.
+    let samples = noisy_pulse(200.0, 18.0, 0.60, 0xCAFE_1234);
+
+    let mut engine = DspEngine::new(config);
+    let mut stable_at: Option<f32> = None;
+    let mut final_bpm: Option<f32> = None;
+    let mut fed = 0usize;
+
+    for chunk in samples.chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_sec = fed as f32 / SAMPLE_RATE as f32;
+        let result = engine.analyze();
+        final_bpm = result.primary_bpm;
+        if matches!(result.lock_state, LockState::Stable) && stable_at.is_none() {
+            stable_at = Some(elapsed_sec);
+        }
+    }
+
+    // Шумной фикстуре разрешаем +4 с сверх стандартного stable_min_seconds.
+    let max_stable_sec = config.stable_min_seconds + 4.0;
+    let stable_time = stable_at.expect(
+        "потоковый движок должен достичь STABLE на шумном 200 BPM в пределах окна",
+    );
+    assert!(
+        stable_time <= max_stable_sec,
+        "STABLE на шумной фикстуре получен в {stable_time:.2}s, ожидалось <= {max_stable_sec}s"
+    );
+    // BPM должен быть в ±3 BPM (шире допуска ±1 для чистой синтетики).
+    let bpm = final_bpm.expect("primary_bpm должен быть установлен при STABLE");
+    assert!(
+        (bpm - 200.0).abs() <= 3.0,
+        "noisy 200 BPM: primary_bpm={bpm:.1}, ожидалось 200 ±3"
+    );
+}
+
+/// Антифейк-инвариант Phase 4.2: `unstable_club_simulation` через потоковый
+/// движок никогда не должна достигать STABLE — даже если `prev_lock_state`
+/// гипотетически становится LOCKING при первых вызовах.
+///
+/// Сглаживание гейтировано на `noise_level == High`. Нестабильная симуляция
+/// имеет случайный темп → `prev_lock_state` никогда не достигает LOCKING/STABLE
+/// → сглаживание не применяется → anti-fake-инвариант сохраняется.
+#[test]
+fn streaming_unstable_club_simulation_never_reaches_stable() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+    let samples = unstable_club_simulation(18.0);
+
+    let mut engine = DspEngine::new(config);
+    let mut ever_stable = false;
+    let mut ever_locking = false;
+
+    for chunk in samples.chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        let result = engine.analyze();
+        if matches!(result.lock_state, LockState::Stable) {
+            ever_stable = true;
+        }
+        if matches!(result.lock_state, LockState::Locking) {
+            ever_locking = true;
+        }
+    }
+
+    assert!(!ever_stable,
+        "unstable_club_simulation не должна достигать STABLE в потоковом режиме — \
+         сглаживание могло создать ложную периодичность"
+    );
+    // Движок может кратко видеть LOCKING — это допустимо при случайном
+    // совпадении двух ударов, но не STABLE.
+    let _ = ever_locking; // информационный, не assertion
+}
+
+/// `DspEngine::reset()` сбрасывает `prev_lock_state`, чтобы следующая сессия
+/// начинала без истории предыдущей. Если не сбросить, сглаживание может
+/// применяться на чистом старте, когда нет доказательства темпа.
+#[test]
+fn streaming_reset_clears_prev_lock_state() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+    let mut engine = DspEngine::new(config);
+
+    // Накапливаем историю: доводим до LOCKING/STABLE.
+    for chunk in pulse_track(200.0, 14.0, 0.9).chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        let _ = engine.analyze();
+    }
+
+    // После reset — новая сессия с чистым состоянием.
+    engine.reset();
+
+    // Сразу после reset анализ на пустом буфере должен вернуть SEARCHING,
+    // что означает prev_lock_state = None и нет сглаживания.
+    let result = engine.analyze();
+    assert_eq!(
+        result.lock_state,
+        LockState::Searching,
+        "после reset() движок обязан вернуться в SEARCHING"
+    );
+    assert_eq!(result.primary_bpm, None, "после reset() primary_bpm должен быть null");
 }
