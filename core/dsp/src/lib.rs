@@ -123,10 +123,17 @@ pub struct DspResult {
 ///
 /// Каждый вызов `push_samples` добавляет новый PCM в ограниченное кольцо,
 /// сливает полные кадры онсетов в `onset_history` и отбрасывает самые
-/// старые сэмплы онсетов, выпадающие за пределы окна анализа. Поэтому
+/// старые сэмплы онсетов, выпадающие за пределов окна анализа. Поэтому
 /// CPU-стоимость на вызов пропорциональна размеру *нового* PCM-чанка,
 /// а не длительности стрима — анализ стрима, работающего уже час, стоит
 /// столько же, сколько анализ после первого push.
+///
+/// `prev_lock_state` сохраняет результат предыдущего `analyze()` и
+/// используется для адаптивного сглаживания огибающей онсетов: если движок
+/// уже находился в `LOCKING` или `STABLE`, значит, в окне было консистентное
+/// темповое свидетельство — и тогда лёгкий low-pass на огибающей безопасен.
+/// Без этой истории (первые вызовы, новая сессия, батч-путь) сглаживание
+/// не применяется, чтобы не создавать ложную периодичность в чистом шуме.
 #[derive(Debug, Clone)]
 pub struct DspEngine {
     config: DspConfig,
@@ -135,6 +142,9 @@ pub struct DspEngine {
     pcm_pending: Vec<f32>,
     onset_history: VecDeque<f32>,
     prev_frame_rms: Option<f32>,
+    /// Состояние захвата из предыдущего вызова `analyze()`.
+    /// `None` в начале сессии и после `reset()`.
+    prev_lock_state: Option<LockState>,
     hop_size: usize,
     frame_size: usize,
     pcm_capacity: usize,
@@ -162,6 +172,7 @@ impl DspEngine {
             pcm_pending: Vec::with_capacity(frame_size + hop_size),
             onset_history: VecDeque::with_capacity(onset_capacity),
             prev_frame_rms: None,
+            prev_lock_state: None,
             hop_size,
             frame_size,
             pcm_capacity,
@@ -230,21 +241,31 @@ impl DspEngine {
         analyze_candidates(raw_candidates, self.observed_seconds(), self.config)
     }
 
-    pub fn analyze(&self) -> DspResult {
+    /// Вычислить текущий `DspResult` по скользящей истории онсетов.
+    ///
+    /// Принимает `&mut self`: после вычисления сохраняет `lock_state`
+    /// результата в `self.prev_lock_state`, чтобы следующий вызов мог
+    /// применить адаптивное сглаживание огибающей при необходимости.
+    pub fn analyze(&mut self) -> DspResult {
         let pcm: Vec<f32> = self.pcm_window.iter().copied().collect();
         if pcm.is_empty() || self.config.sample_rate == 0 {
             let signal_quality = measure_signal(&pcm, self.config.sample_rate);
+            // Пустой вход не обновляет prev_lock_state.
             return empty_result(LockState::Searching, signal_quality, 0.0, self.config);
         }
         let raw_envelope: Vec<f32> = self.onset_history.iter().copied().collect();
         let envelope = finalize_envelope(raw_envelope);
-        analyze_from_envelope(
+        let result = analyze_from_envelope(
             &pcm,
             self.config.sample_rate,
             &envelope,
             self.hop_sec,
             self.config,
-        )
+            self.prev_lock_state,
+        );
+        // Запомнить состояние для следующего вызова.
+        self.prev_lock_state = Some(result.lock_state);
+        result
     }
 
     pub fn reset(&mut self) {
@@ -253,6 +274,7 @@ impl DspEngine {
         self.pcm_pending.clear();
         self.onset_history.clear();
         self.prev_frame_rms = None;
+        self.prev_lock_state = None;
     }
 
     fn observed_seconds(&self) -> f32 {
@@ -332,7 +354,8 @@ pub fn analyze_pcm(samples: &[f32], sample_rate: u32, config: DspConfig) -> DspR
     }
 
     let (envelope, hop_sec) = onset_envelope(samples, sample_rate);
-    analyze_from_envelope(samples, sample_rate, &envelope, hop_sec, config)
+    // Батч-путь: нет скользящей истории → передаём None, сглаживание не применяется.
+    analyze_from_envelope(samples, sample_rate, &envelope, hop_sec, config, None)
 }
 
 /// Общий пост-онсетный пайплайн, используемый и офлайн-точкой входа `analyze_pcm`,
@@ -340,12 +363,17 @@ pub fn analyze_pcm(samples: &[f32], sample_rate: u32, config: DspConfig) -> DspR
 /// финализированную огибающую онсетов и соответствующий `hop_sec`,
 /// возвращает `DspResult` с полным скорингом, нормализацией кандидатов
 /// и классификацией состояния захвата.
+///
+/// `prev_lock_state` — состояние предыдущего вызова анализа (только в режиме
+/// стриминга; `None` в батч-режиме). Используется для условного сглаживания
+/// огибающей онсетов при шумном клубном входе: см. `smooth_onset_envelope`.
 fn analyze_from_envelope(
     samples: &[f32],
     sample_rate: u32,
     envelope: &[f32],
     hop_sec: f32,
     config: DspConfig,
+    prev_lock_state: Option<LockState>,
 ) -> DspResult {
     let mut signal_quality = measure_signal(samples, sample_rate);
     let duration_sec = if sample_rate == 0 {
@@ -371,8 +399,44 @@ fn analyze_from_envelope(
         signal_quality.breakdown_likely = true;
     }
 
+    // Адаптивное сглаживание огибающей онсетов для шумного клубного микрофона.
+    //
+    // Применяется только при одновременном выполнении двух условий:
+    //
+    // 1. Предыдущий вызов `analyze()` дал LOCKING или STABLE — в скользящем
+    //    окне есть доказательство консистентного темпа. Без этой истории
+    //    сглаживание может создать ложную периодичность в чистом шуме или
+    //    хаотичном сигнале (регрессия `unstable_club_simulation`).
+    //
+    // 2. Текущий шумовой уровень — High (не NoiseOnly). High означает
+    //    «музыкальный сигнал с высоким шумом»; NoiseOnly означает «шум
+    //    без структуры» — там сглаживать нечего.
+    //
+    // 3-точечная MA убирает широкополосные шумовые пики между kick-ударами,
+    //    не смещая позиции транзиентов (автокорреляция смотрит на лаги ≥130 мс).
+    //    Результат: более чистый пик автокорреляции → выше уверенность →
+    //    движок быстрее достигает и удерживает STABLE при реальном клубном входе.
+    //
+    // Батч-путь (`analyze_pcm`) всегда передаёт `prev_lock_state = None`,
+    //    поэтому сглаживание на нём никогда не применяется → все batch-тесты
+    //    в `offline_contract.rs` остаются без изменений.
+    let smoothed_envelope_storage: Vec<f32>;
+    let effective_envelope: &[f32] = {
+        let has_tempo_history = matches!(
+            prev_lock_state,
+            Some(LockState::Locking | LockState::Stable)
+        );
+        let is_noisy_not_noise_only = signal_quality.noise_level == NoiseLevel::High;
+        if has_tempo_history && is_noisy_not_noise_only {
+            smoothed_envelope_storage = smooth_onset_envelope(envelope);
+            &smoothed_envelope_storage
+        } else {
+            envelope
+        }
+    };
+
     let raw_peaks = tempo_autocorrelation(
-        envelope,
+        effective_envelope,
         hop_sec,
         config.broad_bpm_min,
         config.broad_bpm_max,
@@ -1011,6 +1075,26 @@ fn estimate_snr_db(samples: &[f32], sample_rate: u32) -> Option<f32> {
         return None;
     }
     Some(round_3(20.0 * (signal_rms / noise_rms).log10()))
+}
+
+/// Лёгкое 3-точечное скользящее среднее для огибающей онсетов.
+///
+/// Применяется только потоковым движком (`DspEngine::analyze`) и только когда
+/// `prev_lock_state == LOCKING|STABLE` и `noise_level == High` — чтобы убрать
+/// широкополосные шумовые пики без создания ложной периодичности.
+/// Граничные точки: среднее из двух ближайших соседей (без zero-padding).
+fn smooth_onset_envelope(envelope: &[f32]) -> Vec<f32> {
+    let n = envelope.len();
+    if n < 3 {
+        return envelope.to_vec();
+    }
+    let mut smoothed = Vec::with_capacity(n);
+    smoothed.push((envelope[0] + envelope[1]) / 2.0);
+    for i in 1..n - 1 {
+        smoothed.push((envelope[i - 1] + envelope[i] + envelope[i + 1]) / 3.0);
+    }
+    smoothed.push((envelope[n - 2] + envelope[n - 1]) / 2.0);
+    smoothed
 }
 
 fn resample_linear(samples: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {
