@@ -1,4 +1,16 @@
+// App entry point. Wires the permission gate, the microphone source,
+// the capture bridge (which owns the DSP worker isolate), and the live
+// UI together. No BPM math, no fake values, no fallback to synthetic
+// audio if capture fails — the UI surfaces the error instead.
+
 import 'package:flutter/material.dart';
+
+import 'capture/capture_bridge.dart';
+import 'capture/microphone_source.dart';
+import 'permissions/permission_gate.dart';
+import 'ui/debug_screen.dart';
+import 'ui/main_screen.dart';
+import 'ui/permission_denied_screen.dart';
 
 void main() {
   runApp(const HitechBpmRadarApp());
@@ -10,69 +22,86 @@ class HitechBpmRadarApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'hitech-bpm-radar',
+      title: 'Hitech BPM Radar',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff00a884)),
         useMaterial3: true,
       ),
-      home: const DspContractGateScreen(),
-    );
-  }
-}
-
-class DspContractGateScreen extends StatelessWidget {
-  const DspContractGateScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('hitech-bpm-radar')),
-      body: const SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'DSP contract ready',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
-              ),
-              SizedBox(height: 12),
-              Text(
-                'Microphone capture and live BPM rendering are blocked until the Rust FFI bridge emits verified DspResult snapshots.',
-              ),
-              SizedBox(height: 24),
-              _ContractRow(label: 'Primary BPM', value: 'null until trusted'),
-              _ContractRow(label: 'Confidence', value: '0.0-1.0'),
-              _ContractRow(label: 'Lock state', value: 'SEARCHING'),
-              _ContractRow(label: 'Candidates', value: 'visible in debug mode'),
-            ],
-          ),
+      home: PermissionGate(
+        onGranted: (_) => const _LiveCaptureScaffold(),
+        onDenied: (ctx, permanent, retry) => PermissionDeniedScreen(
+          permanentlyDenied: permanent,
+          onRetry: retry,
         ),
       ),
     );
   }
 }
 
-class _ContractRow extends StatelessWidget {
-  const _ContractRow({required this.label, required this.value});
+/// Owns the [CaptureBridge] and [MicrophoneSource] for the lifetime of
+/// the live screen. Constructs them in `initState`, tears them down in
+/// `dispose` — kept here (not in app state) so the bridge handle does
+/// not survive a permission revoke.
+class _LiveCaptureScaffold extends StatefulWidget {
+  const _LiveCaptureScaffold();
 
-  final String label;
-  final String value;
+  @override
+  State<_LiveCaptureScaffold> createState() => _LiveCaptureScaffoldState();
+}
+
+class _LiveCaptureScaffoldState extends State<_LiveCaptureScaffold> {
+  final CaptureBridge _bridge = CaptureBridge();
+  final MicrophoneSource _mic = MicrophoneSource();
+  Object? _startupError;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCapture();
+  }
+
+  Future<void> _startCapture() async {
+    try {
+      final pcm = await _mic.start();
+      await _bridge.start(
+        pcmStream: pcm,
+        sampleRate: _mic.sampleRate,
+        encoding: MicrophoneSource.encoding,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _startupError = e);
+    }
+  }
+
+  @override
+  void dispose() {
+    _bridge.dispose();
+    _mic.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+    if (_startupError != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Hitech BPM Radar')),
+        body: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: Text(
+              'Could not start microphone capture:\n\n$_startupError',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
           ),
-          Expanded(child: Text(value)),
-        ],
-      ),
+        ),
+      );
+    }
+    return MainScreen(
+      results: _bridge.results,
+      errors: _bridge.errors,
+      debugBuilder: (_) => DebugScreen(results: _bridge.results),
     );
   }
 }

@@ -8,6 +8,47 @@ and this project adheres to semantic versioning once releases begin.
 ## [Unreleased]
 
 ### Added
+- Phase 3 mobile bridge (step 2 — platform files, mic capture, live UI):
+  - `apps/mobile/android/` + `apps/mobile/ios/` generated via `flutter create --platforms=android,ios .` with org `dev.hitech.bpmradar`. Existing Dart code preserved.
+  - `AndroidManifest.xml` declares `<uses-permission android:name="android.permission.RECORD_AUDIO" />`.
+  - `ios/Runner/Info.plist` declares `NSMicrophoneUsageDescription` with user-readable copy ("Hitech BPM Radar listens through the microphone to detect the BPM of the music around you. Audio stays on your device and is never recorded or sent anywhere.").
+  - `apps/mobile/lib/capture/`:
+    - `microphone_source.dart` — thin wrapper over `package:record` 5.x, opens PCM16 mono 48 kHz via `startStream()`.
+    - `dsp_worker.dart` — isolate entry point that owns the FFI handle, decodes PCM16 → Float32 via `s / 32768.0`, calls `DspEngine.pushSamples`, and polls `engine.analyzeJson()` at UI rate (default 20 Hz), forwarding raw JSON to the main isolate.
+    - `capture_bridge.dart` — main-isolate orchestrator. Spawns the worker, forwards `PushPcm` messages via `SendPort`, re-emits parsed `DspResult` on a broadcast stream and `CaptureError` on an error stream. UI never sees raw bytes.
+    - `capture_messages.dart` — typed message envelopes (`WorkerInit`, `PushPcm`, `ResetEngine`, `StopWorker`, `DspResultMessage`, `WorkerReady`, `WorkerError`).
+  - `apps/mobile/lib/permissions/permission_gate.dart` — wraps `package:permission_handler`. Requests `Permission.microphone`, re-checks on app resume so returning from system settings transitions automatically.
+  - `apps/mobile/lib/ui/`:
+    - `main_screen.dart` — `StreamBuilder<DspResult>` rendering primary BPM (with `— —` placeholder when null, never a guess), confidence percent + bar, lock-state badge, signal-quality dBFS meter, clipping chip, and a recent-BPM sparkline.
+    - `debug_screen.dart` — same stream, layouts the full candidate list with relation labels (`main`, `raw`, `half_time`, `double_time`, `normalized_from_*`), score, `source_bpm`, every `signal_quality` field, and timing metrics. Half- and double-time candidates always visible.
+    - `permission_denied_screen.dart` — explainer with `openAppSettings()` deep-link on permanent denial, soft re-prompt button otherwise.
+  - `apps/mobile/lib/main.dart` rewired: `PermissionGate` → `_LiveCaptureScaffold` owns `CaptureBridge` + `MicrophoneSource` for the screen's lifetime; capture start failures surface as a labelled error screen, never as a synthetic fallback.
+  - `apps/mobile/lib/dsp/engine.dart` — added `String analyzeJson()` accessor so the worker forwards raw JSON without an intermediate decode.
+  - `apps/mobile/test/widget_test.dart` — 7 widget tests covering: live STABLE render from a synthetic snapshot, capture-error banner from the error stream, debug-screen candidate visibility (main + half_time), debug waiting state, SEARCHING never showing an invented BPM, permanent-denial settings copy, soft-denial retry button.
+- New Flutter dependencies (justified):
+  - `record: ^5.1.2` — pure Dart microphone capture with `startStream()` PCM byte stream on Android / iOS / macOS / Linux / Web. Avoids writing custom platform channels.
+  - `permission_handler: ^11.3.1` — runtime permission request + `openAppSettings()` deep-link.
+
+### Changed
+- `docs/MOBILE_AUDIO.md` rewritten with the concrete pipeline: package choice, isolate model, frame-format table per platform, latency policy, anti-fake guarantees.
+- `docs/ARCHITECTURE.md` `apps/mobile` section updated from "future boundary" to live Flutter layering (`lib/dsp/`, `lib/capture/`, `lib/permissions/`, `lib/ui/`).
+- `README.md` Current Phase + "Running the mobile app" instructions; links the new manual test checklist.
+
+### Added
+- `docs/MANUAL_TEST_CHECKLIST.md` — device-level acceptance: build/launch, permission flow (grant / soft deny / permanent deny + settings return), live capture against a 200 BPM reference, silence + clipping + half-time-trap spot checks, debug-screen content, sustained 60 s smoothness.
+
+- Phase 3 mobile bridge (step 1 — FFI binding & DSP wrapper, no mic yet):
+  - `core/ffi/include/hitech_bpm_ffi.h` — public C ABI header; single source of truth for `ffigen` and any native consumer.
+  - `apps/mobile/lib/dsp/bindings.dart` — Dart FFI bindings for `hitech_bpm_engine_*` and `hitech_bpm_string_free`. Hand-checked-in but regenerable via the `ffigen:` config in `apps/mobile/pubspec.yaml` so contributors don't need libclang locally just to build.
+  - `apps/mobile/lib/dsp/dsp_result.dart` — typed view over the JSON `DspResult` (LockState enum, SignalQuality, TempoCandidate, DspTiming). Parses what Rust decided; performs no BPM math.
+  - `apps/mobile/lib/dsp/engine.dart` — `DspEngine` wrapper that owns the native handle, marshals `Float32List` PCM into pinned native memory, polls `analyze_json` on a UI-rate timer (default 50 ms), and exposes parsed snapshots on a broadcast `Stream<DspResult>`. Mic capture is the next patch — for now the caller (test or future audio bridge) supplies PCM.
+  - `apps/mobile/test/dsp_engine_test.dart` — Flutter test that builds `libhitech_bpm_ffi` via `cargo build --release -p hitech-bpm-ffi`, drives 13 s of synthetic 200 BPM PCM through the Dart binding, and asserts `lock_state == STABLE`, `primary_bpm` within ±2 BPM, half-time candidate visibility, and that 14 s of silence never reaches `STABLE`. Also asserts the broadcast stream emits parsed snapshots while subscribed.
+  - `apps/mobile/test/helpers/native_library.dart` — locates / builds the workspace dylib so the Flutter test layer drives the same Rust DSP the production app will load.
+  - `apps/mobile/test/helpers/synthetic_pulse.dart` — deterministic 200 BPM kick generator mirroring `core/ffi/tests/ffi_contract.rs::pulse_200_bpm`.
+- New Flutter dependencies (justified):
+  - `ffi: ^2.1.0` — required for `Pointer<Float>` allocation when handing PCM frames to Rust.
+  - `ffigen: ^13.0.0` (dev) — regenerates `bindings.dart` from the C header when the ABI evolves.
+
 - FFI `analyze` boundary: `hitech_bpm_engine_analyze_json` returns the current rolling `DspResult` as a heap-owned UTF-8 JSON C string; `hitech_bpm_string_free` releases it. Flutter / native consumers can now read tempo, confidence, lock state, signal quality, and the full candidate list without owning a parallel BPM implementation. JSON crosses the boundary at UI poll rate (~10–30 Hz); the audio thread continues to call only `push_samples`, which stays allocation-light.
 - `core/ffi/tests/ffi_contract.rs` drives `push_samples` + `analyze_json` end-to-end through the C ABI on a clean 200 BPM pulse, on silence, and on a null handle. Verifies JSON shape, `STABLE` lock on 13 s of clean signal, primary_bpm within ±2 BPM, half-time candidate visibility, and the anti-fake gate that silence never reaches `STABLE`.
 - Phase 2 streaming DSP core — `DspEngine` now holds a **rolling onset history**: `pcm_window`, `pcm_pending`, `onset_history`, and `prev_frame_rms`. On each `push_samples`, only the *new* PCM region is converted into spectral-flux frames and appended to the bounded onset ring; the oldest entries drop off the back. Per-push CPU cost is independent of stream duration.
