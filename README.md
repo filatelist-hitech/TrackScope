@@ -34,9 +34,31 @@ docs/              Architecture, DSP algorithm, QA matrix, roadmap, mobile notes
 
 ## Current Phase
 
-Phase 0/1: Infrastructure and Offline DSP Lab.
+Phase 3 step 2 (mobile bridge live): Flutter app captures microphone audio via `package:record`, ships PCM into a dedicated DSP worker isolate that owns the Rust FFI handle, and renders rolling `DspResult` snapshots through `StreamBuilder` on a live BPM screen + a debug screen.
 
-The Rust crate in `core/dsp/` is now the production source of truth: it owns onset extraction, autocorrelation tempo estimation, hitech candidate normalization, confidence scoring, and lock-state classification in native Rust. `core/dsp/tempo.py` and `core/dsp/synthetic.py` remain as the readable algorithmic reference and continue to back the Python offline-lab report.
+The Rust crate in `core/dsp/` is the production source of truth: it owns onset extraction, autocorrelation tempo estimation, hitech candidate normalization, confidence scoring, and lock-state classification in native Rust. `core/dsp/tempo.py` and `core/dsp/synthetic.py` remain as the readable algorithmic reference and continue to back the Python offline-lab report.
+
+### Running the mobile app
+
+```sh
+# 1. Build the Rust FFI dylib (once per machine, cached by cargo)
+/opt/homebrew/opt/rust/bin/cargo build --release -p hitech-bpm-ffi
+
+# 2. Fetch Flutter deps
+cd apps/mobile
+/opt/homebrew/bin/flutter pub get
+
+# 3. Static + unit checks
+/opt/homebrew/bin/flutter analyze
+/opt/homebrew/bin/flutter test
+
+# 4. Launch on an attached device or running simulator/emulator
+/opt/homebrew/bin/flutter run
+```
+
+The Rust dylib is bundled into the Android/iOS app via the platform plugin pipeline (`record_darwin`, `permission_handler_apple` are picked up automatically by Flutter). For the test runner, `apps/mobile/test/helpers/native_library.dart` invokes `cargo build` itself if the dylib is missing.
+
+Before merging the mobile bridge to `stage`, run the device-level acceptance items in [docs/MANUAL_TEST_CHECKLIST.md](docs/MANUAL_TEST_CHECKLIST.md).
 
 ### Test workflow
 
@@ -62,6 +84,7 @@ The Rust crate in `core/dsp/` is now the production source of truth: it owns ons
 - [QA Matrix](docs/QA_MATRIX.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Mobile Audio Notes](docs/MOBILE_AUDIO.md)
+- [Manual Test Checklist (mobile)](docs/MANUAL_TEST_CHECKLIST.md)
 - [Release Checklist](docs/RELEASE_CHECKLIST.md)
 
 ## Working with Claude Code

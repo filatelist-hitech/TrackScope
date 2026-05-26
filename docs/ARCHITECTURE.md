@@ -70,7 +70,16 @@ Large licensed audio files should not be committed without an explicit dataset p
 
 ### `apps/mobile`
 
-Future mobile app boundary. It owns microphone permissions, native audio bridge behavior, result rendering, debug screen, and session history. It must not implement independent BPM logic.
+Live Flutter app boundary. Owns microphone permissions, native audio bridge behavior, result rendering, debug screen, and session history. It must not implement independent BPM logic.
+
+Layering (Phase 3 step 2 is live):
+
+- `lib/dsp/` — typed Dart wrapper over the Rust FFI: `bindings.dart` (raw C ABI), `dsp_result.dart` (typed view of the JSON contract), `engine.dart` (handle + stream/poll). No BPM math on this side.
+- `lib/capture/` — `MicrophoneSource` (thin wrapper over `package:record`), `CaptureBridge` (spawns a DSP worker isolate, forwards PCM byte chunks via `SendPort`, re-emits parsed `DspResult` and `CaptureError` on broadcast streams), `dsp_worker.dart` (isolate entry point owning the FFI handle, doing PCM16 → f32 conversion, polling `analyzeJson` at UI rate).
+- `lib/permissions/` — `PermissionGate` wraps `package:permission_handler`, re-checks on resume.
+- `lib/ui/` — `MainScreen`, `DebugScreen`, `PermissionDeniedScreen`. Both data screens take a `Stream<DspResult>` directly so they are testable in isolation; the production wiring lives in `main.dart`.
+
+The capture pipeline is documented in `docs/MOBILE_AUDIO.md`. UI subscribes only to `CaptureBridge.results` — there is no parallel state.
 
 ## Public DSP API Shape
 
