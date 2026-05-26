@@ -11,8 +11,9 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'dart:io' show Platform;
+
 import '../dsp/dsp_result.dart';
-import '../dsp/engine.dart' show defaultLibraryName;
 import 'capture_messages.dart';
 import 'dsp_worker.dart';
 
@@ -164,14 +165,15 @@ class CaptureBridge {
     }
   }
 
-  String _platformDefaultLibrary() {
-    try {
-      return defaultLibraryName();
-    } catch (_) {
-      // На хостах, где платформа не распознана, даём воркеру попробовать
-      // дефолтное имя — он поднимет ошибку загрузки через WorkerError,
-      // которую UI обязан показать.
-      return 'libhitech_bpm_ffi';
-    }
+  // На iOS нативная .a статически вшита в бинарник Runner — путь к
+  // библиотеке не нужен, DspEngine.open(libraryPath: null) вызовет
+  // DynamicLibrary.process() на стороне воркера.
+  String? _platformDefaultLibrary() {
+    if (Platform.isIOS) return null;
+    if (Platform.isMacOS) return 'libhitech_bpm_ffi.dylib';
+    if (Platform.isAndroid) return 'libhitech_bpm_ffi.so';
+    if (Platform.isLinux) return 'libhitech_bpm_ffi.so';
+    if (Platform.isWindows) return 'hitech_bpm_ffi.dll';
+    return null;
   }
 }
