@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+### Phase 4 (частичная реализация, 2026-05-26)
+
+#### Added
+- **`apps/mobile/lib/capture/bpm_smoother.dart`** — новый Dart-класс `BpmSmoother`, реализующий три UI-слоя стабилизации: (1) медианный фильтр последних N=5 снэпшотов `primary_bpm` (~250 мс при 50 мс опросе), (2) EMA уверенности α=0.2, (3) гистерезис выхода из `STABLE` — K=3 подряд идущих не-`STABLE` кадров. `CLIPPED_MIC` / `BREAKDOWN` / `NOISE_ONLY` сбрасывают гистерезис немедленно. Сглаживание расположено в Dart, не в Rust, чтобы Rust DSP оставался parity-тестируемым без модификации.
+- **SNR-оценка в Rust** (`core/dsp/src/lib.rs`): функция `estimate_snr_db` — перцентильный метод (20-й перцентиль = шумовой пол, 80-й = уровень сигнала). Вызывается из `measure_signal`, результат попадает в `signal_quality.snr_estimate_db`. До Phase 4 `snr_estimate_db` всегда был `null`; теперь не `null` для реальных шумовых входов через Rust-путь.
+- **SNR-based `signal_factor`** (`core/dsp/src/lib.rs`): использует `snr_estimate_db`, когда доступен, вместо fallback на категориальный `noise_level`. Градация: SNR >= 20 dB → 1.0; 10–20 dB → 0.72–1.0; 3–10 dB → 0.45–0.72; < 3 dB → 0.28.
+
+#### Changed
+- **`apps/mobile/lib/capture/capture_bridge.dart`** — интегрирован `BpmSmoother`: `_smoother.smooth(parsed)` применяется перед отправкой `DspResult` в UI-стрим; `_smoother.reset()` вызывается при `stop()`.
+- **`docs/DSP_ALGORITHM.md`** — добавлены: раздел "SNR-оценка и signal_factor" в "Движок уверенности"; новый раздел "Dart-слой сглаживания (Phase 4)" с описанием `BpmSmoother`; обновлена заметка про `snr_estimate_db` в "Текущее состояние имплементации".
+- **`docs/ROADMAP.md`** — Phase 4 переведена из "СЛЕДУЮЩАЯ ФАЗА" в "В ПРОЦЕССЕ"; задачи 4.1 и 4.2 (SNR-часть) отмечены выполненными; открытые подзадачи явно помечены бэклогом.
+- **`docs/QA_MATRIX.md`** — обновлена дата верификации (26.05.2026); добавлена заметка о поведении `snr_estimate_db` в Python vs Rust.
+
+#### Known limitations (Phase 4)
+- MA-сглаживание огибающей онсетов в Rust не добавлялось: тест показал ложную периодичность на `unstable_club_simulation`. Остаётся бэклогом задачи 4.2.
+- `snr_estimate_db` может оставаться `null` на синтетических пульсах без фонового шума — ожидаемое поведение.
+- Python-анализатор эмитит `snr_estimate_db: null` для всех фикстур — SNR-оценка реализована только в Rust.
+
+---
+
 ### Added
 - `scripts/build_ios_native.sh` — bash-скрипт для кросс-компиляции `libhitech_bpm_ffi.a` под `aarch64-apple-ios` через rustup. Разрешает конфликт двух Rust-тулчейнов: явно переставляет PATH на `~/.rustup/toolchains/stable-aarch64-apple-darwin/bin`, чтобы cargo использовал rustup-управляемый тулчейн с iOS-таргетом, а не Homebrew-rustc. Копирует `.a` в `apps/mobile/ios/Frameworks/`.
 

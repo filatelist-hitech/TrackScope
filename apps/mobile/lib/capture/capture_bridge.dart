@@ -14,6 +14,7 @@ import 'dart:typed_data';
 import 'dart:io' show Platform;
 
 import '../dsp/dsp_result.dart';
+import 'bpm_smoother.dart';
 import 'capture_messages.dart';
 import 'dsp_worker.dart';
 
@@ -48,6 +49,11 @@ class CaptureBridge {
       StreamController<CaptureError>.broadcast();
   Completer<void>? _readyCompleter;
   bool _disposed = false;
+
+  // Сглаживающий слой: медианный фильтр BPM + EMA уверенности +
+  // гистерезис выхода из STABLE. Находится здесь, а не в воркере,
+  // чтобы сохранялась parity-тестируемость Rust DSP без UI-биасов.
+  final BpmSmoother _smoother = BpmSmoother();
 
   /// Broadcast-поток скользящих снапшотов `DspResult`. UI подписывается
   /// сюда; никаких других источников состояния не допускается.
@@ -90,10 +96,12 @@ class CaptureBridge {
 
   /// Отвязывает аудио-источник и просит воркер сбросить скользящее
   /// состояние. Сам воркер остаётся живым, чтобы последующий `start`
-  /// был быстрым.
+  /// был быстрым. Сглаживающий буфер тоже сбрасывается — иначе
+  /// старое BPM «просочится» в новую сессию.
   Future<void> stop() async {
     await _pcmSub?.cancel();
     _pcmSub = null;
+    _smoother.reset();
     _workerInbox?.send(const ResetEngine());
   }
 
@@ -147,7 +155,11 @@ class CaptureBridge {
     } else if (message is DspResultMessage) {
       try {
         final parsed = DspResult.parse(message.json);
-        if (!_resultsCtrl.isClosed) _resultsCtrl.add(parsed);
+        // Применяем сглаживание перед передачей в UI-стрим.
+        // `_smoother` не изменяет `candidates` и `signalQuality` — они
+        // передаются as-is для debug-экрана.
+        final smoothed = _smoother.smooth(parsed);
+        if (!_resultsCtrl.isClosed) _resultsCtrl.add(smoothed);
       } catch (e, st) {
         _errorsCtrl.add(CaptureError('не удалось распарсить DspResult: $e', st));
       }

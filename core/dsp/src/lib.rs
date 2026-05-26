@@ -776,7 +776,7 @@ fn measure_signal(samples: &[f32], sample_rate: u32) -> SignalQuality {
         clipping,
         clipped_frame_ratio: round_6(clipped_frame_ratio),
         noise_level,
-        snr_estimate_db: None,
+        snr_estimate_db: if silence { None } else { estimate_snr_db(samples, sample_rate) },
         silence,
         breakdown_likely,
     }
@@ -953,6 +953,23 @@ fn signal_factor(signal_quality: &SignalQuality) -> f32 {
     if signal_quality.clipping {
         return 0.62;
     }
+
+    // Если SNR-оценка доступна — используем её для более точного фактора.
+    // Это позволяет правильно обработать «громкий, но чистый» сигнал
+    // в отличие от «тихого, но шумного».
+    if let Some(snr) = signal_quality.snr_estimate_db {
+        return if snr >= 20.0 {
+            1.0
+        } else if snr >= 10.0 {
+            0.72 + 0.28 * ((snr - 10.0) / 10.0)
+        } else if snr >= 3.0 {
+            0.45 + 0.27 * ((snr - 3.0) / 7.0)
+        } else {
+            0.28 // очень низкий SNR — близко к NOISE_ONLY
+        };
+    }
+
+    // Фолбэк на noise_level, когда SNR-оценка недоступна.
     match signal_quality.noise_level {
         NoiseLevel::NoiseOnly => 0.28,
         NoiseLevel::High => 0.68,
@@ -963,6 +980,37 @@ fn signal_factor(signal_quality: &SignalQuality) -> f32 {
 
 fn severe_clipping(signal_quality: &SignalQuality) -> bool {
     signal_quality.clipped_frame_ratio >= 0.05
+}
+
+/// Оценивает SNR по перцентильному методу: шумовой уровень = 20-й перцентиль
+/// RMS-кадров, уровень сигнала = 80-й перцентиль. Возвращает `None` при
+/// тишине или когда кадров недостаточно для надёжной оценки.
+///
+/// 20-мс кадры выбраны как компромисс: достаточно длинные, чтобы усреднить
+/// широкополосный шум, но короче типичного kick-транзиента (≈55 мс).
+fn estimate_snr_db(samples: &[f32], sample_rate: u32) -> Option<f32> {
+    if samples.is_empty() || sample_rate == 0 {
+        return None;
+    }
+    let frame_len = ((sample_rate as f32 * 0.020) as usize)
+        .max(64)
+        .min(samples.len());
+    let rms_frames: Vec<f32> = samples
+        .chunks(frame_len)
+        .filter(|frame| frame.len() >= frame_len / 2)
+        .map(|frame| frame_rms(frame))
+        .collect();
+    if rms_frames.len() < 6 {
+        return None;
+    }
+    let mut sorted = rms_frames.clone();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let noise_rms = sorted[sorted.len() / 5]; // 20-й перцентиль ≈ шумовой пол
+    let signal_rms = sorted[sorted.len() * 4 / 5]; // 80-й перцентиль ≈ уровень сигнала
+    if noise_rms < 1e-8 || signal_rms <= noise_rms {
+        return None;
+    }
+    Some(round_3(20.0 * (signal_rms / noise_rms).log10()))
 }
 
 fn resample_linear(samples: &[f32], source_rate: u32, target_rate: u32) -> Vec<f32> {
