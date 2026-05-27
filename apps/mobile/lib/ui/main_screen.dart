@@ -4,7 +4,7 @@
 // значений, никакого фейкового BPM.
 //
 // Структура:
-//   • ~45 % высоты — SpectrogramView: скроллящаяся FFT-карта аудио.
+//   • ~45 % высоты — SpectrumBarsView: 48 анимированных FFT-баров, 30–6000 Гц.
 //   • ~15 % высоты — WaveformView: амплитуда PCM + level-meter, краснеет при клиппинге.
 //   • ~40 % высоты — InfoTable: поля из DspResult, badge lock_state.
 //
@@ -25,7 +25,7 @@ import 'package:flutter/material.dart' hide LockState;
 
 import '../capture/capture_bridge.dart';
 import '../dsp/dsp_result.dart';
-import '../viz/spectrogram_painter.dart';
+import '../viz/spectrum_bars_painter.dart';
 import '../viz/viz_controller.dart';
 import '../viz/waveform_painter.dart';
 
@@ -134,14 +134,16 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 if (_lastError != null) _ErrorBanner(error: _lastError!),
 
-                // ── Spectrogram (45 %) ──────────────────────────────────────
+                // ── Spectrum bars (45 %) ────────────────────────────────────
+                // 48 log-spaced bars (30 Hz → 6 kHz), fast-attack / ~300 ms
+                // decay. Colour through thermal LUT: quiet=blue, loud=orange.
                 Expanded(
                   flex: 45,
                   child: RepaintBoundary(
                     child: ListenableBuilder(
                       listenable: _viz,
                       builder: (_, __) {
-                        if (!_viz.hasData) {
+                        if (_viz.smoothedBars.isEmpty) {
                           return Container(
                             color: _kBg,
                             alignment: Alignment.center,
@@ -156,8 +158,8 @@ class _MainScreenState extends State<MainScreen> {
                           );
                         }
                         return CustomPaint(
-                          painter: SpectrogramPainter(
-                            cols: _viz.specCols,
+                          painter: SpectrumBarsPainter(
+                            bars: _viz.smoothedBars,
                             lutPaints: _viz.lutPaints,
                           ),
                           child: const SizedBox.expand(),

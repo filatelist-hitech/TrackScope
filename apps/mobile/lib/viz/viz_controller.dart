@@ -46,6 +46,18 @@ const _kFloorDb = -60.0;
 /// full-scale sine after Hann windowing gives peak ≈ 256).
 const _kRefMag = 256.0;
 
+/// Number of animated spectrum bars.
+const _kBarCount = 48;
+
+/// Lowest frequency for log-spaced bar grouping (Hz).
+const _kBarMinFreq = 30.0;
+
+/// Highest frequency for log-spaced bar grouping (Hz).
+const _kBarMaxFreq = 6000.0;
+
+/// Sample rate assumed for bar-to-bin mapping (must match the audio source).
+const _kBarSampleRate = 48000.0;
+
 // ── LUT ──────────────────────────────────────────────────────────────────────
 // 7 colour stops linearly interpolated into 256 entries.
 // Confirmed at init time — never recomputed in the hot path.
@@ -62,6 +74,20 @@ const _kStopTs = [0.0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6, 1.0];
 const _kStopR = [0x0D, 0x1A, 0x00, 0x00, 0xFF, 0xFF, 0xFF];
 const _kStopG = [0x02, 0x1A, 0xFF, 0xFF, 0xE6, 0x44, 0xFF];
 const _kStopB = [0x21, 0xFF, 0xFF, 0x88, 0x00, 0x00, 0xFF];
+
+// Pre-compute log-spaced bin ranges for each spectrum bar.
+// Each entry is (binLo, binHi) — exclusive upper bound.
+List<(int, int)> _buildBarBinRanges() {
+  const binHz = _kBarSampleRate / _kFftSize; // ≈ 46.9 Hz / bin
+  final logRatio = math.log(_kBarMaxFreq / _kBarMinFreq);
+  return List.generate(_kBarCount, (bar) {
+    final fLo = _kBarMinFreq * math.exp(logRatio * bar / (_kBarCount - 1));
+    final fHi = _kBarMinFreq * math.exp(logRatio * (bar + 1) / (_kBarCount - 1));
+    final binLo = (fLo / binHz).floor().clamp(0, _kDisplayBins - 1);
+    final binHi = (fHi / binHz).ceil().clamp(binLo + 1, _kDisplayBins);
+    return (binLo, binHi);
+  });
+}
 
 List<Color> _buildLut() {
   final lut = List<Color>.filled(256, const Color(0xFF000000));
@@ -110,6 +136,7 @@ class VizController extends ChangeNotifier {
     // Pre-cache Paint objects — one per LUT entry.
     // Created once here; never allocated in the paint() hot path.
     lutPaints = List.generate(256, (i) => Paint()..color = _lut[i]);
+    _barBinRanges = _buildBarBinRanges();
   }
 
   late final List<Color> _lut;
@@ -122,6 +149,19 @@ class VizController extends ChangeNotifier {
   final Queue<double> _pcmQueue = Queue();
   int _newSampleCount = 0;
   bool _fftInFlight = false;
+
+  // Spectrum bars: log-spaced bin groups + smoothed heights.
+  late final List<(int, int)> _barBinRanges;
+
+  // Mutable smooth state (one double per bar, updated in-place for decay).
+  final _barSmoothData = List<double>.filled(_kBarCount, 0.0);
+
+  // Public snapshot — replaced atomically so shouldRepaint(identical) fires.
+  List<double> _smoothedBars = const <double>[];
+
+  /// 48 smoothed bar heights in [0, 1], fast attack / ~300 ms decay.
+  /// Replaced on every FFT column — use identity check in shouldRepaint.
+  List<double> get smoothedBars => _smoothedBars;
 
   // Beat energy: chunk RMS with fast-attack / slow-decay envelope.
   // Driven exclusively by incoming PCM — reflects real audio transients.
@@ -250,6 +290,22 @@ class VizController extends ChangeNotifier {
       while (_specCols.length > _kMaxCols) {
         _specCols.removeAt(0);
       }
+      // ── Animated spectrum bars ────────────────────────────────────────────
+      // Group linear FFT bins into log-spaced bars (30 Hz → 6 kHz),
+      // apply fast-attack / slow-decay envelope (~300 ms at 20 fps).
+      for (var bar = 0; bar < _kBarCount; bar++) {
+        final (binLo, binHi) = _barBinRanges[bar];
+        var peak = 0.0;
+        for (var b = binLo; b < binHi; b++) {
+          if (mags[b] > peak) peak = mags[b];
+        }
+        final norm = _magToNorm(peak);
+        _barSmoothData[bar] =
+            math.max(norm, _barSmoothData[bar] * 0.80).clamp(0.0, 1.0);
+      }
+      // Publish an immutable snapshot so shouldRepaint(identical) fires.
+      _smoothedBars = List<double>.unmodifiable(_barSmoothData);
+
       notifyListeners();
     } catch (_) {
       // FFT failure is non-fatal — skip this column.
@@ -258,14 +314,15 @@ class VizController extends ChangeNotifier {
     }
   }
 
-  int _magToLutIdx(double mag) {
-    if (mag <= 0) return 0;
-    // Use adaptive peak so the full colour range is exploited at any level.
-    final norm = (mag / _adaptiveMaxMag).clamp(1e-7, 1.0);
-    final db = 20.0 * math.log(norm) / math.ln10;
-    final t = ((db - _kFloorDb) / (-_kFloorDb)).clamp(0.0, 1.0);
-    return (t * 255).round().clamp(0, 255);
+  /// Returns normalised energy in [0, 1] using log scale + adaptive peak.
+  double _magToNorm(double mag) {
+    if (mag <= 0) return 0.0;
+    final n = (mag / _adaptiveMaxMag).clamp(1e-7, 1.0);
+    final db = 20.0 * math.log(n) / math.ln10;
+    return ((db - _kFloorDb) / (-_kFloorDb)).clamp(0.0, 1.0);
   }
+
+  int _magToLutIdx(double mag) => (_magToNorm(mag) * 255).round().clamp(0, 255);
 
   // ── Session reset ──────────────────────────────────────────────────────────
 
@@ -276,6 +333,8 @@ class VizController extends ChangeNotifier {
     _newSampleCount = 0;
     _beatDecay = 0.0;
     _adaptiveMaxMag = _kRefMag;
+    _barSmoothData.fillRange(0, _kBarCount, 0.0);
+    _smoothedBars = const <double>[];
     notifyListeners();
   }
 
