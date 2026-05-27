@@ -1,15 +1,35 @@
 // Живой экран BPM. Через StreamBuilder подписывается на
-// `CaptureBridge.results` и напрямую рисует каждое поле из последнего
-// `DspResult` — никакого производного состояния, никаких запасных
+// CaptureBridge.results и напрямую рисует каждое поле из последнего
+// DspResult — никакого производного состояния, никаких запасных
 // значений, никакого фейкового BPM.
+//
+// Структура:
+//   • ~45 % высоты — SpectrogramView: скроллящаяся FFT-карта аудио.
+//   • ~15 % высоты — WaveformView: амплитуда PCM, краснеет при клиппинге.
+//   • ~40 % высоты — InfoTable: поля из DspResult, badge lock_state.
+//
+// Обе визуализации питаются реальным PCM из CaptureBridge.rawPcm.
+// Если rawPcm == null — плейсхолдер «Ожидание микрофона…».
+// VizController живёт в State и освобождается в dispose().
 
 import 'dart:async';
-import 'dart:collection';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart' hide LockState;
 
 import '../capture/capture_bridge.dart';
 import '../dsp/dsp_result.dart';
+import '../viz/spectrogram_painter.dart';
+import '../viz/viz_controller.dart';
+import '../viz/waveform_painter.dart';
+
+// ── Design tokens ─────────────────────────────────────────────────────────────
+
+const _kBg = Color(0xFF0A0A0F);
+const _kSurface = Color(0xFF12121A);
+const _kMono = TextStyle(fontFamily: 'monospace');
+
+// ── MainScreen ────────────────────────────────────────────────────────────────
 
 class MainScreen extends StatefulWidget {
   const MainScreen({
@@ -17,28 +37,36 @@ class MainScreen extends StatefulWidget {
     required this.results,
     required this.errors,
     required this.debugBuilder,
+    this.rawPcm,
   });
 
   final Stream<DspResult> results;
   final Stream<CaptureError> errors;
 
   /// Как строится debug-экран, когда пользователь нажимает иконку жука.
-  /// Инжектится, чтобы виджет-тесты могли подставить стаб-builder.
   final WidgetBuilder debugBuilder;
+
+  /// Raw PCM-16 LE mono bytes from CaptureBridge.rawPcm. Null in unit tests
+  /// and before mic permission is granted — visualisers show a placeholder.
+  final Stream<Uint8List>? rawPcm;
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
-  static const int _historyLength = 60;
-  final Queue<double?> _bpmHistory = Queue<double?>();
+  late final VizController _viz;
   StreamSubscription<CaptureError>? _errSub;
   CaptureError? _lastError;
+  DspResult? _lastResult;
 
   @override
   void initState() {
     super.initState();
+    _viz = VizController();
+    final pcm = widget.rawPcm;
+    if (pcm != null) _viz.attachRawPcm(pcm);
+
     _errSub = widget.errors.listen((err) {
       if (!mounted) return;
       setState(() => _lastError = err);
@@ -48,24 +76,29 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void dispose() {
     _errSub?.cancel();
+    _viz.dispose();
     super.dispose();
-  }
-
-  void _recordHistory(double? bpm) {
-    _bpmHistory.addLast(bpm);
-    while (_bpmHistory.length > _historyLength) {
-      _bpmHistory.removeFirst();
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _kBg,
       appBar: AppBar(
-        title: const Text('Hitech BPM Radar'),
+        backgroundColor: _kBg,
+        elevation: 0,
+        title: const Text(
+          'Hitech BPM Radar',
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: 15,
+            letterSpacing: 1.5,
+            fontFamily: 'monospace',
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.bug_report_outlined),
+            icon: const Icon(Icons.bug_report_outlined, color: Colors.white54),
             tooltip: 'Отладка',
             onPressed: () {
               Navigator.of(context).push(MaterialPageRoute(
@@ -79,26 +112,71 @@ class _MainScreenState extends State<MainScreen> {
         child: StreamBuilder<DspResult>(
           stream: widget.results,
           builder: (context, snap) {
-            final result = snap.data;
-            if (result != null) {
-              _recordHistory(result.primaryBpm);
-            }
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_lastError != null)
-                    _ErrorBanner(error: _lastError!),
-                  _BpmReadout(result: result),
-                  const SizedBox(height: 16),
-                  _ConfidenceAndLock(result: result),
-                  const SizedBox(height: 16),
-                  _SignalQualityMeter(result: result),
-                  const SizedBox(height: 16),
-                  Expanded(child: _HistorySparkline(history: _bpmHistory)),
-                ],
-              ),
+            if (snap.data != null) _lastResult = snap.data;
+            final result = _lastResult;
+            final isClipping = result?.signalQuality.clipping ?? false;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_lastError != null) _ErrorBanner(error: _lastError!),
+
+                // ── Spectrogram (45 %) ──────────────────────────────────────
+                Expanded(
+                  flex: 45,
+                  child: RepaintBoundary(
+                    child: ListenableBuilder(
+                      listenable: _viz,
+                      builder: (_, __) {
+                        if (!_viz.hasData) {
+                          return Container(
+                            color: _kBg,
+                            alignment: Alignment.center,
+                            child: const Text(
+                              'Ожидание микрофона…',
+                              style: TextStyle(
+                                color: Color(0xFF444466),
+                                fontFamily: 'monospace',
+                                fontSize: 14,
+                              ),
+                            ),
+                          );
+                        }
+                        return CustomPaint(
+                          painter: SpectrogramPainter(
+                            cols: _viz.specCols,
+                            lutPaints: _viz.lutPaints,
+                          ),
+                          child: const SizedBox.expand(),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+
+                // ── Waveform (15 %) ─────────────────────────────────────────
+                Expanded(
+                  flex: 15,
+                  child: RepaintBoundary(
+                    child: ListenableBuilder(
+                      listenable: _viz,
+                      builder: (_, __) => CustomPaint(
+                        painter: WaveformPainter(
+                          samples: _viz.waveCache,
+                          isClipping: isClipping,
+                        ),
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ── Info table (40 %) ───────────────────────────────────────
+                Expanded(
+                  flex: 40,
+                  child: _InfoTable(result: result),
+                ),
+              ],
             );
           },
         ),
@@ -107,59 +185,195 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-class _BpmReadout extends StatelessWidget {
-  const _BpmReadout({required this.result});
+// ── Info table ────────────────────────────────────────────────────────────────
+
+class _InfoTable extends StatelessWidget {
+  const _InfoTable({required this.result});
   final DspResult? result;
 
   @override
   Widget build(BuildContext context) {
-    final bpm = result?.primaryBpm;
-    final text = bpm == null ? '— —' : bpm.toStringAsFixed(1);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('ОСНОВНОЙ BPM',
-            style: TextStyle(letterSpacing: 1.5, fontSize: 12)),
-        const SizedBox(height: 4),
-        Text(
-          text,
-          style: const TextStyle(fontSize: 72, fontWeight: FontWeight.w800),
-        ),
-      ],
+    final r = result;
+    final bpm = r?.primaryBpm;
+    final conf = r?.confidence ?? 0.0;
+    final lock = r?.lockState ?? LockState.searching;
+    final sq = r?.signalQuality;
+
+    // Best main candidate (relation == 'main'), fallback to first.
+    TempoCandidate? best;
+    if (r != null && r.candidates.isNotEmpty) {
+      try {
+        best = r.candidates.firstWhere((c) => c.relation == 'main');
+      } catch (_) {
+        best = r.candidates.first;
+      }
+    }
+
+    // Half-time and double-time for display.
+    final halfCand = r?.candidates
+        .where((c) => c.relation == 'half_time' || c.relation == 'normalized_from_half')
+        .toList();
+    final doubleCand = r?.candidates
+        .where((c) => c.relation == 'double_time' || c.relation == 'normalized_from_double')
+        .toList();
+
+    final halfBpm = (halfCand?.isNotEmpty ?? false)
+        ? halfCand!.first.bpm.toStringAsFixed(1)
+        : '—';
+    final doubleBpm = (doubleCand?.isNotEmpty ?? false)
+        ? doubleCand!.first.bpm.toStringAsFixed(1)
+        : '—';
+
+    return Container(
+      color: _kSurface,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Row 1: BPM + lock badge ────────────────────────────────────
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                bpm == null ? '—' : bpm.toStringAsFixed(1),
+                style: const TextStyle(
+                  fontSize: 52,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  fontFamily: 'monospace',
+                  height: 1.0,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(left: 6, bottom: 6),
+                child: Text(
+                  'BPM',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white38,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              _LockBadge(state: lock),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // ── Row 2: confidence + input level ───────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: _Cell(
+                  label: 'Уверенность',
+                  value: '${(conf * 100).round()}%',
+                ),
+              ),
+              Expanded(
+                child: _Cell(
+                  label: 'Уровень входа',
+                  value: sq?.inputLevelDbfs != null
+                      ? '${sq!.inputLevelDbfs!.toStringAsFixed(1)} dBFS'
+                      : '—',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // ── Row 3: best candidate + half / double ──────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: _Cell(
+                  label: 'Лучший кандидат',
+                  value: best != null ? '${best.bpm.toStringAsFixed(1)} BPM' : '—',
+                ),
+              ),
+              Expanded(
+                child: _Cell(
+                  label: '×½ / ×2',
+                  value: '$halfBpm / $doubleBpm',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // ── Row 4: clipping + noise level ─────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: _Cell(
+                  label: 'Клиппинг',
+                  value: sq?.clipping == true ? '⚠ ПЕРЕГРУЗ' : 'нет',
+                  valueColor:
+                      sq?.clipping == true ? Colors.red.shade300 : null,
+                ),
+              ),
+              Expanded(
+                child: _Cell(
+                  label: 'Шум',
+                  value: _noiseLabel(sq?.noiseLevel),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
+  }
+
+  String _noiseLabel(String? level) {
+    switch (level) {
+      case 'low':
+        return 'низкий';
+      case 'medium':
+        return 'средний';
+      case 'high':
+        return 'высокий';
+      case 'noise_only':
+        return 'только шум';
+      default:
+        return '—';
+    }
   }
 }
 
-class _ConfidenceAndLock extends StatelessWidget {
-  const _ConfidenceAndLock({required this.result});
-  final DspResult? result;
+class _Cell extends StatelessWidget {
+  const _Cell({required this.label, required this.value, this.valueColor});
+  final String label;
+  final String value;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {
-    final lock = result?.lockState ?? LockState.searching;
-    final conf = result?.confidence ?? 0.0;
-    final pct = (conf * 100).round();
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _LockBadge(state: lock),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Уверенность $pct%'),
-              const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(value: conf.clamp(0.0, 1.0)),
-              ),
-            ],
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10,
+            color: Colors.white38,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: _kMono.copyWith(
+            fontSize: 13,
+            color: valueColor ?? Colors.white70,
           ),
         ),
       ],
     );
   }
 }
+
+// ── Lock badge ────────────────────────────────────────────────────────────────
 
 class _LockBadge extends StatelessWidget {
   const _LockBadge({required this.state});
@@ -167,163 +381,45 @@ class _LockBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    Color bg;
-    switch (state) {
-      case LockState.stable:
-        bg = Colors.green.shade700;
-        break;
-      case LockState.locking:
-        bg = Colors.amber.shade700;
-        break;
-      case LockState.unstable:
-      case LockState.breakdown:
-        bg = Colors.deepOrange;
-        break;
-      case LockState.clippedMic:
-        bg = scheme.error;
-        break;
-      case LockState.noiseOnly:
-        bg = Colors.blueGrey;
-        break;
-      case LockState.searching:
-      case LockState.unknown:
-        bg = scheme.surfaceContainerHighest;
-        break;
-    }
+    final (label, bg) = _scheme(state);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration:
           BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(state.wireName,
-          style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.0)),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+          letterSpacing: 0.8,
+        ),
+      ),
     );
   }
-}
 
-class _SignalQualityMeter extends StatelessWidget {
-  const _SignalQualityMeter({required this.result});
-  final DspResult? result;
-
-  @override
-  Widget build(BuildContext context) {
-    final sq = result?.signalQuality;
-    final dbfs = sq?.inputLevelDbfs;
-    // -60 dBFS → 0.0, 0 dBFS → 1.0 (с ограничением).
-    final norm =
-        dbfs == null ? 0.0 : ((dbfs + 60.0) / 60.0).clamp(0.0, 1.0);
-    final clipping = sq?.clipping ?? false;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Уровень входа: ${dbfs?.toStringAsFixed(1) ?? '—'} dBFS',
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),
-            if (clipping)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error,
-                    borderRadius: BorderRadius.circular(4)),
-                child: const Text('КЛИППИНГ',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700)),
-              ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: norm,
-            backgroundColor:
-                Theme.of(context).colorScheme.surfaceContainerHighest,
-            color: clipping ? Theme.of(context).colorScheme.error : null,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _HistorySparkline extends StatelessWidget {
-  const _HistorySparkline({required this.history});
-  final Queue<double?> history;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('НЕДАВНИЙ BPM',
-            style: TextStyle(letterSpacing: 1.5, fontSize: 12)),
-        const SizedBox(height: 8),
-        Expanded(
-          child: CustomPaint(
-            painter: _SparkPainter(
-              history.toList(growable: false),
-              Theme.of(context).colorScheme,
-            ),
-            child: const SizedBox.expand(),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SparkPainter extends CustomPainter {
-  _SparkPainter(this.points, this.scheme);
-  final List<double?> points;
-  final ColorScheme scheme;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final valid = points.whereType<double>().toList();
-    if (valid.isEmpty) return;
-    final minV = valid.reduce((a, b) => a < b ? a : b) - 1.0;
-    final maxV = valid.reduce((a, b) => a > b ? a : b) + 1.0;
-    final range = (maxV - minV).clamp(1.0, double.infinity);
-    final stepX = size.width / (points.length - 1).clamp(1, 999);
-    final paint = Paint()
-      ..color = scheme.primary
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke;
-    final path = Path();
-    var started = false;
-    for (var i = 0; i < points.length; i++) {
-      final v = points[i];
-      if (v == null) {
-        started = false;
-        continue;
-      }
-      final x = i * stepX;
-      final y = size.height - ((v - minV) / range) * size.height;
-      if (!started) {
-        path.moveTo(x, y);
-        started = true;
-      } else {
-        path.lineTo(x, y);
-      }
+  (String, Color) _scheme(LockState s) {
+    switch (s) {
+      case LockState.stable:
+        return ('стабильно', const Color(0xFF2E7D32));
+      case LockState.locking:
+        return ('захват', const Color(0xFFF57F17));
+      case LockState.unstable:
+        return ('нестабильно', const Color(0xFFE65100));
+      case LockState.breakdown:
+        return ('брейк', const Color(0xFF1565C0));
+      case LockState.clippedMic:
+        return ('перегруз микрофона', const Color(0xFFC62828));
+      case LockState.noiseOnly:
+        return ('только шум', const Color(0xFF4A148C));
+      case LockState.searching:
+      case LockState.unknown:
+        return ('поиск', const Color(0xFF37474F));
     }
-    canvas.drawPath(path, paint);
   }
-
-  @override
-  bool shouldRepaint(covariant _SparkPainter old) =>
-      !identical(old.points, points);
 }
+
+// ── Error banner ──────────────────────────────────────────────────────────────
 
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner({required this.error});
@@ -332,22 +428,16 @@ class _ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(6),
-      ),
+      color: const Color(0xFF7F0000),
       child: Row(
         children: [
-          Icon(Icons.error_outline,
-              color: Theme.of(context).colorScheme.onErrorContainer),
+          const Icon(Icons.error_outline, color: Colors.white70, size: 16),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Ошибка захвата: ${error.message}',
-              style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer),
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ),
         ],

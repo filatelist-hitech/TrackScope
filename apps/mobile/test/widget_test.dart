@@ -79,8 +79,47 @@ DspResult _searchingSnapshot() => DspResult.fromJson({
       },
     });
 
+DspResult _clippingSnapshot() => DspResult.fromJson({
+      'primary_bpm': null,
+      'confidence': 0.2,
+      'lock_state': 'CLIPPED_MIC',
+      'signal_quality': {
+        'input_level_dbfs': -2.0,
+        'peak_dbfs': 0.0,
+        'clipping': true,
+        'clipped_frame_ratio': 0.12,
+        'noise_level': 'high',
+        'snr_estimate_db': null,
+        'silence': false,
+        'breakdown_likely': false,
+      },
+      'candidates': <Map<String, dynamic>>[],
+      'timing': {
+        'analysis_time_sec': 3.0,
+        'window_time_sec': 6.0,
+        'hop_time_sec': 0.0025,
+        'first_lock_time_sec': null,
+      },
+    });
+
+/// Helper: wraps [MainScreen] without a rawPcm stream (simulates pre-mic state).
+Widget _buildMainScreen(
+  Stream<DspResult> results,
+  Stream<CaptureError> errors,
+) =>
+    MaterialApp(
+      home: MainScreen(
+        results: results,
+        errors: errors,
+        rawPcm: null, // no mic in tests → spectrogram shows placeholder
+        debugBuilder: (_) => const Scaffold(body: Text('stub-debug')),
+      ),
+    );
+
 void main() {
-  testWidgets('MainScreen renders primary_bpm and STABLE badge from stream',
+  // ── MainScreen ─────────────────────────────────────────────────────────────
+
+  testWidgets('MainScreen shows BPM placeholder before first snapshot',
       (tester) async {
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
@@ -89,24 +128,84 @@ void main() {
       await errs.close();
     });
 
-    await tester.pumpWidget(MaterialApp(
-      home: MainScreen(
-        results: ctrl.stream,
-        errors: errs.stream,
-        debugBuilder: (_) => const Scaffold(body: Text('stub-debug')),
-      ),
-    ));
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
     await tester.pump();
 
-    expect(find.text('— —'), findsOneWidget);
+    // No result yet → BPM field shows em-dash placeholder.
+    expect(find.text('—'), findsWidgets);
+    // Spectrogram placeholder visible (no rawPcm).
+    expect(find.textContaining('Ожидание микрофона'), findsOneWidget);
+  });
+
+  testWidgets(
+      'MainScreen renders primary_bpm and стабильно badge from STABLE snapshot',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
 
     ctrl.add(_stableSnapshot());
     await tester.pump();
     await tester.pump();
 
+    // BPM displayed.
     expect(find.text('200.0'), findsOneWidget);
-    expect(find.text('STABLE'), findsOneWidget);
-    expect(find.text('Уверенность 87%'), findsOneWidget);
+    // Russian label for STABLE state.
+    expect(find.text('стабильно'), findsOneWidget);
+    // Confidence row present.
+    expect(find.textContaining('87%'), findsOneWidget);
+  });
+
+  testWidgets('MainScreen shows поиск badge for SEARCHING snapshot',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_searchingSnapshot());
+    await tester.pump();
+    await tester.pump();
+
+    // primary_bpm null → em-dash, never an invented number.
+    expect(find.text('—'), findsWidgets,
+        reason: 'SEARCHING must render placeholder, never an invented BPM');
+    expect(find.text('поиск'), findsOneWidget);
+  });
+
+  testWidgets('MainScreen shows перегруз микрофона badge for CLIPPED_MIC',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_clippingSnapshot());
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('перегруз микрофона'), findsOneWidget);
+    // Clipping warning in table.
+    expect(find.textContaining('ПЕРЕГРУЗ'), findsOneWidget);
+    // BPM must be null, not a fake number.
+    expect(find.text('—'), findsWidgets,
+        reason: 'CLIPPED_MIC with null primary_bpm must show placeholder');
   });
 
   testWidgets('MainScreen surfaces capture errors from the error stream',
@@ -118,13 +217,7 @@ void main() {
       await errs.close();
     });
 
-    await tester.pumpWidget(MaterialApp(
-      home: MainScreen(
-        results: ctrl.stream,
-        errors: errs.stream,
-        debugBuilder: (_) => const Scaffold(body: Text('stub-debug')),
-      ),
-    ));
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
     await tester.pump();
 
     errs.add(const CaptureError('не удалось открыть нативный DSP'));
@@ -135,6 +228,25 @@ void main() {
         find.textContaining('Ошибка захвата: не удалось открыть нативный DSP'),
         findsOneWidget);
   });
+
+  testWidgets('Debug button navigates to debug screen', (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.bug_report_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('stub-debug'), findsOneWidget);
+  });
+
+  // ── DebugScreen ────────────────────────────────────────────────────────────
 
   testWidgets('DebugScreen keeps half-time candidates visible',
       (tester) async {
@@ -170,32 +282,7 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('SEARCHING snapshot keeps BPM placeholder (no fake value)',
-      (tester) async {
-    final ctrl = StreamController<DspResult>.broadcast();
-    final errs = StreamController<CaptureError>.broadcast();
-    addTearDown(() async {
-      await ctrl.close();
-      await errs.close();
-    });
-
-    await tester.pumpWidget(MaterialApp(
-      home: MainScreen(
-        results: ctrl.stream,
-        errors: errs.stream,
-        debugBuilder: (_) => const Scaffold(body: Text('stub-debug')),
-      ),
-    ));
-    await tester.pump();
-
-    ctrl.add(_searchingSnapshot());
-    await tester.pump();
-    await tester.pump();
-
-    expect(find.text('— —'), findsOneWidget,
-        reason: 'SEARCHING must render placeholder, never an invented BPM');
-    expect(find.text('SEARCHING'), findsOneWidget);
-  });
+  // ── PermissionDeniedScreen ─────────────────────────────────────────────────
 
   testWidgets('PermissionDeniedScreen shows settings deep-link copy',
       (tester) async {
