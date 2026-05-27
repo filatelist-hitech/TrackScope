@@ -6,6 +6,38 @@
 
 ## [Unreleased]
 
+### Phase 5 UI — редизайн главного экрана (2026-05-27)
+
+#### Added
+
+- **`apps/mobile/lib/viz/viz_controller.dart`** — `VizController` (`ChangeNotifier`): подписывается на `CaptureBridge.rawPcm`, хранит ~4-секундный кольцевой буфер PCM-16 LE → f32, запускает Dart-side FFT через `compute()` (~50 мс интервал). Никогда не смотрит в `DspResult`, не вычисляет BPM. LUT (256 `Color`-записей, 7 контрольных точек) и 256 `Paint`-объектов предвычислены при инициализации — `Color.lerp` не вызывается в горячем пути рендеринга.
+
+- **`apps/mobile/lib/viz/spectrogram_painter.dart`** — `SpectrogramPainter` (`CustomPainter`): скроллящаяся FFT-карта (время → право, частота → верх, яркость = логарифм амплитуды). 200 колонок × 128 бинов (0–6 кГц). Использует `VizController.lutPaints` — Paint создаются один раз.
+
+- **`apps/mobile/lib/viz/waveform_painter.dart`** — `WaveformPainter` (`CustomPainter`): амплитуда PCM vs время, центрированная нулевая линия. Цвет teal `#00BFA5`, краснеет (`#F44336`) когда `DspResult.signal_quality.clipping == true`.
+
+- **`CaptureBridge.rawPcm`** (`Stream<Uint8List>`): новый broadcast-стрим в `capture_bridge.dart`, форкнутый от PCM-источника до отправки в DSP-воркер. Используется `VizController` — DSP-изолят не затронут.
+
+- **Редизайн `apps/mobile/lib/ui/main_screen.dart`**: три секции — спектрограмма (~45 %), волноформа (~15 %), информационная таблица (~40 %). `RepaintBoundary` вокруг каждой визуализации. Тёмная тема (`#0A0A0F`), monospace-шрифт для числовых полей. Таблица содержит: крупный BPM (52 sp), badge состояния захвата (русские метки для всех 7 состояний), уверенность, уровень входа, лучший кандидат, полутемп/двойной темп, клиппинг, уровень шума. `primary_bpm == null` → «—», не «0».
+
+- **Badge lock_state** с русскими метками и цветами: поиск (серый), захват (янтарный), стабильно (зелёный), нестабильно (оранжевый), брейк (синий), перегруз микрофона (красный), только шум (фиолетовый).
+
+- **Тёмная тема** в `main.dart`: `ThemeData.dark()` с `scaffoldBackgroundColor: #0A0A0F`, `primary: #00BFA5`.
+
+- **`fftea: ^1.5.0`** в `pubspec.yaml` — чистый Dart FFT без platform channels, безопасен в любом изоляте. Обоснование: требуется Dart-side FFT для спектрограммы без зависимости от Rust DSP.
+
+#### Changed
+
+- **`apps/mobile/test/widget_test.dart`** — обновлены smoke-тесты: новые русские метки badge (стабильно, поиск, перегруз микрофона), плейсхолдер «Ожидание микрофона…», тест навигации на debug screen. Добавлен тест для CLIPPED_MIC (null BPM + ⚠ ПЕРЕГРУЗ).
+
+- **`docs/MOBILE_AUDIO.md`** — новый раздел «Dart-side визуализации (Phase 5)»: изолятная топология, FFT-параметры, таблица цветовой палитры LUT, описание RepaintBoundary и известные ограничения.
+
+#### Known limitations (Phase 5)
+
+- `compute()` создаёт новый Dart-изолят при каждом FFT-вызове (~20/с). На слабых устройствах возможны кратковременные подтормаживания при отрисовке спектрограммы. Замена на персистентный viz-изолят — следующий патч.
+- Waveform использует поточечную выборку (не RMS) — на очень тихом сигнале может выглядеть «зубчато».
+- iOS Simulator не поддерживает захват микрофона — `VizController.hasData == false`, показывается плейсхолдер.
+
 ### Phase 4 (частичная реализация, 2026-05-26)
 
 #### Added

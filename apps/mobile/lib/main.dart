@@ -23,8 +23,14 @@ class HitechBpmRadarApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Hitech BPM Radar',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff00a884)),
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0A0A0F),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF00BFA5),
+          surface: Color(0xFF12121A),
+        ),
         useMaterial3: true,
       ),
       home: PermissionGate(
@@ -101,6 +107,7 @@ class _LiveCaptureScaffoldState extends State<_LiveCaptureScaffold> {
     return MainScreen(
       results: _bridge.results,
       errors: _bridge.errors,
+      rawPcm: _bridge.rawPcm,
       debugBuilder: (_) => DebugScreen(results: _bridge.results),
     );
   }

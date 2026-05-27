@@ -12,6 +12,9 @@ dependencies:
   ffi: ^2.1.0
   record: ^6.0.0
   permission_handler: ^12.0.0
+  # Pure-Dart FFT for the Dart-side spectrogram visualisation. No platform
+  # channels — safe to call from any isolate. Added Phase 5 UI.
+  fftea: ^1.5.0
 
 dev_dependencies:
   flutter_test:

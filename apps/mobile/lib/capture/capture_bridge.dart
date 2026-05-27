@@ -47,6 +47,11 @@ class CaptureBridge {
       StreamController<DspResult>.broadcast();
   final StreamController<CaptureError> _errorsCtrl =
       StreamController<CaptureError>.broadcast();
+  // Raw PCM bytes (PCM-16 LE mono) forked from the mic stream before the
+  // DSP-worker isolate. Used by VizController on the main isolate for the
+  // Dart-side spectrogram / waveform. Never contains computed BPM.
+  final StreamController<Uint8List> _rawPcmCtrl =
+      StreamController<Uint8List>.broadcast();
   Completer<void>? _readyCompleter;
   bool _disposed = false;
 
@@ -58,6 +63,10 @@ class CaptureBridge {
   /// Broadcast-поток скользящих снапшотов `DspResult`. UI подписывается
   /// сюда; никаких других источников состояния не допускается.
   Stream<DspResult> get results => _resultsCtrl.stream;
+
+  /// Raw PCM-16 LE mono bytes, forked from the mic source.
+  /// For Dart-side visualisation only — do not compute BPM here.
+  Stream<Uint8List> get rawPcm => _rawPcmCtrl.stream;
 
   /// Broadcast-поток ошибок захвата / воркера. UI обязан их показывать
   /// (например, баннером) — тихий откат на синтетический источник явно
@@ -87,6 +96,8 @@ class CaptureBridge {
         if (inbox == null || chunk.isEmpty) return;
         inbox.send(
             PushPcm(chunk, sampleRate: sampleRate, encoding: encoding));
+        // Fork raw bytes to the visualisation stream.
+        if (!_rawPcmCtrl.isClosed) _rawPcmCtrl.add(chunk);
       },
       onError: (Object e, StackTrace st) =>
           _errorsCtrl.add(CaptureError('ошибка аудио-источника: $e', st)),
@@ -121,6 +132,7 @@ class CaptureBridge {
     _workerInbox = null;
     await _resultsCtrl.close();
     await _errorsCtrl.close();
+    await _rawPcmCtrl.close();
   }
 
   Future<void> _spawnWorker({required int sampleRate}) async {
