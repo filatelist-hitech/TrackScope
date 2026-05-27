@@ -1,0 +1,151 @@
+{
+  "fixtures": [
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_01",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_01.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_02",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_02.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_03",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_03.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_04",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_04.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_05",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_05.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_06",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_06.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_07",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_07.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_08",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_08.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_09",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_09.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_10",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_10.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_11",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_11.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_12",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_12.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_13",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_13.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_14",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_14.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_15",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_15.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_16",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_16.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_17",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_17.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_18",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_18.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_19",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_19.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_20",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_20.json"
+    },
+    {
+      "bpm_tolerance": 4.0,
+      "category": "real",
+      "lock_state_must_match": false,
+      "name": "hitech_real_21",
+      "snapshot": "datasets/hitech/snapshots/hitech_real_21.json"
+    }
+  ]
+}
