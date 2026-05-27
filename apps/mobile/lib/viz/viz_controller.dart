@@ -123,6 +123,18 @@ class VizController extends ChangeNotifier {
   int _newSampleCount = 0;
   bool _fftInFlight = false;
 
+  // Beat energy: chunk RMS with fast-attack / slow-decay envelope.
+  // Driven exclusively by incoming PCM — reflects real audio transients.
+  // Used by WaveformPainter and main_screen for beat-reactive glow.
+  double _beatDecay = 0.0;
+
+  /// Beat energy in [0, 1]. Fast attack (immediate), decay ~200 ms per chunk.
+  double get beatDecay => _beatDecay;
+
+  // Adaptive spectrogram normalisation: tracks the rolling peak magnitude
+  // so the full LUT colour range is used even at modest input levels.
+  double _adaptiveMaxMag = _kRefMag;
+
   // Spectrogram: ring of LUT-index columns.
   // Each Int32List is one time column, length == _kDisplayBins.
   final List<Int32List> _specCols = [];
@@ -150,14 +162,22 @@ class VizController extends ChangeNotifier {
     if (count == 0) return;
 
     // Decode PCM-16 LE signed → f32 in [-1, 1].
+    // Accumulate sum-of-squares inline for chunk RMS (zero extra pass).
+    var sumSq = 0.0;
     for (var i = 0; i < count; i++) {
       final lo = bytes[i * 2];
       final hi = bytes[i * 2 + 1];
       var raw = (hi << 8) | lo;
       if (raw >= 0x8000) raw -= 0x10000;
-      _pcmQueue.addLast(raw / 32768.0);
+      final s = raw / 32768.0;
+      _pcmQueue.addLast(s);
+      sumSq += s * s;
     }
     _newSampleCount += count;
+
+    // Beat-energy envelope: fast attack, ~0.88^1 ≈ 88% per chunk (~200 ms decay).
+    final chunkRms = math.sqrt(sumSq / count).clamp(0.0, 1.0);
+    _beatDecay = math.max(chunkRms, _beatDecay * 0.88).clamp(0.0, 1.0);
 
     // Trim ring to 4 s.
     while (_pcmQueue.length > _kMaxPcmSamples) {
@@ -208,6 +228,18 @@ class VizController extends ChangeNotifier {
 
       final mags = await compute(_fftWorker, windowed);
 
+      // Adaptive peak normalisation: fast attack (immediate max), slow decay
+      // (~0.997 per column ≈ full decay in ~250 columns = ~12 s at 20 fps).
+      // Prevents the display from being dominated by a single loud frequency.
+      double colMax = 0.0;
+      for (var i = 0; i < _kDisplayBins; i++) {
+        if (mags[i] > colMax) colMax = mags[i];
+      }
+      _adaptiveMaxMag = math.max(
+        math.max(colMax, _kRefMag * 0.02), // keep a minimum floor
+        _adaptiveMaxMag * 0.997,
+      );
+
       // Convert magnitudes to LUT indices.
       final col = Int32List(_kDisplayBins);
       for (var i = 0; i < _kDisplayBins; i++) {
@@ -228,7 +260,8 @@ class VizController extends ChangeNotifier {
 
   int _magToLutIdx(double mag) {
     if (mag <= 0) return 0;
-    final norm = (mag / _kRefMag).clamp(1e-7, 1.0);
+    // Use adaptive peak so the full colour range is exploited at any level.
+    final norm = (mag / _adaptiveMaxMag).clamp(1e-7, 1.0);
     final db = 20.0 * math.log(norm) / math.ln10;
     final t = ((db - _kFloorDb) / (-_kFloorDb)).clamp(0.0, 1.0);
     return (t * 255).round().clamp(0, 255);
@@ -241,6 +274,8 @@ class VizController extends ChangeNotifier {
     _specCols.clear();
     _waveCache = const [];
     _newSampleCount = 0;
+    _beatDecay = 0.0;
+    _adaptiveMaxMag = _kRefMag;
     notifyListeners();
   }
 
