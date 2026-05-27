@@ -98,14 +98,61 @@ python3 tools/offline-lab/offline_lab.py report
 
 Каждое изменение DSP-алгоритма обязано добавлять или обновлять тесты. Чистые синтетические тесты — первый гейт, но их недостаточно для продакшен-уверенности; шумные, клиппированные и брейкдаун-случаи требуются до того, как мобильную интеграцию можно считать готовой.
 
-## Команды валидации
+## Реальные фикстуры (Phase 4.3)
+
+### Обоснование допусков
+
+Синтетические фикстуры тестируются с допуском ±1 BPM (точность детектора, не parity). Для кросс-языкового parity Python↔Rust синтетические фикстуры используют ±2 BPM.
+
+Для реальных записей допуск parity ±4 BPM обоснован структурно:
+
+- Python использует `statistics.median` на Python-float (double precision), Rust — собственный median-хелпер на `Vec<f32>`. После вычитания медианного floor'а и peak-нормализации огибающих двух языков расходятся на малое, но ненулевое значение в каждом кадре.
+- Расхождение суммируется через ~4800 лагов автокорреляции: разница в score 0.001 между соседними лагами меняет победителя на 1 lag step.
+- При 200 BPM 1 lag step ≈ 1.7 BPM; при 220 BPM ≈ 2.1 BPM. С плотным бас-паттерном выбор может упасть на 2 lag step = ~3.4 BPM.
+- ±4 BPM — минимальная граница, которая не даёт ложных регрессий на типичном hitech-материале, и при этом поймает настоящий алгоритмический дрейф (нарушение медианного пути, ошибка нормализации).
+
+Per-fixture допуск хранится в `datasets/fixture_manifest.json` и вычисляется автоматически при `snapshot`: `max(4.0, |py−rust| + 1.0)`. Когда delta=0.00 (как на всех текущих фикстурах), допуск = 4.0 — достаточно места для будущего дрейфа.
+
+### Snapshot-инвентарь (21 фикстура, захвачено 26.05.2026)
+
+| Имя фикстуры | Источник | Hint BPM | Детектировано (py≈rust) | Lock state | Допуск |
+| --- | --- | --- | --- | --- | --- |
+| `hitech_real_01` | файл 1 (180 BPM) | 180 | 180.2 | LOCKING | 4.0 |
+| `hitech_real_02` | файл 2 | — | 182.2 | LOCKING | 4.0 |
+| `hitech_real_03` | файл 3 (184 BPM) | 184 | 183.6 | UNSTABLE | 4.0 |
+| `hitech_real_04` | файл 4 (186 BPM) | 186 | 186.5 | LOCKING | 4.0 |
+| `hitech_real_05` | файл 5 | — | 187.9 | STABLE | 4.0 |
+| `hitech_real_06` | файл 6 (188 BPM) | 188 | null | NOISE_ONLY | 4.0 |
+| `hitech_real_07` | файл 7 | — | 190.2 | LOCKING | 4.0 |
+| `hitech_real_08` | файл 8 | — | 192.4 | LOCKING | 4.0 |
+| `hitech_real_09` | файл 9 | — | null | NOISE_ONLY | 4.0 |
+| `hitech_real_10` | файл 10 (196 BPM) | 196 | 146.7 | LOCKING | 4.0 |
+| `hitech_real_11` | файл 11 | — | 198.0 | STABLE | 4.0 |
+| `hitech_real_12` | файл 12 | — | 200.5 | LOCKING | 4.0 |
+| `hitech_real_13` | файл 13 (200 BPM) | 200 | null | NOISE_ONLY | 4.0 |
+| `hitech_real_14` | файл 14 (200 BPM) | 200 | null | NOISE_ONLY | 4.0 |
+| `hitech_real_15` | файл 15 (FLAC) | — | null | NOISE_ONLY | 4.0 |
+| `hitech_real_16` | файл 16 (AIFF) | — | 200.5 | LOCKING | 4.0 |
+| `hitech_real_17` | файл 17 | — | 202.1 | STABLE | 4.0 |
+| `hitech_real_18` | файл 18 (FLAC) | — | null | NOISE_ONLY | 4.0 |
+| `hitech_real_19` | файл 19 (206 BPM) | 206 | 205.6 | LOCKING | 4.0 |
+| `hitech_real_20` | файл 20 | — | 207.4 | LOCKING | 4.0 |
+| `hitech_real_21` | файл 21 | — | 210.1 | STABLE | 4.0 |
+
+Все 21 фикстура: delta Python↔Rust = 0.00 на момент захвата (batch-анализ на одинаковом 30-секундном WAV-окне). Null/null фикстуры (оба анализатора не смогли залочиться в первые 30 сек) считаются PASS — оба согласны в отсутствии данных.
+
+Fixture `hitech_real_10` (hint 196 BPM): оба анализатора вернули 146.7 — вероятна half-time детекция на сложном треке; добавить как known limitation и исследовать в Phase 4.4.
+
+### Команды валидации
 
 ```sh
 python3 -m unittest discover core/tests
 node --test core/dsp/index.test.js
-cargo test --workspace                       # герметично: не вызывает python3
-python3 tools/offline-lab/offline_lab.py report
-python3 tools/offline-lab/parity.py          # опциональный кросс-языковой parity Python ↔ Rust
+cargo test --workspace                                         # герметично: не вызывает python3
+python3 tools/offline-lab/offline_lab.py report               # синтетический QA-отчёт
+python3 tools/offline-lab/parity.py --fixture-set synthetic   # synthetic parity baseline
+python3 tools/offline-lab/parity.py --fixture-set real        # real fixture parity (snapshot-based)
+python3 tools/offline-lab/parity.py                           # все manifest-фикстуры
 ```
 
 Flutter-валидация становится обязательной после имплементации платформенных файлов и микрофонного моста.

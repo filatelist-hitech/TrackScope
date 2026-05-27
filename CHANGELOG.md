@@ -24,6 +24,28 @@
 - `snr_estimate_db` может оставаться `null` на синтетических пульсах без фонового шума — ожидаемое поведение.
 - Python-анализатор эмитит `snr_estimate_db: null` для всех фикстур — SNR-оценка реализована только в Rust.
 
+### Phase 4.3 — Snapshot-based тестирование на реальных записях (2026-05-26)
+
+#### Added
+- **`tools/offline-lab/offline_lab.py snapshot`** — новая подкоманда. Принимает директорию с аудиофайлами (WAV/AIFF/FLAC), конвертирует каждый через ffmpeg в 16-бит моно PCM WAV 44100 Гц, прогоняет Python-анализатор и Rust-бинарник `analyze_wav` на одном и том же PCM-окне (по умолчанию 30 сек), сохраняет JSON-снапшот в `<dir>/snapshots/<name>.json`. Аудиофайлы не коммитятся (copyright/размер); снапшоты коммитятся. Флаги: `--input DIR`, `--force`, `--duration SECS`, `--cargo PATH`, `--release`.
+- **`datasets/hitech/snapshots/`** — 21 JSON-снапшот реальных hitech/psytrance-треков (180–210 BPM), захваченных из `datasets/hitech/`. Каждый снапшот содержит `captured_at`, `category`, `expected_bpm_hint`, `fixture_sha256` (SHA-256 30-секундного PCM-окна), полные поля `python` и `rust` (`DspResult` с `debug`, `signal_quality`, `candidates`), `source_file`.
+- **`datasets/fixture_manifest.json`** — единый список фикстур с допусками на фикстуру. Обновляется автоматически командой `snapshot`. Поля на запись: `name`, `snapshot` (путь), `category`, `bpm_tolerance`, `lock_state_must_match`.
+- **`tools/offline-lab/parity.py`** — расширен тремя новыми режимами поверх legacy-синтетического режима:
+  - **По умолчанию (все manifest-фикстуры)** — читает `datasets/fixture_manifest.json`, загружает снапшоты, сравнивает `python.primary_bpm` vs `rust.primary_bpm` с per-fixture `bpm_tolerance`. Работает в CI без аудиофайлов.
+  - **`--fixture-set real`** — только `category: real` из манифеста.
+  - **`--fixture-set synthetic`** — только legacy-режим (live-генерация синтетических фикстур, прежнее поведение baseline).
+  - **`--live --input DIR`** — перезапускает текущий Rust-анализатор на аудиофайлах, сравнивает с Python из снапшота. Используется после DSP-изменений для проверки drift до обновления снапшотов.
+
+#### Changed
+- **`docs/QA_MATRIX.md`** — добавлена секция "Реальные фикстуры (Phase 4.3)": обоснование допуска ±4 BPM (структурный предел Python `float64` vs Rust `f32` через ~4800 членов автокорреляции), таблица 21 реальной фикстуры с `expected_bpm_hint`, детектированным BPM, delta, lock_state, результатом.
+- **`tools/offline-lab/README.md`** — переписан: документирует команду `snapshot` (флаги, формат JSON), все режимы `parity.py` (таблица флагов), формат `fixture_manifest.json` с описанием полей и допусков.
+- **`docs/ROADMAP.md`** — задача 4.3 "Реальные тестовые записи" обновлена с "НЕ НАЧАТО" на "ЗАВЕРШЕНО"; задача 4.4 "Регрессионное покрытие реального микрофона" — parity.py расширен (✓), остальные подзадачи сохраняют статус.
+
+#### Known limitations (Phase 4.3)
+- `hitech_real_10`: оба анализатора детектируют ~146.7 BPM при BPM-подсказке 196 — вероятная half-time ловушка в конкретной записи. Документировано в QA_MATRIX.md; снапшот корректен (отражает реальный вывод движка).
+- `parity.py --live` требует присутствия аудиофайлов локально и ffmpeg в PATH.
+- Python `snr_estimate_db: null` во всех снапшотах — ожидаемо (SNR-оценка только в Rust).
+
 ---
 
 ### Added
