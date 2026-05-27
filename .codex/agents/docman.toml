@@ -1,6 +1,6 @@
 name = "DOCMAN"
 description = "Documentation agent for architecture docs, algorithm docs, QA matrix, and user-facing technical notes."
-model = "gpt-5.2"
+model = "gpt-5.5"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 

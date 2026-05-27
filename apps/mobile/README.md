@@ -1,7 +1,109 @@
 # apps/mobile
 
-Future mobile application boundary.
+Граница Flutter-мобильного приложения.
 
-This app will own microphone permissions, native audio bridge integration, live result rendering, debug output, and session history. It must not calculate BPM outside `core/dsp`.
+Это приложение владеет разрешениями микрофона, интеграцией нативного аудио-моста, рендером живого результата, отладочным выводом и историей сессий. Оно не должно считать BPM вне `core/dsp`.
 
-No final UI should be built until the DSP contract and Phase 1 synthetic tests exist.
+## Текущее состояние (Phase 5 — живой UI)
+
+### Главный экран (`lib/ui/main_screen.dart`)
+
+Экран делится на три зоны:
+
+| Зона | Высота | Содержимое |
+|---|---|---|
+| Спектрограмма | ~45 % | Скроллящаяся FFT-карта (200 колонок × 128 бинов), время → право, частота → верх, яркость = log-амплитуда через тепловую LUT |
+| Волновая форма | ~15 % | Амплитуда PCM, 300 точек, бирюзовая (`#00BFA5`) / красная (`#F44336`) при клиппинге |
+| Таблица данных | ~40 % | Поля из `DspResult`: BPM 52 sp, бейдж захвата, уверенность, уровень входа, лучший кандидат, ×½ / ×2, клиппинг, шум |
+
+Если микрофон ещё не активен → плейсхолдер «Ожидание микрофона…» (реальный Flutter-виджет, находим тестами).
+
+### Визуализация (`lib/viz/`)
+
+- **`VizController`** (`ChangeNotifier`) — получает сырой PCM через `CaptureBridge.rawPcm`, хранит кольцевой буфер 4 с, запускает FFT через `compute()` (~20 раз/с) в отдельном изоляте, хранит кольцо из 200 спектральных колонок и 300 downsample-точек для осциллографа.
+- **`SpectrogramPainter`** — 25 600 `drawRect`-вызовов на перерисовку; `Paint`-объекты предаллоцированы в LUT (256 штук), нет `Color.lerp` на горячем пути.
+- **`WaveformPainter`** — `Path`-line через 300 точек, один `drawPath`.
+- Оба обёрнуты в `RepaintBoundary` → перерисовка только по новым FFT-данным, не по обновлению таблицы.
+
+### LUT (тепловая палитра спектрограммы)
+
+7 контрольных точек, интерполированных в 256 записей:
+
+| t | Цвет |
+|---|---|
+| 0.000 | `#0D0221` (почти чёрный) |
+| 0.167 | `#1A1AFF` (синий) |
+| 0.333 | `#00FFFF` (циан) |
+| 0.500 | `#00FF88` (зелёный) |
+| 0.667 | `#FFE600` (жёлтый) |
+| 0.833 | `#FF4400` (оранжево-красный) |
+| 1.000 | `#FFFFFF` (белый) |
+
+### Параметры FFT
+
+| Параметр | Значение |
+|---|---|
+| Библиотека | `fftea 1.5.0+1` (pure Dart) |
+| Размер FFT | 1024 samples |
+| Hop | 2400 samples (~50 мс при 48 кГц) |
+| Отображаемые бины | 128 (первые 128 из 512) |
+| Окно | Hann |
+| Шкала | log-амплитуда, floor −60 dBFS |
+| Максимум PCM | 4 с буфер (192 000 samples) |
+
+### Состояния захвата (русские метки)
+
+| `LockState` | Метка | Цвет |
+|---|---|---|
+| `stable` | стабильно | `#2E7D32` (зелёный) |
+| `locking` | захват | `#F57F17` (янтарный) |
+| `unstable` | нестабильно | `#E65100` (оранжевый) |
+| `breakdown` | брейк | `#1565C0` (синий) |
+| `clippedMic` | перегруз микрофона | `#C62828` (тёмно-красный) |
+| `noiseOnly` | только шум | `#4A148C` (тёмно-фиолетовый) |
+| `searching` / `unknown` | поиск | `#37474F` (серый) |
+
+### Поток данных PCM
+
+```
+MicrophoneSource
+   └─► CaptureBridge
+          ├─► DSP worker isolate (→ DspResult stream)
+          └─► rawPcm: Stream<Uint8List>  ←── новое в Phase 5
+                 └─► VizController
+                        ├─► compute(_fftWorker) → спектральные колонки
+                        └─► downsample → waveCache
+```
+
+`core/dsp/` и `core/ffi/` не тронуты.
+
+## Сборка и тесты
+
+```sh
+# из корня воркспейса
+/opt/homebrew/opt/rust/bin/cargo test --workspace
+python3 -m unittest discover core/tests
+/opt/homebrew/opt/nodejs/bin/node --test core/dsp/index.test.js
+python3 tools/offline-lab/offline_lab.py report
+
+# из apps/mobile/
+flutter pub get
+flutter analyze
+flutter test
+```
+
+## Регенерация FFI-биндингов
+
+`lib/dsp/bindings.dart` закоммичен. Перегенерировать после изменения C-хедера:
+
+```sh
+# из apps/mobile/
+flutter pub run ffigen --config pubspec.yaml
+```
+
+## Известные ограничения (Phase 5)
+
+- FFT запускается через `compute()` ~20 раз/с; при высокой частоте spawn'а изолятов на слабых устройствах возможна задержка — мониторить на реальных девайсах.
+- Первые 128 бинов из 512 (0–11 кГц при 48 кГц). Высокочастотный контент выше 11 кГц не отображается.
+- `snr_estimate_db` на чистых синтетических пульсах может оставаться `null` — ожидаемое поведение (нет шумового пола для оценки).
+- Спектрограмма и волновая форма не имеют шкал осей — добавить в Phase 6.

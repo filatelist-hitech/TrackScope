@@ -1,89 +1,123 @@
 # Roadmap
 
-## Phase 1: Offline DSP Lab
+## Phase 1: офлайн-DSP-лаборатория — **ЗАВЕРШЕНО**
 
-Goal: prove deterministic BPM detection against synthetic hitech fixtures before UI work.
+Цель: доказать детерминированное определение BPM на синтетических hitech-фикстурах до UI-работы.
 
-Deliverables:
+Артефакты:
 
-- `core/dsp` result contract and engine skeleton
-- synthetic fixture generator
-- offline analyzer CLI
-- clean click/kick tests at 170, 180, 190, 200, and 220 BPM
-- half-time and double-time trap tests
-- silence and noise-only negative tests
+- Контракт результата и каркас движка Rust `core/dsp`.
+- Генератор синтетических фикстур.
+- CLI офлайн-анализатора.
+- Тесты на чистый click/kick при 170, 180, 190, 200 и 220 BPM.
+- Тесты half-time и double-time ловушек.
+- Негативные тесты на тишину и шум-без-сигнала.
 
-Exit criteria:
+Критерии выхода — выполнены:
 
-- clean synthetic accuracy within +/-1 BPM
-- no fake BPM on silence/noise-only
-- candidate list exposes raw and normalized candidates
-- offline report includes confidence, lock state, signal quality, and pass/fail
+- точность на чистой синтетике в пределах ±1 BPM ✓
+- нет фейкового BPM на тишине/шуме ✓
+- список кандидатов содержит raw и нормализованных кандидатов ✓
+- офлайн-отчёт содержит уверенность, состояние захвата, качество сигнала и pass/fail ✓
 
-## Phase 2: Streaming DSP Core
+## Phase 2: потоковое DSP-ядро — **ЗАВЕРШЕНО**
 
-Goal: make the detector work incrementally on audio chunks.
+Цель: детектор работает инкрементально на аудио-чанках.
 
-Deliverables:
+Артефакты:
 
-- ring buffer
-- rolling onset history
-- candidate history
-- confidence engine
-- lock state machine
-- first-lock and stable-lock timing tests
+- кольцевой буфер;
+- скользящая история онсетов;
+- история кандидатов;
+- движок уверенности;
+- автомат состояния захвата;
+- тесты тайминга первого и стабильного захвата.
 
-Exit criteria:
+Критерии выхода — выполнены:
 
-- first usable lock under 6 seconds on clean synthetic input
-- stable lock under 12 seconds on valid hitech input
-- no false `STABLE` on silence/noise-only
-- `BREAKDOWN`, `CLIPPED_MIC`, and `UNSTABLE` are exercised by tests
+- первый рабочий захват до 6 секунд на чистом синтетическом входе ✓
+- стабильный захват до 12 секунд на валидном hitech-входе ✓
+- никакого ложного `STABLE` на тишине/шуме ✓
+- `BREAKDOWN`, `CLIPPED_MIC` и `UNSTABLE` покрыты тестами ✓
 
-## Phase 3: Mobile Audio Bridge
+## Phase 3: мобильный аудио-мост — **ЗАВЕРШЕНО**
 
-Goal: feed real microphone audio into the already-tested DSP engine.
+Цель: подавать живой аудио-сигнал с микрофона в уже протестированный DSP-движок.
 
-Deliverables:
+Артефакты:
 
-- microphone permission flow
-- native audio bridge
-- sample-rate conversion policy
-- platform latency notes
-- debug screen that renders the DSP contract
-- session history storage
+- сценарий выдачи разрешения микрофона;
+- нативный аудио-мост (Flutter → Rust FFI через DSP-воркер изолят);
+- статическая сборка `libhitech_bpm_ffi.a` для iOS через `scripts/build_ios_native.sh`;
+- политика конверсии частоты дискретизации (PCM16 mono 48 kHz → f32);
+- заметки о платформенной задержке (`docs/MOBILE_AUDIO.md`);
+- отладочный экран, рендерящий DSP-контракт;
+- ручной тест-чеклист (`docs/MANUAL_TEST_CHECKLIST.md`).
 
-Exit criteria:
+Критерии выхода — выполнены:
 
-- mobile code does not calculate BPM directly
-- permission and latency behavior is documented per platform
-- debug mode shows candidates and confidence
+- мобильный код не считает BPM напрямую ✓
+- поведение разрешений и задержки задокументировано ✓
+- debug-режим показывает кандидатов и уверенность ✓
+- живой запуск на iPhone 11 подтверждён (2026-05-26): BPM 187–196 на треках 192–207 BPM через комнатный микрофон ✓
 
-## Phase 4: Hardening
+## Phase 4: закалка — **В ПРОЦЕССЕ**
 
-Goal: handle club noise, clipping, breakdowns, unstable tempo, and real hitech recordings.
+Цель: обработать клубный шум, клиппинг, брейкдауны, нестабильный темп и реальные hitech-записи. Выйти на заявленный целевой диапазон точности ±2–4 BPM на живом микрофоне.
 
-Deliverables:
+Наблюдения по итогам Phase 3 (реальное устройство):
 
-- curated test recordings
-- clipped microphone regression fixtures
-- noisy club fixtures
-- breakdown/no-kick scenarios
-- algorithm comparison reports
-- release checklist
+- Через комнатный микрофон на расстоянии ~1 метра ошибка BPM составила ~±5–8 BPM — за пределами цели ±2–4 BPM.
+- `lock_state` достигал `LOCKING` при уверенности 52–62%, но не `STABLE` — ожидаемо для комнатного акустики.
+- Состояние захвата часто осциллирует между `LOCKING` и `SEARCHING` при шуме окружающей среды.
+- Уровень входа -10 до -12 dBFS — адекватный диапазон, не клиппинг.
 
-Exit criteria:
+### Задачи Phase 4
 
-- noisy mic target accuracy within +/-2-4 BPM when signal quality is adequate
-- clipped input warns clearly and does not overstate confidence
-- breakdown sections do not preserve stale `STABLE`
-- release documentation identifies known limitations
+#### 4.1 Сглаживание и стабилизация BPM — **ЗАВЕРШЕНО** (Verified on 2026-05-26)
 
-## Next Patch
+- Медиан-фильтр последних N=5 снэпшотов `primary_bpm` в Dart-классе `BpmSmoother` (`apps/mobile/lib/capture/bpm_smoother.dart`). ✓
+- Гистерезис выхода из `STABLE`: переключение только после K=3 подряд идущих не-`STABLE` кадров. `CLIPPED_MIC` / `BREAKDOWN` / `NOISE_ONLY` сбрасывают гистерезис немедленно. ✓
+- EMA уверенности α=0.2 в `BpmSmoother`, не в Rust-ядре. ✓
 
-Implement the Phase 1 engine skeleton and test harness:
+Сглаживание расположено в Dart, а не в Rust, чтобы Rust DSP-ядро оставалось parity-тестируемым без сглаживания. Детали: `docs/DSP_ALGORITHM.md` → раздел "Dart-слой сглаживания".
 
-1. Add typed `DspResult`, `TempoCandidate`, `SignalQuality`, and lock-state definitions.
-2. Add synthetic fixture generator for clean click/kick tracks.
-3. Add offline test cases for 170, 180, 190, 200, 220, 100 half-time, 400 double-time, silence, noise, and clipped input.
-4. Keep mobile UI untouched.
+#### 4.2 Адаптивные пороги для живого микрофона — **ЧАСТИЧНО**
+
+- SNR-оценка `estimate_snr_db` реализована в Rust (`core/dsp/src/lib.rs`): перцентильный метод (20-й / 80-й перцентиль). `signal_quality.snr_estimate_db` теперь не всегда `null` для реальных шумовых входов. `signal_factor` использует SNR, когда доступен. ✓
+- Режим «клубного микрофона» (more aggressive low-pass на onset-огибающей) — **НЕ ЗАВЕРШЕНО**: тест показал, что MA-сглаживание огибающей онсетов создаёт ложную периодичность на `unstable_club_simulation`; требует более умного критерия активации. Бэклог.
+- Адаптивный noise-floor в реальном времени — **НЕ ЗАВЕРШЕНО**. Бэклог.
+
+#### 4.3 Реальные тестовые записи — **ЗАВЕРШЕНО** (2026-05-26)
+
+- 21 hitech/psytrance-трек (180–210 BPM) добавлен в `datasets/hitech/`. Аудиофайлы не коммитятся (copyright/размер); коммитятся JSON-снапшоты. ✓
+- `datasets/hitech/snapshots/` — 21 снапшот с полным `DspResult` (Python + Rust) на 30-секундном окне каждого трека. ✓
+- `datasets/fixture_manifest.json` — единый список с per-fixture `bpm_tolerance` (минимум 4.0 BPM для реальных записей). ✓
+- `offline_lab.py snapshot --input DIR` — инфраструктура захвата снапшотов; конвертация через ffmpeg, анализ Python+Rust, обновление манифеста. ✓
+- `parity.py` расширен для manifest-based CI-режима (без аудиофайлов), `--fixture-set real/synthetic/all`, `--live` mode для post-DSP-change drift-проверки. ✓
+- Допуск ±4 BPM для реальных фикстур обоснован: структурный предел Python `float64` vs Rust `f32` через ~4800 членов автокорреляции. ✓
+
+Known limitation: `hitech_real_10` детектируется на ~147 BPM (half-time от ~294) при BPM-подсказке 196 — вероятная особенность записи; документировано в QA_MATRIX.md.
+
+#### 4.4 Регрессионное покрытие реального микрофона — **ЧАСТИЧНО**
+
+- Rust и Dart тесты для `BpmSmoother` и SNR-пути добавлены. ✓
+- Расширение `tools/offline-lab/parity.py` для прогона на реальных WAV-записях — **ЗАВЕРШЕНО** (manifest-режим + live-режим). ✓
+- Допуск ±4 BPM для шумных реальных фикстур — **ЗАВЕРШЕНО** (per-fixture в `fixture_manifest.json`). ✓
+- Python-тест на реальных треках (21 фикстура, все PASS в `parity.py --fixture-set real`) — **ЗАВЕРШЕНО**. ✓
+- `parity.py` в default-режиме (все 21 реальные фикстуры) проходит в CI без аудиофайлов. ✓
+
+#### 4.5 Документация ограничений и релизный чеклист — **В ПРОЦЕССЕ**
+
+- Известные ограничения зафиксированы в `docs/DSP_ALGORITHM.md` (SNR null на синтетике, MA onset-сглаживание не добавлено). ✓
+- `docs/ROADMAP.md` обновлён с разбивкой сделано / бэклог (это обновление). ✓
+- Обновление `docs/RELEASE_CHECKLIST.md` для Phase 4 — **НЕ ЗАВЕРШЕНО**.
+- Таблица платформенных задержек с измеренными значениями для iPhone — **НЕ ЗАВЕРШЕНО**.
+
+Критерии выхода:
+
+- целевая точность на живом микрофоне в пределах ±2–4 BPM при адекватном SNR;
+- `lock_state == STABLE` при прямом звуке с колонки в ~30 см (не только `LOCKING`);
+- клиппирующий вход явно предупреждает и не завышает уверенность;
+- брейкдауны не сохраняют устаревший `STABLE`;
+- релизная документация фиксирует известные ограничения.

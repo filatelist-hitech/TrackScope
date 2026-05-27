@@ -1,0 +1,383 @@
+{
+  "captured_at": "2026-05-26T20:06:16Z",
+  "category": "real",
+  "expected_bpm_hint": null,
+  "fixture_sha256": "daaa73b55999f793edc6b29143f46d18670b473a9b484d1223773a335171bf22",
+  "python": {
+    "candidates": [
+      {
+        "bpm": 190.909,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.759516,
+          "peak_prominence": 0.744326,
+          "recent_stability": 0.759516,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.759516,
+        "relation": "main",
+        "score": 0.744326,
+        "source_bpm": 381.818,
+        "stability_score": 0.759516
+      },
+      {
+        "bpm": 190.909,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.759516,
+          "peak_prominence": 0.744326,
+          "recent_stability": 0.759516,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.759516,
+        "relation": "normalized_from_double",
+        "score": 0.744326,
+        "source_bpm": 381.818,
+        "stability_score": 0.759516
+      },
+      {
+        "bpm": 218.678,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.757793,
+          "peak_prominence": 0.742637,
+          "recent_stability": 0.757793,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.757793,
+        "relation": "normalized_from_half",
+        "score": 0.742637,
+        "source_bpm": 109.339,
+        "stability_score": 0.757793
+      },
+      {
+        "bpm": 169.997,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.75778,
+          "peak_prominence": 0.742624,
+          "recent_stability": 0.75778,
+          "signal_quality": 0.92
+        },
+        "range_score": 0.999956,
+        "raw_score": 0.75778,
+        "relation": "normalized_from_half",
+        "score": 0.74261,
+        "source_bpm": 84.998,
+        "stability_score": 0.75778
+      },
+      {
+        "bpm": 199.623,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.754512,
+          "peak_prominence": 0.739421,
+          "recent_stability": 0.754512,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.754512,
+        "relation": "normalized_from_half",
+        "score": 0.739421,
+        "source_bpm": 99.811,
+        "stability_score": 0.754512
+      },
+      {
+        "bpm": 229.091,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.73747,
+          "peak_prominence": 0.73747,
+          "recent_stability": 0.73747,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.73747,
+        "relation": "raw",
+        "score": 0.73747,
+        "source_bpm": null,
+        "stability_score": 0.73747
+      },
+      {
+        "bpm": 183.622,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.745531,
+          "peak_prominence": 0.730621,
+          "recent_stability": 0.745531,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.745531,
+        "relation": "normalized_from_half",
+        "score": 0.730621,
+        "source_bpm": 91.811,
+        "stability_score": 0.745531
+      },
+      {
+        "bpm": 190.909,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.719368,
+          "peak_prominence": 0.719368,
+          "recent_stability": 0.719368,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.719368,
+        "relation": "raw",
+        "score": 0.719368,
+        "source_bpm": null,
+        "stability_score": 0.719368
+      },
+      {
+        "bpm": 209.17,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.718313,
+          "peak_prominence": 0.718313,
+          "recent_stability": 0.718313,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.718313,
+        "relation": "raw",
+        "score": 0.718313,
+        "source_bpm": null,
+        "stability_score": 0.718313
+      },
+      {
+        "bpm": 176.872,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.714112,
+          "peak_prominence": 0.714112,
+          "recent_stability": 0.714112,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.714112,
+        "relation": "raw",
+        "score": 0.714112,
+        "source_bpm": null,
+        "stability_score": 0.714112
+      }
+    ],
+    "confidence": 0.28,
+    "debug": {
+      "harmonic_ambiguity": 0.997731,
+      "onset_rate_hz": 42.345,
+      "onset_strength": 0.055371,
+      "stability_score": 0.759516,
+      "tempo_peak_prominence": 0.018684,
+      "warnings": [
+        "weak periodic onset structure"
+      ]
+    },
+    "lock_state": "NOISE_ONLY",
+    "primary_bpm": null,
+    "signal_quality": {
+      "breakdown_likely": false,
+      "clipped_frame_ratio": 2e-06,
+      "clipping": false,
+      "input_level_dbfs": -15.968,
+      "noise_level": "medium",
+      "peak_dbfs": -1.753,
+      "silence": false,
+      "snr_estimate_db": null
+    },
+    "timing": {
+      "analysis_time_sec": 30.0,
+      "first_lock_time_sec": null,
+      "hop_time_sec": 0.0025,
+      "window_time_sec": 30.0
+    }
+  },
+  "rust": {
+    "candidates": [
+      {
+        "bpm": 190.909,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.759516,
+          "peak_prominence": 0.744326,
+          "recent_stability": 0.759516,
+          "signal_quality": 0.749484
+        },
+        "range_score": 1.0,
+        "raw_score": 0.759516,
+        "relation": "main",
+        "score": 0.744326,
+        "source_bpm": 381.818,
+        "stability_score": 0.759516
+      },
+      {
+        "bpm": 190.909,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.759516,
+          "peak_prominence": 0.744326,
+          "recent_stability": 0.759516,
+          "signal_quality": 0.749484
+        },
+        "range_score": 1.0,
+        "raw_score": 0.759516,
+        "relation": "normalized_from_double",
+        "score": 0.744326,
+        "source_bpm": 381.818,
+        "stability_score": 0.759516
+      },
+      {
+        "bpm": 218.678,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.757793,
+          "peak_prominence": 0.742637,
+          "recent_stability": 0.757793,
+          "signal_quality": 0.749484
+        },
+        "range_score": 1.0,
+        "raw_score": 0.757793,
+        "relation": "normalized_from_half",
+        "score": 0.742637,
+        "source_bpm": 109.339,
+        "stability_score": 0.757793
+      },
+      {
+        "bpm": 169.997,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.75778,
+          "peak_prominence": 0.742624,
+          "recent_stability": 0.75778,
+          "signal_quality": 0.749484
+        },
+        "range_score": 0.999956,
+        "raw_score": 0.75778,
+        "relation": "normalized_from_half",
+        "score": 0.74261,
+        "source_bpm": 84.998,
+        "stability_score": 0.75778
+      },
+      {
+        "bpm": 199.623,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.754512,
+          "peak_prominence": 0.739421,
+          "recent_stability": 0.754512,
+          "signal_quality": 0.749484
+        },
+        "range_score": 1.0,
+        "raw_score": 0.754512,
+        "relation": "normalized_from_half",
+        "score": 0.739421,
+        "source_bpm": 99.811,
+        "stability_score": 0.754512
+      },
+      {
+        "bpm": 229.091,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.73747,
+          "peak_prominence": 0.73747,
+          "recent_stability": 0.73747,
+          "signal_quality": 0.749484
+        },
+        "range_score": 1.0,
+        "raw_score": 0.73747,
+        "relation": "raw",
+        "score": 0.73747,
+        "source_bpm": null,
+        "stability_score": 0.73747
+      },
+      {
+        "bpm": 183.622,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.745531,
+          "peak_prominence": 0.730621,
+          "recent_stability": 0.745531,
+          "signal_quality": 0.749484
+        },
+        "range_score": 1.0,
+        "raw_score": 0.745531,
+        "relation": "normalized_from_half",
+        "score": 0.730621,
+        "source_bpm": 91.811,
+        "stability_score": 0.745531
+      },
+      {
+        "bpm": 190.909,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.719368,
+          "peak_prominence": 0.719368,
+          "recent_stability": 0.719368,
+          "signal_quality": 0.749484
+        },
+        "range_score": 1.0,
+        "raw_score": 0.719368,
+        "relation": "raw",
+        "score": 0.719368,
+        "source_bpm": null,
+        "stability_score": 0.719368
+      },
+      {
+        "bpm": 209.17,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.718313,
+          "peak_prominence": 0.718313,
+          "recent_stability": 0.718313,
+          "signal_quality": 0.749484
+        },
+        "range_score": 1.0,
+        "raw_score": 0.718313,
+        "relation": "raw",
+        "score": 0.718313,
+        "source_bpm": null,
+        "stability_score": 0.718313
+      },
+      {
+        "bpm": 176.872,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.714112,
+          "peak_prominence": 0.714112,
+          "recent_stability": 0.714112,
+          "signal_quality": 0.749484
+        },
+        "range_score": 1.0,
+        "raw_score": 0.714112,
+        "relation": "raw",
+        "score": 0.714112,
+        "source_bpm": null,
+        "stability_score": 0.714112
+      }
+    ],
+    "confidence": 0.28,
+    "lock_state": "NOISE_ONLY",
+    "primary_bpm": null,
+    "signal_quality": {
+      "breakdown_likely": false,
+      "clipped_frame_ratio": 2e-06,
+      "clipping": false,
+      "input_level_dbfs": -15.968,
+      "noise_level": "medium",
+      "peak_dbfs": -1.753,
+      "silence": false,
+      "snr_estimate_db": 11.053
+    },
+    "timing": {
+      "analysis_time_sec": 30.0,
+      "first_lock_time_sec": null,
+      "hop_time_sec": 0.002494331,
+      "window_time_sec": 30.0
+    }
+  },
+  "source_file": "9 Unknown Artist - Compiled By Rave Kombat - VA KRID KORE - 09 Wordsalad - Unlock.wav"
+}

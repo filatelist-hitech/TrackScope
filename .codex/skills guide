@@ -1,7 +1,0 @@
-Skills — это переиспользуемые workflow-пакеты: инструкции, ресурсы, опциональные scripts, references и assets. Codex видит название, описание и путь skills, а полный SKILL.md читает только когда решает применить skill. Skills можно явно вызвать через $skill-name или через /skills, а можно дать Codex выбрать их по description.
-
-Для репозитория skills надо класть сюда:
-
-.agents/skills/
-
-Codex сканирует .agents/skills от текущей директории вверх до корня репозитория; личные skills можно хранить в $HOME/.agents/skills.
