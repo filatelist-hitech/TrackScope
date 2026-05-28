@@ -118,6 +118,7 @@ class _MainScreenState extends State<MainScreen> {
             if (snap.data != null) _lastResult = snap.data;
             final result = _lastResult;
             final displayBpm = result != null ? _bpmDisplay.update(result) : null;
+            final isLockingDisplay = _bpmDisplay.isLockingDisplay;
             final isClipping = result?.signalQuality.clipping ?? false;
 
             return Column(
@@ -178,7 +179,7 @@ class _MainScreenState extends State<MainScreen> {
                 // ── Info table (40 %) ───────────────────────────────────────
                 Expanded(
                   flex: 40,
-                  child: _InfoTable(result: result, displayBpm: displayBpm),
+                  child: _InfoTable(result: result, displayBpm: displayBpm, isLockingDisplay: isLockingDisplay),
                 ),
               ],
             );
@@ -192,17 +193,17 @@ class _MainScreenState extends State<MainScreen> {
 // ── Info table ────────────────────────────────────────────────────────────────
 
 class _InfoTable extends StatelessWidget {
-  const _InfoTable({required this.result, this.displayBpm});
+  const _InfoTable({required this.result, this.displayBpm, this.isLockingDisplay = false});
   final DspResult? result;
-  /// EMA-сглаженное значение BPM для большого числа на экране.
-  /// null когда lock_state != STABLE или primary_bpm ещё не доступен.
+  /// EMA-сглаженное значение BPM (STABLE) или raw primaryBpm (LOCKING).
+  /// null когда не STABLE и не LOCKING, или primary_bpm ещё не доступен.
   final double? displayBpm;
+  /// true когда displayBpm из LOCKING — рендерить с меньшей яркостью.
+  final bool isLockingDisplay;
 
   @override
   Widget build(BuildContext context) {
     final r = result;
-    // displayBpm приоритетен для большого числа (EMA-сглаженный).
-    // Если BpmDisplay ещё не вошёл в STABLE — используем raw primary_bpm.
     final bpm = displayBpm ?? r?.primaryBpm;
     final conf = r?.confidence ?? 0.0;
     final lock = r?.lockState ?? LockState.searching;
@@ -245,10 +246,10 @@ class _InfoTable extends StatelessWidget {
             children: [
               Text(
                 bpm == null ? '—' : bpm.toStringAsFixed(1),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 52,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: isLockingDisplay ? Colors.white54 : Colors.white,
                   fontFamily: 'monospace',
                   height: 1.0,
                 ),
