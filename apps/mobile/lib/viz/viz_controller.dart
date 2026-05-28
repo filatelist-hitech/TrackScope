@@ -40,7 +40,10 @@ const _kHopSamples = 2400;
 const _kMaxPcmSamples = 192000;
 
 /// dB floor used for log-magnitude normalisation.
-const _kFloorDb = -60.0;
+/// -45 dB gives good saturation at typical mic-to-speaker distances
+/// (~30–60 cm, −25 to −15 dBFS input level). Was −60 dB which rendered
+/// all bins near-black at normal club/rehearsal levels.
+const _kFloorDb = -45.0;
 
 /// Reference magnitude for normalisation (1024-pt FFT, f32 [-1,1] input,
 /// full-scale sine after Hann windowing gives peak ≈ 256).
