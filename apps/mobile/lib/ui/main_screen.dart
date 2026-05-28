@@ -12,10 +12,9 @@
 //   • Beat glow на BPM-числе — VizController.beatDecay (PCM RMS с decay).
 //   • Confidence bar под BPM — TweenAnimationBuilder по DspResult.confidence.
 //   • Level meter — WaveformPainter.inputLevel по DspResult.inputLevelDbfs.
-//   • Курсор «сейчас» — SpectrogramPainter рисует белую линию на правом крае.
+//   • BpmDisplay (Phase 6): EMA α=0.2 в STABLE; raw в LOCKING с меньшей яркостью.
 //
 // Обе визуализации питаются реальным PCM из CaptureBridge.rawPcm.
-// Если rawPcm == null — плейсхолдер «Ожидание микрофона…».
 // VizController живёт в State и освобождается в dispose().
 
 import 'dart:async';
@@ -23,6 +22,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart' hide LockState;
 
+import '../capture/bpm_display.dart';
 import '../capture/capture_bridge.dart';
 import '../dsp/dsp_result.dart';
 import '../viz/spectrum_bars_painter.dart';
@@ -66,6 +66,7 @@ class _MainScreenState extends State<MainScreen> {
   StreamSubscription<CaptureError>? _errSub;
   CaptureError? _lastError;
   DspResult? _lastResult;
+  final BpmDisplay _bpmDisplay = BpmDisplay();
 
   @override
   void initState() {
@@ -84,6 +85,7 @@ class _MainScreenState extends State<MainScreen> {
   void dispose() {
     _errSub?.cancel();
     _viz.dispose();
+    _bpmDisplay.reset();
     super.dispose();
   }
 
@@ -128,6 +130,8 @@ class _MainScreenState extends State<MainScreen> {
           builder: (context, snap) {
             if (snap.data != null) _lastResult = snap.data;
             final result = _lastResult;
+            final displayBpm = result != null ? _bpmDisplay.update(result) : null;
+            final isLockingDisplay = _bpmDisplay.isLockingDisplay;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -170,8 +174,6 @@ class _MainScreenState extends State<MainScreen> {
                 ),
 
                 // ── Waveform + level meter (15 %) ───────────────────────────
-                // inputLevel and isClipping are read from _lastResult — a field
-                // on this State, so always current when VizController notifies.
                 Expanded(
                   flex: 15,
                   child: RepaintBoundary(
@@ -194,7 +196,12 @@ class _MainScreenState extends State<MainScreen> {
                 // ── Info table (40 %) ───────────────────────────────────────
                 Expanded(
                   flex: 40,
-                  child: _InfoTable(result: result, viz: _viz),
+                  child: _InfoTable(
+                    result: result,
+                    viz: _viz,
+                    displayBpm: displayBpm,
+                    isLockingDisplay: isLockingDisplay,
+                  ),
                 ),
               ],
             );
@@ -213,17 +220,21 @@ class _MainScreenState extends State<MainScreen> {
 //
 // Confidence bar: TweenAnimationBuilder<double> targeting DspResult.confidence.
 // Animates over 500 ms so the bar glides smoothly to new values.
+//
+// Phase 6: isLockingDisplay dims the BPM text to white54 during LOCKING.
 
 class _AnimatedBpmDisplay extends StatelessWidget {
   const _AnimatedBpmDisplay({
     required this.bpm,
     required this.confidence,
     required this.viz,
+    this.isLockingDisplay = false,
   });
 
   final double? bpm;
   final double confidence;
   final VizController viz;
+  final bool isLockingDisplay;
 
   static const _kBaseStyle = TextStyle(
     fontSize: 52,
@@ -236,23 +247,23 @@ class _AnimatedBpmDisplay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bpmText = bpm == null ? '—' : bpm!.toStringAsFixed(1);
+    final baseColor = isLockingDisplay ? Colors.white54 : Colors.white;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         // BPM text with beat-reactive teal glow.
-        // RepaintBoundary isolates this sub-tree so only the Text repaints
-        // at VizController rate (~20 fps), not the surrounding cells.
         RepaintBoundary(
           child: ListenableBuilder(
             listenable: viz,
             builder: (_, __) {
               final g = viz.beatDecay;
+              final style = _kBaseStyle.copyWith(color: baseColor);
               return Text(
                 bpmText,
                 style: g > 0.04
-                    ? _kBaseStyle.copyWith(
+                    ? style.copyWith(
                         shadows: [
                           Shadow(
                             color: _kTeal
@@ -261,7 +272,7 @@ class _AnimatedBpmDisplay extends StatelessWidget {
                           ),
                         ],
                       )
-                    : _kBaseStyle,
+                    : style,
               );
             },
           ),
@@ -290,8 +301,8 @@ class _ConfidenceBarPainter extends CustomPainter {
   final double level;
 
   static const _kTrack = Color(0x22FFFFFF);
-  static const _kLow = Color(0xFF455A64); // grey
-  static const _kHigh = _kTeal; // teal
+  static const _kLow = Color(0xFF455A64);
+  static const _kHigh = _kTeal;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -320,14 +331,25 @@ class _ConfidenceBarPainter extends CustomPainter {
 // ── Info table ────────────────────────────────────────────────────────────────
 
 class _InfoTable extends StatelessWidget {
-  const _InfoTable({required this.result, required this.viz});
+  const _InfoTable({
+    required this.result,
+    required this.viz,
+    this.displayBpm,
+    this.isLockingDisplay = false,
+  });
+
   final DspResult? result;
   final VizController viz;
+  /// EMA-сглаженное значение BPM (STABLE) или raw primaryBpm (LOCKING).
+  /// null когда не STABLE и не LOCKING, или primary_bpm ещё не доступен.
+  final double? displayBpm;
+  /// true когда displayBpm из LOCKING — рендерить с меньшей яркостью.
+  final bool isLockingDisplay;
 
   @override
   Widget build(BuildContext context) {
     final r = result;
-    final bpm = r?.primaryBpm;
+    final bpm = displayBpm ?? r?.primaryBpm;
     final conf = r?.confidence ?? 0.0;
     final lock = r?.lockState ?? LockState.searching;
     final sq = r?.signalQuality;
@@ -370,7 +392,12 @@ class _InfoTable extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _AnimatedBpmDisplay(bpm: bpm, confidence: conf, viz: viz),
+              _AnimatedBpmDisplay(
+                bpm: bpm,
+                confidence: conf,
+                viz: viz,
+                isLockingDisplay: isLockingDisplay,
+              ),
               const Padding(
                 padding: EdgeInsets.only(left: 6),
                 child: Text(
@@ -573,4 +600,3 @@ class _ErrorBanner extends StatelessWidget {
     );
   }
 }
-
