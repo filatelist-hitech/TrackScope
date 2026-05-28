@@ -51,6 +51,16 @@ class SpectrogramPainter extends CustomPainter {
         );
       }
     }
+
+    // "Now" cursor — semi-transparent white vertical line at the right edge.
+    // Anchors the viewer's eye at the "present" column as time scrolls left.
+    canvas.drawLine(
+      Offset(size.width - 1, 0),
+      Offset(size.width - 1, size.height),
+      Paint()
+        ..color = const Color(0x66FFFFFF)
+        ..strokeWidth = 1.5,
+    );
   }
 
   @override
