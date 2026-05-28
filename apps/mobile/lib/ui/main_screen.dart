@@ -17,6 +17,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart' hide LockState;
 
+import '../capture/bpm_display.dart';
 import '../capture/capture_bridge.dart';
 import '../dsp/dsp_result.dart';
 import '../viz/spectrogram_painter.dart';
@@ -59,6 +60,7 @@ class _MainScreenState extends State<MainScreen> {
   StreamSubscription<CaptureError>? _errSub;
   CaptureError? _lastError;
   DspResult? _lastResult;
+  final BpmDisplay _bpmDisplay = BpmDisplay();
 
   @override
   void initState() {
@@ -77,6 +79,7 @@ class _MainScreenState extends State<MainScreen> {
   void dispose() {
     _errSub?.cancel();
     _viz.dispose();
+    _bpmDisplay.reset();
     super.dispose();
   }
 
@@ -114,6 +117,7 @@ class _MainScreenState extends State<MainScreen> {
           builder: (context, snap) {
             if (snap.data != null) _lastResult = snap.data;
             final result = _lastResult;
+            final displayBpm = result != null ? _bpmDisplay.update(result) : null;
             final isClipping = result?.signalQuality.clipping ?? false;
 
             return Column(
@@ -174,7 +178,7 @@ class _MainScreenState extends State<MainScreen> {
                 // ── Info table (40 %) ───────────────────────────────────────
                 Expanded(
                   flex: 40,
-                  child: _InfoTable(result: result),
+                  child: _InfoTable(result: result, displayBpm: displayBpm),
                 ),
               ],
             );
@@ -188,13 +192,18 @@ class _MainScreenState extends State<MainScreen> {
 // ── Info table ────────────────────────────────────────────────────────────────
 
 class _InfoTable extends StatelessWidget {
-  const _InfoTable({required this.result});
+  const _InfoTable({required this.result, this.displayBpm});
   final DspResult? result;
+  /// EMA-сглаженное значение BPM для большого числа на экране.
+  /// null когда lock_state != STABLE или primary_bpm ещё не доступен.
+  final double? displayBpm;
 
   @override
   Widget build(BuildContext context) {
     final r = result;
-    final bpm = r?.primaryBpm;
+    // displayBpm приоритетен для большого числа (EMA-сглаженный).
+    // Если BpmDisplay ещё не вошёл в STABLE — используем raw primary_bpm.
+    final bpm = displayBpm ?? r?.primaryBpm;
     final conf = r?.confidence ?? 0.0;
     final lock = r?.lockState ?? LockState.searching;
     final sq = r?.signalQuality;

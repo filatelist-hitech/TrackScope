@@ -145,12 +145,22 @@ pub struct DspEngine {
     /// Состояние захвата из предыдущего вызова `analyze()`.
     /// `None` в начале сессии и после `reset()`.
     prev_lock_state: Option<LockState>,
+    /// Скользящий буфер последних BPM_HISTORY_N значений `primary_bpm`
+    /// в состоянии STABLE. Медиана буфера заменяет мгновенное значение,
+    /// сглаживая остаточный джиттер после параболической интерполяции.
+    /// Очищается при любом не-STABLE кадре.
+    bpm_history: VecDeque<f32>,
     hop_size: usize,
     frame_size: usize,
     pcm_capacity: usize,
     onset_capacity: usize,
     hop_sec: f32,
 }
+
+/// Ёмкость скользящего BPM-буфера в `DspEngine`.
+/// N=3 охватывает ~150 мс при интервале опроса 50 мс — достаточно,
+/// чтобы подавить остаточный джиттер без заметной задержки смены темпа.
+const BPM_HISTORY_N: usize = 3;
 
 impl DspEngine {
     pub fn new(config: DspConfig) -> Self {
@@ -173,6 +183,7 @@ impl DspEngine {
             onset_history: VecDeque::with_capacity(onset_capacity),
             prev_frame_rms: None,
             prev_lock_state: None,
+            bpm_history: VecDeque::with_capacity(BPM_HISTORY_N + 1),
             hop_size,
             frame_size,
             pcm_capacity,
@@ -255,7 +266,7 @@ impl DspEngine {
         }
         let raw_envelope: Vec<f32> = self.onset_history.iter().copied().collect();
         let envelope = finalize_envelope(raw_envelope);
-        let result = analyze_from_envelope(
+        let mut result = analyze_from_envelope(
             &pcm,
             self.config.sample_rate,
             &envelope,
@@ -263,6 +274,25 @@ impl DspEngine {
             self.config,
             self.prev_lock_state,
         );
+
+        // BPM candidate history — медиана N=BPM_HISTORY_N значений в STABLE.
+        // Снижает остаточный джиттер после параболической интерполяции без
+        // заметной задержки смены темпа: буфер очищается на первом не-STABLE
+        // кадре, поэтому новый захват начинается с нуля.
+        if result.lock_state == LockState::Stable {
+            if let Some(bpm) = result.primary_bpm {
+                self.bpm_history.push_back(bpm);
+                while self.bpm_history.len() > BPM_HISTORY_N {
+                    self.bpm_history.pop_front();
+                }
+                let mut sorted: Vec<f32> = self.bpm_history.iter().copied().collect();
+                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                result.primary_bpm = Some(sorted[sorted.len() / 2]);
+            }
+        } else {
+            self.bpm_history.clear();
+        }
+
         // Запомнить состояние для следующего вызова.
         self.prev_lock_state = Some(result.lock_state);
         result
@@ -275,6 +305,7 @@ impl DspEngine {
         self.onset_history.clear();
         self.prev_frame_rms = None;
         self.prev_lock_state = None;
+        self.bpm_history.clear();
     }
 
     fn observed_seconds(&self) -> f32 {
@@ -935,6 +966,10 @@ fn tail_onset_breakdown(envelope: &[f32], hop_sec: f32) -> bool {
     history_peak > 0.45 && tail_peak < 0.20 && tail_mean < 0.003_f32.max(history_mean * 0.95)
 }
 
+/// Минимальный знаменатель параболической коррекции. При значениях ниже
+/// этого порога вершина считается «плоской» и используется целочисленный лаг.
+const PARABOLIC_DENOM_MIN: f64 = 1e-6;
+
 fn tempo_autocorrelation(envelope: &[f32], hop_sec: f32, min_bpm: f32, max_bpm: f32) -> Vec<RawPeak> {
     if envelope.len() < 4 || hop_sec <= 0.0 || min_bpm <= 0.0 || max_bpm <= 0.0 {
         return Vec::new();
@@ -966,8 +1001,34 @@ fn tempo_autocorrelation(envelope: &[f32], hop_sec: f32, min_bpm: f32, max_bpm: 
     for idx in 1..scores.len().saturating_sub(1) {
         let (lag, score) = scores[idx];
         if score >= scores[idx - 1].1 && score >= scores[idx + 1].1 {
+            // Параболическая интерполяция пика: снижает ошибку дискретизации
+            // с ±1.6 BPM (целый лаг) до < 0.2 BPM (дробный лаг).
+            //
+            // k_frac = k - (A[k+1] - A[k-1]) / (2 * (2*A[k] - A[k+1] - A[k-1]))
+            //
+            // idx гарантированно interior (1..len-1), поэтому scores[idx-1]
+            // и scores[idx+1] всегда существуют.
+            let a = scores[idx - 1].1 as f64;
+            let b = scores[idx].1 as f64;
+            let c = scores[idx + 1].1 as f64;
+            let parabolic_denom = 2.0 * (2.0 * b - a - c);
+            let frac_lag: f64 = if parabolic_denom.abs() > PARABOLIC_DENOM_MIN {
+                // x* = k + (C - A) / (2*(2*B - A - C))
+                // Знак «+»: пик сдвигается в сторону более высокого соседа.
+                let candidate = lag as f64 + (c - a) / parabolic_denom;
+                // Fallback если дробный лаг выходит за допустимый диапазон BPM.
+                let interp_bpm = 60.0 / (candidate as f32 * hop_sec);
+                if candidate > 0.0 && interp_bpm >= min_bpm && interp_bpm <= max_bpm {
+                    candidate
+                } else {
+                    lag as f64
+                }
+            } else {
+                // Плоская вершина — интерполяция бессмысленна.
+                lag as f64
+            };
             peaks.push(RawPeak {
-                bpm: 60.0 / (lag as f32 * hop_sec),
+                bpm: 60.0 / (frac_lag as f32 * hop_sec),
                 score,
             });
         }

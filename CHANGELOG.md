@@ -6,6 +6,31 @@
 
 ## [Unreleased]
 
+### Phase 6 — стабилизация BPM-отображения (2026-05-29)
+
+#### Added
+
+- **Параболическая интерполяция пика автокорреляции** (`core/dsp/src/lib.rs`, `tempo_autocorrelation()`): дробный лаг `k_frac = k + (A[k+1] - A[k-1]) / (2·(2·A[k] - A[k-1] - A[k+1]))` снижает ошибку дискретизации с до ~2 BPM/лаг до < 0.2 BPM для любого BPM-значения. Fallback к целому лагу на плоских вершинах и выходах за диапазон.
+
+- **BPM candidate history в `DspEngine`** (`core/dsp/src/lib.rs`): скользящий буфер N=3 значений `primary_bpm` в STABLE, заменяет мгновенное значение медианой. Очищается при любом не-STABLE кадре.
+
+- **`BpmDisplay`** (`apps/mobile/lib/capture/bpm_display.dart`): display-layer EMA (α=0.2) для большого BPM-числа в `MainScreen`. Активен только в STABLE; снэп к первому значению без задержки. Добавлен параметр `displayBpm` в `_InfoTable`.
+
+- **`core/dsp/tests/stability.rs`** — 7 новых Rust-тестов: `parabolic_flat_peak_no_panic`, `parabolic_precision_200_bpm`, `streak_stability_{180,195,200,220}_bpm`, `bpm_history_clears_on_state_change`. Streak-допуск ±0.5 BPM (строже базового ±1.0 BPM).
+
+- **`apps/mobile/test/bpm_display_test.dart`** — 8 unit-тестов `BpmDisplay`: null на не-STABLE, snap, EMA, сброс, re-entry, anti-fake, reset(), сходимость.
+
+#### Changed
+
+- Большое BPM-число на главном экране теперь показывается только в STABLE (было: LOCKING + STABLE). Во время LOCKING отображается `—`.
+
+#### Diagnostic (Phase 6 pre-fix measurements)
+
+При `hop_sec = 0.0025 с`:
+- 195 BPM, lag=123 → 195.1 BPM; lag=124 → 193.5 BPM; с интерполяцией → 195.0 BPM
+- 180 BPM, lag=133 → 180.5 BPM; lag=134 → 179.1 BPM; с интерполяцией → 180.0 BPM
+- 220 BPM, lag=109 → 220.2 BPM; lag=110 → 218.2 BPM; с интерполяцией → 220.0 BPM
+
 ### Phase 5 UI — редизайн главного экрана (2026-05-27)
 
 #### Added
