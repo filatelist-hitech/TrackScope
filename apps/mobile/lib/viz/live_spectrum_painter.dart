@@ -57,7 +57,10 @@ class LiveSpectrumPainter extends CustomPainter {
   // ── Display frequency range ───────────────────────────────────────────────────
   static const double _minFreq = 20.0;
   static const double _maxFreq = 20000.0;
-  static const double _logRange = 9.965784; // log(_maxFreq / _minFreq)
+  // ln(_maxFreq / _minFreq) = ln(20000 / 20) = ln(1000) ≈ 6.9078
+  // Previous incorrect value 9.965784 ≈ ln(21286), causing the spectrum to
+  // render only ~69% of the canvas width.
+  static const double _logRange = 6.907755;
 
   // X-axis label anchors (Hz → label string)
   static const List<double> _xLabelFreqs = [50, 200, 1000, 4000, 16000];
@@ -125,8 +128,10 @@ class LiveSpectrumPainter extends CustomPainter {
     linePath.lineTo(xs.last, ys.last);
 
     // ── Gradient fill ─────────────────────────────────────────────────────────
+    // Extend the fill baseline to the full canvas width so no gap appears at
+    // the right edge when the last visible bin is just below 20 kHz.
     final fillPath = Path()..addPath(linePath, Offset.zero);
-    fillPath.lineTo(xs.last, drawH);
+    fillPath.lineTo(w, drawH);
     fillPath.lineTo(xs.first, drawH);
     fillPath.close();
 

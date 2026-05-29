@@ -281,7 +281,9 @@ class _GlassmorphismCard extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            // Reduced from 12→8: meaningful perf improvement on real devices
+            // since the background repaints every ~50 ms with live waveform.
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: Container(
               color: Colors.white.withAlpha(8),
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
@@ -489,32 +491,42 @@ class _AnimatedBpmDisplay extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // BPM number with beat-reactive accent glow.
+        // AnimatedSwitcher crossfades when the text changes (e.g. "195.9" ↔ "—")
+        // so state transitions don't appear as instant flashes.
         RepaintBoundary(
-          child: ListenableBuilder(
-            listenable: viz,
-            builder: (_, __) {
-              final g = viz.beatDecay;
-              final style = AppTheme.mono(
-                fontSize: 52,
-                color: baseColor,
-                weight: FontWeight.w800,
-                height: 1.0,
-              );
-              return Text(
-                bpmText,
-                style: g > 0.04
-                    ? style.copyWith(
-                        shadows: [
-                          Shadow(
-                            color: AppTheme.accent.withAlpha(
-                                (g * 0.9 * 255).round().clamp(0, 255)),
-                            blurRadius: 6.0 + g * 26.0,
-                          ),
-                        ],
-                      )
-                    : style,
-              );
-            },
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeIn,
+            switchOutCurve: Curves.easeOut,
+            transitionBuilder: (child, anim) =>
+                FadeTransition(opacity: anim, child: child),
+            child: ListenableBuilder(
+              key: ValueKey(bpmText),
+              listenable: viz,
+              builder: (_, __) {
+                final g = viz.beatDecay;
+                final style = AppTheme.mono(
+                  fontSize: 52,
+                  color: baseColor,
+                  weight: FontWeight.w800,
+                  height: 1.0,
+                );
+                return Text(
+                  bpmText,
+                  style: g > 0.04
+                      ? style.copyWith(
+                          shadows: [
+                            Shadow(
+                              color: AppTheme.accent.withAlpha(
+                                  (g * 0.9 * 255).round().clamp(0, 255)),
+                              blurRadius: 6.0 + g * 26.0,
+                            ),
+                          ],
+                        )
+                      : style,
+                );
+              },
+            ),
           ),
         ),
         const SizedBox(height: 3),

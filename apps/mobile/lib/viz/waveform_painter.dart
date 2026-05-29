@@ -126,6 +126,53 @@ class WaveformPainter extends CustomPainter {
       dy += dashLen + gapLen;
     }
 
+    // ── Y-axis amplitude labels (left side) ──────────────────────────────────
+    // Labels at the actual ±1 positions and at centre (0).
+    // amplitude → y: y = midY - amp * midY * 0.86
+    const ampLabelPaint = TextStyle(
+      fontSize: 7,
+      fontFamily: 'monospace',
+      color: Color(0x55FFFFFF),
+    );
+    final ampEntries = <(double, String)>[
+      (h / 2 - h * 0.86 / 2, '+1'),   // amplitude +1
+      (h / 2,                 ' 0'),   // amplitude  0
+      (h / 2 + h * 0.86 / 2, '-1'),   // amplitude -1
+    ];
+    for (final (y, label) in ampEntries) {
+      if (y < 0 || y > h) continue;
+      final ltp = TextPainter(
+        text: TextSpan(text: label, style: ampLabelPaint),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      ltp.paint(canvas, Offset(4, y - ltp.height / 2));
+    }
+
+    // ── X-axis time labels (bottom row, 16 px reserved) ───────────────────────
+    // The waveCache window is ~4 s at 48 kHz (192 000 / 300 points).
+    // Labels: −4s, −3s, −2s, −1s, 0 at proportional positions.
+    const timeLabelH = 14.0;
+    const timePaint = TextStyle(
+      fontSize: 7,
+      fontFamily: 'monospace',
+      color: Color(0x44FFFFFF),
+    );
+    final timeEntries = <(double, String)>[
+      (0.00, '-4s'),
+      (0.25, '-3s'),
+      (0.50, '-2s'),
+      (0.75, '-1s'),
+      (1.00, '0'),
+    ];
+    for (final (frac, label) in timeEntries) {
+      final ltp = TextPainter(
+        text: TextSpan(text: label, style: timePaint),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final lx = (frac * w - ltp.width / 2).clamp(0.0, w - ltp.width);
+      ltp.paint(canvas, Offset(lx, h - timeLabelH + 2));
+    }
+
     // ── "WAVEFORM" label (top-left) ───────────────────────────────────────────
     final tp = TextPainter(
       text: const TextSpan(
