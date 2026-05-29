@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### Phase 7.1 — Осциллограф вместо спектрограммы (2026-05-29)
+
+#### Changed
+
+- **`WaveformPainter`** переписан в стиль осциллографа: тёмный фон с сеткой (4×6 линий), glow-проход (`MaskFilter.blur 5px`) + чёткая линия, пунктирный курсор «Now» у правого края, метка «WAVEFORM» в левом верхнем углу. Цвет `accentColor` вместо хардкоданного `#00BFA5`; при клиппинге — `#FF4444`.
+- **Главный экран (`main_screen.dart`)**: панель `_SpectrogramView` (35 %) заменена на `_WaveformView` (35 %). Импорт `spectrogram_painter.dart` убран, добавлен `waveform_painter.dart`. `_WaveformView` получает `isClipping` из `DspResult` для мгновенного предупреждения о перегрузе.
+- Старая спектрограмма-тайлы полностью убрана из видимого UI. Файл `spectrogram_painter.dart` сохранён.
+
+---
+
 ### Phase 7 — UI overhaul: метрическая спектрограмма, live-спектр, design system (2026-05-29)
 
 #### Added

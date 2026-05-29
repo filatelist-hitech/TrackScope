@@ -1,16 +1,16 @@
 // Главный экран BPM-радара — Phase 7 premium design.
 //
 // Layout (top to bottom):
-//   • 35 % — SpectrogramView: scrolling FFT waterfall with Hz/time metric axes.
+//   • 35 % — WaveformView: oscilloscope rolling PCM waveform (bpm pulse visible).
 //   • 22 % — LiveSpectrumView: current FFT frame as smooth curve + gradient fill
 //             + peak-hold ticks.
 //   • 43 % — GlassmorphismCard: DspResult info (BPM, badge, confidence, etc.)
 //             with BackdropFilter blur + semi-transparent surface.
 //
-// Both visualization panels feed from VizController, which computes a single
-// FFT per audio hop (~50 ms) and publishes to SpectrogramPainter (specCols) AND
-// LiveSpectrumPainter (latestNorms / peakHoldValues). FFT is computed exactly
-// once per hop. Anti-fake: no BPM maths here.
+// VizController computes a single FFT per audio hop (~50 ms) and publishes:
+//   • waveCache (300 PCM samples) → WaveformPainter
+//   • latestNorms / peakHoldValues → LiveSpectrumPainter
+// Anti-fake: no BPM maths here.
 //
 // Design tokens in design_tokens.dart.
 // BpmDisplay (Phase 6 EMA) is preserved and not modified.
@@ -26,8 +26,8 @@ import '../capture/bpm_display.dart';
 import '../capture/capture_bridge.dart';
 import '../dsp/dsp_result.dart';
 import '../viz/live_spectrum_painter.dart';
-import '../viz/spectrogram_painter.dart';
 import '../viz/viz_controller.dart';
+import '../viz/waveform_painter.dart';
 import 'design_tokens.dart';
 
 // ── MainScreen ────────────────────────────────────────────────────────────────
@@ -125,11 +125,15 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 if (_lastError != null) _ErrorBanner(error: _lastError!),
 
-                // ── Spectrogram (35 %) ──────────────────────────────────────
+                // ── Waveform / oscilloscope (35 %) ─────────────────────────
                 Expanded(
                   flex: 35,
                   child: RepaintBoundary(
-                    child: _SpectrogramView(viz: _viz),
+                    child: _WaveformView(
+                      viz: _viz,
+                      isClipping:
+                          result?.signalQuality.clipping ?? false,
+                    ),
                   ),
                 ),
 
@@ -164,26 +168,26 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// ── Spectrogram view ──────────────────────────────────────────────────────────
+// ── Waveform / oscilloscope view ──────────────────────────────────────────────
 
-class _SpectrogramView extends StatelessWidget {
-  const _SpectrogramView({required this.viz});
+class _WaveformView extends StatelessWidget {
+  const _WaveformView({required this.viz, required this.isClipping});
   final VizController viz;
+  final bool isClipping;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: viz,
       builder: (_, __) {
-        if (viz.specCols.isEmpty) {
+        if (viz.waveCache.isEmpty) {
           return const _Placeholder(label: 'Ожидание микрофона…');
         }
         return CustomPaint(
-          painter: SpectrogramPainter(
-            cols: viz.specCols,
-            lutPaints: viz.lutPaints,
+          painter: WaveformPainter(
+            samples: viz.waveCache,
             accentColor: AppTheme.accent,
-            hopSec: 0.05,
+            isClipping: isClipping,
           ),
           child: const SizedBox.expand(),
         );

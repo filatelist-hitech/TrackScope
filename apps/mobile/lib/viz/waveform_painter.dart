@@ -1,112 +1,150 @@
-// WaveformPainter — amplitude vs time, synchronised with spectrogram time axis.
+// WaveformPainter — oscilloscope-style rolling PCM waveform.
 //
-// Receives the 300-point downsampled PCM slice from VizController.waveCache
-// and draws a centred waveform path. Colour is teal (#00BFA5) normally,
-// red (#F44336) when signal_quality.clipping == true.
+// Phase 7.1 redesign: glowing accent line on dark grid, "WAVEFORM" corner
+// label, dashed "Now" cursor at right edge.
 //
-// inputLevel (0..1 from −60 dBFS → 0 dBFS) drives a 4 px level-meter bar on
-// the right edge: green / yellow / red as level approaches 0 dBFS.
+// Receives VizController.waveCache — 300 downsampled f32 PCM samples ∈ [-1,1].
+// Colour is accentColor normally; _kClip (#FF4444) when isClipping == true.
 //
-// RepaintBoundary in the parent ensures repaints are triggered only by new
-// data, not by table/badge rebuilds.
+// Performance notes:
+//   • Grid: 4 horizontal + 6 vertical drawLine calls — negligible.
+//   • Glow pass: one drawPath with MaskFilter.blur, then one crisp drawPath.
+//   • "Now" cursor: series of short drawLine calls (dashes).
+//   • shouldRepaint checks List identity — skips repaint when samples unchanged.
 
 import 'package:flutter/material.dart';
 
 class WaveformPainter extends CustomPainter {
   const WaveformPainter({
     required this.samples,
-    required this.isClipping,
-    this.inputLevel = 0.0,
+    required this.accentColor,
+    this.isClipping = false,
   });
 
+  /// Downsampled PCM slice from VizController.waveCache (300 points, [-1, 1]).
   final List<double> samples;
+
+  /// Accent colour for the waveform line (normally AppTheme.accent).
+  final Color accentColor;
+
+  /// When true, line colour changes to red to warn of clipping.
   final bool isClipping;
 
-  /// Normalised input level: 0.0 = −60 dBFS, 1.0 = 0 dBFS.
-  /// Drives the right-edge level-meter bar.
-  final double inputLevel;
+  // Clipping warning colour — same red as AppTheme.danger.
+  static const _kClip = Color(0xFFFF4444);
 
-  static const _kAccent = Color(0xFF00BFA5);
-  static const _kClip = Color(0xFFF44336);
-  static const _kZeroLine = Color(0x22FFFFFF);
-  static const _kBg = Color(0xFF0A0A0F);
-  static const _kMeterBg = Color(0x33FFFFFF);
+  // Grid / label colours — fully self-contained, no design_tokens dependency.
+  static const _kGridLine    = Color(0x08FFFFFF);
+  static const _kCentreRef   = Color(0x0CFFFFFF);
+  static const _kCornerLabel = Color(0x44FFFFFF);
 
   @override
   void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // ── Background ────────────────────────────────────────────────────────────
     canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = _kBg,
+      Rect.fromLTWH(0, 0, w, h),
+      Paint()..color = const Color(0xFF07070F),
     );
 
-    // ── Zero-line ────────────────────────────────────────────────────────────
-    final midY = size.height / 2;
+    // ── Grid — horizontal dividers ────────────────────────────────────────────
+    final gridPaint = Paint()
+      ..color = _kGridLine
+      ..strokeWidth = 0.5;
+    for (var i = 1; i < 4; i++) {
+      final y = h * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
+    }
+
+    // ── Grid — vertical dividers ──────────────────────────────────────────────
+    for (var i = 1; i < 6; i++) {
+      final x = w * i / 6;
+      canvas.drawLine(Offset(x, 0), Offset(x, h), gridPaint);
+    }
+
+    // ── Centre reference line (slightly brighter than grid) ───────────────────
     canvas.drawLine(
-      Offset(0, midY),
-      Offset(size.width, midY),
+      Offset(0, h / 2),
+      Offset(w, h / 2),
       Paint()
-        ..color = _kZeroLine
+        ..color = _kCentreRef
         ..strokeWidth = 0.5,
     );
 
-    // ── Waveform path ────────────────────────────────────────────────────────
+    // ── Waveform ──────────────────────────────────────────────────────────────
     if (samples.isNotEmpty) {
-      final waveColor = isClipping ? _kClip : _kAccent;
-      final paint = Paint()
-        ..color = waveColor
-        ..strokeWidth = 1.2
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
+      final waveColor = isClipping ? _kClip : accentColor;
+      final stepX = w / (samples.length - 1).clamp(1, 99999);
+      final midY = h / 2;
 
-      final stepX = size.width / (samples.length - 1).clamp(1, 9999);
       final path = Path();
       for (var i = 0; i < samples.length; i++) {
         final x = i * stepX;
-        final y = midY - samples[i].clamp(-1.0, 1.0) * (midY * 0.9);
+        final y = midY - samples[i].clamp(-1.0, 1.0) * (midY * 0.86);
         if (i == 0) {
           path.moveTo(x, y);
         } else {
           path.lineTo(x, y);
         }
       }
-      canvas.drawPath(path, paint);
-    }
 
-    // ── Level meter (right edge, 4 px, drawn over waveform) ─────────────────
-    const mW = 4.0;
-    const mPad = 4.0;
-    final mX = size.width - mW - mPad;
-    final mH = size.height - mPad * 2;
+      // Glow pass
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = waveColor.withAlpha(90)
+          ..strokeWidth = 5.0
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          // ignore: avoid_redundant_argument_values
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0),
+      );
 
-    // Background track
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(mX, mPad, mW, mH),
-        const Radius.circular(2),
-      ),
-      Paint()..color = _kMeterBg,
-    );
-
-    if (inputLevel > 0.01) {
-      final fillH = mH * inputLevel.clamp(0.0, 1.0);
-      final meterColor = inputLevel > 0.85
-          ? const Color(0xCCF44336) // red: near clipping
-          : inputLevel > 0.6
-              ? const Color(0xCCFFD600) // yellow: moderate
-              : const Color(0xCC00C853); // green: healthy
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(mX, mPad + mH - fillH, mW, fillH),
-          const Radius.circular(2),
-        ),
-        Paint()..color = meterColor,
+      // Crisp line
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = waveColor
+          ..strokeWidth = 1.5
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round,
       );
     }
+
+    // ── "Now" cursor — dashed vertical at right edge ──────────────────────────
+    final nowPaint = Paint()
+      ..color = accentColor.withAlpha(115) // ~0.45 alpha
+      ..strokeWidth = 1.0;
+    const dashLen = 4.0;
+    const gapLen  = 4.0;
+    var dy = 0.0;
+    while (dy < h) {
+      final endY = (dy + dashLen).clamp(0.0, h);
+      canvas.drawLine(Offset(w - 1, dy), Offset(w - 1, endY), nowPaint);
+      dy += dashLen + gapLen;
+    }
+
+    // ── "WAVEFORM" label (top-left) ───────────────────────────────────────────
+    final tp = TextPainter(
+      text: const TextSpan(
+        text: 'WAVEFORM',
+        style: TextStyle(
+          fontSize: 8,
+          fontFamily: 'monospace',
+          color: _kCornerLabel,
+          letterSpacing: 1.5,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, const Offset(4, 4));
   }
 
   @override
   bool shouldRepaint(WaveformPainter old) =>
       !identical(samples, old.samples) ||
       isClipping != old.isClipping ||
-      inputLevel != old.inputLevel;
+      accentColor != old.accentColor;
 }
