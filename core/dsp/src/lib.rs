@@ -337,9 +337,12 @@ impl DspEngine {
     /// результата в `self.prev_lock_state`, чтобы следующий вызов мог
     /// применить адаптивное сглаживание огибающей при необходимости.
     pub fn analyze(&mut self) -> DspResult {
-        let pcm: Vec<f32> = self.pcm_window.iter().copied().collect();
+        // Rearrange the ring buffer in-place so it is contiguous (no heap alloc).
+        // The &mut borrow ends here; as_slices() then creates a plain &[f32].
+        self.pcm_window.make_contiguous();
+        let pcm: &[f32] = self.pcm_window.as_slices().0;
         if pcm.is_empty() || self.config.sample_rate == 0 {
-            let signal_quality = measure_signal(&pcm, self.config.sample_rate);
+            let signal_quality = measure_signal(pcm, self.config.sample_rate);
             // Пустой вход не обновляет prev_lock_state.
             return empty_result(LockState::Searching, signal_quality, 0.0, self.config);
         }
@@ -483,7 +486,7 @@ impl DspEngine {
         }
 
         let mut result = analyze_from_envelope(
-            &pcm,
+            pcm,
             self.config.sample_rate,
             &envelope,
             self.hop_sec,
