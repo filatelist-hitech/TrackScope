@@ -112,7 +112,10 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
       body: SafeArea(
-        child: StreamBuilder<DspResult>(
+        child: Padding(
+          // Uniform horizontal inset so nothing touches the screen edges.
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: StreamBuilder<DspResult>(
           stream: widget.results,
           builder: (context, snap) {
             if (snap.data != null) _lastResult = snap.data;
@@ -162,6 +165,7 @@ class _MainScreenState extends State<MainScreen> {
               ],
             );
           },
+        ),
         ),
       ),
     );
@@ -269,7 +273,7 @@ class _GlassmorphismCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+      padding: const EdgeInsets.fromLTRB(0, 4, 0, 10),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),

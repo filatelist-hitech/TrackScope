@@ -149,8 +149,8 @@ class WaveformPainter extends CustomPainter {
     }
 
     // ── X-axis time labels (bottom row, 16 px reserved) ───────────────────────
-    // The waveCache window is ~4 s at 48 kHz (192 000 / 300 points).
-    // Labels: −4s, −3s, −2s, −1s, 0 at proportional positions.
+    // The waveCache window is ~8 s at 48 kHz (384 000 / 300 points).
+    // Labels: −8s, −6s, −4s, −2s, 0 at proportional positions.
     const timeLabelH = 14.0;
     const timePaint = TextStyle(
       fontSize: 7,
@@ -158,10 +158,10 @@ class WaveformPainter extends CustomPainter {
       color: Color(0x44FFFFFF),
     );
     final timeEntries = <(double, String)>[
-      (0.00, '-4s'),
-      (0.25, '-3s'),
-      (0.50, '-2s'),
-      (0.75, '-1s'),
+      (0.00, '-8s'),
+      (0.25, '-6s'),
+      (0.50, '-4s'),
+      (0.75, '-2s'),
       (1.00, '0'),
     ];
     for (final (frac, label) in timeEntries) {

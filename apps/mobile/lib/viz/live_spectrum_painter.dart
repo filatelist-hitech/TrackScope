@@ -118,8 +118,10 @@ class LiveSpectrumPainter extends CustomPainter {
 
     // ── Build smooth line path ────────────────────────────────────────────────
     // Midpoint quadratic bezier between consecutive points for smoothness.
+    // Start from x=0 at the same amplitude as the first visible bin so there
+    // is no unfilled gap at the left edge (the first bin is at ~47 Hz, not 0).
     final linePath = Path();
-    linePath.moveTo(xs.first, ys.first);
+    linePath.moveTo(0, ys.first);
     for (var k = 0; k < xs.length - 1; k++) {
       final mx = (xs[k] + xs[k + 1]) / 2.0;
       final my = (ys[k] + ys[k + 1]) / 2.0;

@@ -36,8 +36,10 @@ const _kWaveformPoints = 300;
 /// New-sample threshold before scheduling an FFT (~50 ms at 48 kHz).
 const _kHopSamples = 2400;
 
-/// PCM ring size in samples (~4 s at 48 kHz).
-const _kMaxPcmSamples = 192000;
+/// PCM ring size in samples (~8 s at 48 kHz).
+/// 8 s ≈ 25 beats at 188 BPM → each beat occupies ~12 px on a 300-point
+/// waveform canvas, readable on mobile without being too compressed.
+const _kMaxPcmSamples = 384000;
 
 /// dB floor used for log-magnitude normalisation.
 const _kFloorDb = -60.0;
