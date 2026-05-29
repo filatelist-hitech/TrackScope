@@ -1,179 +1,75 @@
-// WaveformPainter — oscilloscope-style rolling PCM waveform.
+// WaveformColumnPainter — Traktor DJ–style bar waveform.
 //
-// Phase 7.1 redesign: glowing accent line on dark grid, "WAVEFORM" corner
-// label, dashed "Now" cursor at right edge.
+// Each column is a sharp rectangle whose height encodes amplitude and whose
+// colour encodes bass energy (dark teal → bright accent).  No smoothing,
+// no rounded corners, no dashed cursor line.
 //
-// Receives VizController.waveCache — 300 downsampled f32 PCM samples ∈ [-1,1].
-// Colour is accentColor normally; _kClip (#FF4444) when isClipping == true.
+// Receives VizController.waveColumns — a ring of WaveformColumn snapshots
+// updated every FFT hop (~50 ms).
 //
-// Performance notes:
-//   • Grid: 4 horizontal + 6 vertical drawLine calls — negligible.
-//   • Glow pass: one drawPath with MaskFilter.blur, then one crisp drawPath.
-//   • "Now" cursor: series of short drawLine calls (dashes).
-//   • shouldRepaint checks List identity — skips repaint when samples unchanged.
+// Performance:
+//   • One drawRect per visible column — no Path, no MaskFilter.
+//   • shouldRepaint uses List identity — skips repaint when data unchanged.
+//   • RepaintBoundary is set by the parent _WaveformView widget.
 
 import 'package:flutter/material.dart';
 
-class WaveformPainter extends CustomPainter {
-  const WaveformPainter({
-    required this.samples,
-    required this.accentColor,
-    this.isClipping = false,
-  });
+import 'waveform_column.dart';
 
-  /// Downsampled PCM slice from VizController.waveCache (300 points, [-1, 1]).
-  final List<double> samples;
+const double _kColW = 3.0;
+const double _kColGap = 0.5;
+const double _kColStep = _kColW + _kColGap;
 
-  /// Accent colour for the waveform line (normally AppTheme.accent).
-  final Color accentColor;
+// Dark teal for quiet / high-frequency columns.
+const Color _kColDark = Color(0xFF003D35);
 
-  /// When true, line colour changes to red to warn of clipping.
-  final bool isClipping;
+// Accent cyan for kick / bass-heavy columns.
+const Color _kColAccent = Color(0xFF00E5CC);
 
-  // Clipping warning colour — same red as AppTheme.danger.
-  static const _kClip = Color(0xFFFF4444);
+// Corner label colour — same semi-transparent white as the old oscilloscope.
+const Color _kCornerLabel = Color(0x44FFFFFF);
 
-  // Grid / label colours — fully self-contained, no design_tokens dependency.
-  static const _kGridLine    = Color(0x08FFFFFF);
-  static const _kCentreRef   = Color(0x0CFFFFFF);
-  static const _kCornerLabel = Color(0x44FFFFFF);
+class WaveformColumnPainter extends CustomPainter {
+  const WaveformColumnPainter({required this.columns});
+
+  final List<WaveformColumn> columns;
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
+    final centerY = h / 2;
 
-    // ── Background ────────────────────────────────────────────────────────────
+    // Background.
     canvas.drawRect(
       Rect.fromLTWH(0, 0, w, h),
       Paint()..color = const Color(0xFF07070F),
     );
 
-    // ── Grid — horizontal dividers ────────────────────────────────────────────
-    final gridPaint = Paint()
-      ..color = _kGridLine
-      ..strokeWidth = 0.5;
-    for (var i = 1; i < 4; i++) {
-      final y = h * i / 4;
-      canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
-    }
+    if (columns.isEmpty) return;
 
-    // ── Grid — vertical dividers ──────────────────────────────────────────────
-    for (var i = 1; i < 6; i++) {
-      final x = w * i / 6;
-      canvas.drawLine(Offset(x, 0), Offset(x, h), gridPaint);
-    }
+    // How many columns fit across the panel.
+    final maxVisible = (w / _kColStep).floor().clamp(1, columns.length);
+    final startIdx = columns.length - maxVisible;
 
-    // ── Centre reference line (slightly brighter than grid) ───────────────────
-    canvas.drawLine(
-      Offset(0, h / 2),
-      Offset(w, h / 2),
-      Paint()
-        ..color = _kCentreRef
-        ..strokeWidth = 0.5,
-    );
+    final paint = Paint()..style = PaintingStyle.fill;
 
-    // ── Waveform ──────────────────────────────────────────────────────────────
-    if (samples.isNotEmpty) {
-      final waveColor = isClipping ? _kClip : accentColor;
-      final stepX = w / (samples.length - 1).clamp(1, 99999);
-      final midY = h / 2;
+    for (var i = 0; i < maxVisible; i++) {
+      final col = columns[startIdx + i];
+      final x = i * _kColStep + _kColW / 2;
 
-      final path = Path();
-      for (var i = 0; i < samples.length; i++) {
-        final x = i * stepX;
-        final y = midY - samples[i].clamp(-1.0, 1.0) * (midY * 0.86);
-        if (i == 0) {
-          path.moveTo(x, y);
-        } else {
-          path.lineTo(x, y);
-        }
-      }
+      // Colour: lerp dark→accent by bass × amplitude.
+      final brightness = (col.bassWeight * col.amplitude).clamp(0.0, 1.0);
+      paint.color = Color.lerp(_kColDark, _kColAccent, brightness)!;
 
-      // Glow pass
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = waveColor.withAlpha(90)
-          ..strokeWidth = 5.0
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round
-          // ignore: avoid_redundant_argument_values
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0),
-      );
-
-      // Crisp line
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = waveColor
-          ..strokeWidth = 1.5
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round,
+      final barH = (col.amplitude * h).clamp(1.0, h);
+      canvas.drawRect(
+        Rect.fromCenter(center: Offset(x, centerY), width: _kColW, height: barH),
+        paint,
       );
     }
 
-    // ── "Now" cursor — dashed vertical at right edge ──────────────────────────
-    final nowPaint = Paint()
-      ..color = accentColor.withAlpha(115) // ~0.45 alpha
-      ..strokeWidth = 1.0;
-    const dashLen = 4.0;
-    const gapLen  = 4.0;
-    var dy = 0.0;
-    while (dy < h) {
-      final endY = (dy + dashLen).clamp(0.0, h);
-      canvas.drawLine(Offset(w - 1, dy), Offset(w - 1, endY), nowPaint);
-      dy += dashLen + gapLen;
-    }
-
-    // ── Y-axis amplitude labels (left side) ──────────────────────────────────
-    // Labels at the actual ±1 positions and at centre (0).
-    // amplitude → y: y = midY - amp * midY * 0.86
-    const ampLabelPaint = TextStyle(
-      fontSize: 7,
-      fontFamily: 'monospace',
-      color: Color(0x55FFFFFF),
-    );
-    final ampEntries = <(double, String)>[
-      (h / 2 - h * 0.86 / 2, '+1'),   // amplitude +1
-      (h / 2,                 ' 0'),   // amplitude  0
-      (h / 2 + h * 0.86 / 2, '-1'),   // amplitude -1
-    ];
-    for (final (y, label) in ampEntries) {
-      if (y < 0 || y > h) continue;
-      final ltp = TextPainter(
-        text: TextSpan(text: label, style: ampLabelPaint),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      ltp.paint(canvas, Offset(4, y - ltp.height / 2));
-    }
-
-    // ── X-axis time labels (bottom row, 16 px reserved) ───────────────────────
-    // The waveCache window is ~8 s at 48 kHz (384 000 / 300 points).
-    // Labels: −8s, −6s, −4s, −2s, 0 at proportional positions.
-    const timeLabelH = 14.0;
-    const timePaint = TextStyle(
-      fontSize: 7,
-      fontFamily: 'monospace',
-      color: Color(0x44FFFFFF),
-    );
-    final timeEntries = <(double, String)>[
-      (0.00, '-8s'),
-      (0.25, '-6s'),
-      (0.50, '-4s'),
-      (0.75, '-2s'),
-      (1.00, '0'),
-    ];
-    for (final (frac, label) in timeEntries) {
-      final ltp = TextPainter(
-        text: TextSpan(text: label, style: timePaint),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final lx = (frac * w - ltp.width / 2).clamp(0.0, w - ltp.width);
-      ltp.paint(canvas, Offset(lx, h - timeLabelH + 2));
-    }
-
-    // ── "WAVEFORM" label (top-left) ───────────────────────────────────────────
+    // "WAVEFORM" corner label.
     final tp = TextPainter(
       text: const TextSpan(
         text: 'WAVEFORM',
@@ -190,8 +86,8 @@ class WaveformPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(WaveformPainter old) =>
-      !identical(samples, old.samples) ||
-      isClipping != old.isClipping ||
-      accentColor != old.accentColor;
+  bool shouldRepaint(WaveformColumnPainter old) {
+    if (columns.length != old.columns.length) return true;
+    return !identical(columns, old.columns);
+  }
 }

@@ -41,6 +41,29 @@ pub struct DspConfig {
     pub analysis_window_seconds: f32,
     pub lock_min_seconds: f32,
     pub stable_min_seconds: f32,
+    /// Включить адаптивное окно анализа по состоянию захвата.
+    ///
+    /// Когда `true`, `analyze()` берёт только хвостовой срез `onset_history`
+    /// для автокорреляции (буфер не усекается, только слайс для анализа):
+    ///   STABLE           → полная история (без изменений)
+    ///   LOCKING          → min(полная, 4.0 с)
+    ///   SEARCHING/UNSTABLE → min(полная, 2.0 с)
+    ///
+    /// Это ускоряет реакцию на смену темпа: новый темп начинает доминировать
+    /// в коротком хвосте быстрее, чем в полном окне.
+    /// Default: `true`.
+    pub adaptive_window: bool,
+    /// Порог BPM-разрыва для детектора резкой смены темпа.
+    ///
+    /// Если `|top_candidate_bpm - last_stable_bpm| > tempo_jump_threshold`
+    /// И `tempo_shift_counter >= RELOCK_CONFIRM_FRAMES` — это «темповый прыжок»
+    /// (новый трек, не джиттер). В таком случае дополнительно сбрасывается
+    /// `bpm_history` и следующее состояние форсируется в SEARCHING.
+    ///
+    /// 15 BPM выбрано как безопасный гейт выше любого шумового флуктуации
+    /// (джиттер в STABLE < 2 BPM после параболической интерполяции,
+    /// брейкдаун не меняет BPM-кандидата). Default: `15.0`.
+    pub tempo_jump_threshold: f32,
 }
 
 impl Default for DspConfig {
@@ -54,6 +77,8 @@ impl Default for DspConfig {
             analysis_window_seconds: 12.0,
             lock_min_seconds: 6.0,
             stable_min_seconds: 12.0,
+            adaptive_window: true,
+            tempo_jump_threshold: 15.0,
         }
     }
 }
@@ -150,6 +175,28 @@ pub struct DspEngine {
     /// сглаживая остаточный джиттер после параболической интерполяции.
     /// Очищается при любом не-STABLE кадре.
     bpm_history: VecDeque<f32>,
+    /// BPM, зафиксированный при последнем устойчивом STABLE-захвате.
+    /// Используется fast re-lock: если текущий топ-кандидат расходится
+    /// с этим значением > RELOCK_BPM_SHIFT_THRESHOLD BPM на
+    /// RELOCK_CONFIRM_FRAMES подряд — onset_history усекается до
+    /// RELOCK_WINDOW_SECS секунд для ускорения нового захвата.
+    last_stable_bpm: Option<f32>,
+    /// Счётчик подряд идущих кадров с детектированным темповым сдвигом.
+    /// Сбрасывается при возврате в STABLE или при отсутствии сдвига.
+    tempo_shift_counter: u32,
+    /// Флаг форсированного перехода в SEARCHING при детектировании
+    /// «темпового прыжка» (v2 tempo discontinuity detector).
+    /// При `true` следующий `analyze()` форсирует SEARCHING вместо UNSTABLE,
+    /// независимо от текущего скора кандидата. Сбрасывается после применения.
+    force_next_searching: bool,
+    /// Выставляется в `true` при первом достижении STABLE и никогда не
+    /// сбрасывается в `false` (в отличие от `last_stable_bpm`).
+    /// Используется для гейтирования адаптивного окна: при первом захвате
+    /// (флаг `false`) всегда берётся полная onset-история — 8–12 сек
+    /// (~25–50 ударов) дают надёжный пик автокорреляции и уверенность ≥ 0.72.
+    /// После первого STABLE флаг становится `true`, и адаптивное окно
+    /// начинает работать штатно для ускорения повторного захвата.
+    has_ever_been_stable: bool,
     hop_size: usize,
     frame_size: usize,
     pcm_capacity: usize,
@@ -161,6 +208,43 @@ pub struct DspEngine {
 /// N=3 охватывает ~150 мс при интервале опроса 50 мс — достаточно,
 /// чтобы подавить остаточный джиттер без заметной задержки смены темпа.
 const BPM_HISTORY_N: usize = 3;
+
+/// Fast re-lock (v1): длительность сохраняемой onset-истории после
+/// детектированного темпового сдвига. 2 сек onset-данных ≈ 6–9 периодов
+/// для 170–230 BPM (лаг 78–141 onset-кадров при hop=2.5 мс) — достаточно
+/// для надёжного autocorr-пика. После усечения новые онсеты нового темпа
+/// вытеснят остатки за ~1–2 сек, что даёт итоговый перезахват ~3–4 сек.
+const RELOCK_WINDOW_SECS: f32 = 2.0;
+
+/// Минимальный BPM-разрыв между текущим топ-кандидатом и последним
+/// стабильным BPM для активации fast re-lock.
+const RELOCK_BPM_SHIFT_THRESHOLD: f32 = 10.0;
+
+/// Количество подряд идущих кадров с темповым сдвигом, требуемое для
+/// активации fast re-lock. 1 кадр (~50 мс) достаточно: порог
+/// RELOCK_BPM_SHIFT_THRESHOLD = 10 BPM уже отфильтровывает шумовые
+/// выбросы. 1-кадровая задержка сокращает время реакции до ~50 мс.
+///
+/// Счёт начинается с первого кадра, где prev_lock_state != None и
+/// BPM-расхождение > RELOCK_BPM_SHIFT_THRESHOLD. Это включает кадр
+/// сразу после выхода из STABLE (prev_lock_state = Some(Stable)).
+const RELOCK_CONFIRM_FRAMES: u32 = 1;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Adaptive window constants (v2) — размеры хвостовых срезов onset_history
+// по состоянию захвата. Используются только при `config.adaptive_window == true`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Размер хвостового среза в LOCKING: 6 секунд.
+/// Совпадает с lock_min_seconds (default 6.0). 6 с = ~20 ударов при 200 BPM →
+/// достаточно для уверенности ≥ 0.72 и перехода в STABLE. Было 4.0 с в Phase 4.5 —
+/// регрессия: только ~13 ударов → confidence ~0.68, застревание в LOCKING.
+const ADAPTIVE_WINDOW_LOCKING_SECS: f32 = 6.0;
+
+/// Размер хвостового среза в SEARCHING/UNSTABLE: 2 секунды.
+/// Совпадает с RELOCK_WINDOW_SECS — обеспечивает согласованность:
+/// v1-дренаж onset_history и v2-срез дают одинаковый горизонт анализа.
+const ADAPTIVE_WINDOW_SEARCHING_SECS: f32 = 2.0;
 
 impl DspEngine {
     pub fn new(config: DspConfig) -> Self {
@@ -184,6 +268,10 @@ impl DspEngine {
             prev_frame_rms: None,
             prev_lock_state: None,
             bpm_history: VecDeque::with_capacity(BPM_HISTORY_N + 1),
+            last_stable_bpm: None,
+            tempo_shift_counter: 0,
+            force_next_searching: false,
+            has_ever_been_stable: false,
             hop_size,
             frame_size,
             pcm_capacity,
@@ -258,16 +346,167 @@ impl DspEngine {
     /// результата в `self.prev_lock_state`, чтобы следующий вызов мог
     /// применить адаптивное сглаживание огибающей при необходимости.
     pub fn analyze(&mut self) -> DspResult {
-        let pcm: Vec<f32> = self.pcm_window.iter().copied().collect();
+        // Rearrange the ring buffer in-place so it is contiguous (no heap alloc).
+        // The &mut borrow ends here; as_slices() then creates a plain &[f32].
+        self.pcm_window.make_contiguous();
+        let pcm: &[f32] = self.pcm_window.as_slices().0;
         if pcm.is_empty() || self.config.sample_rate == 0 {
-            let signal_quality = measure_signal(&pcm, self.config.sample_rate);
+            let signal_quality = measure_signal(pcm, self.config.sample_rate);
             // Пустой вход не обновляет prev_lock_state.
             return empty_result(LockState::Searching, signal_quality, 0.0, self.config);
         }
-        let raw_envelope: Vec<f32> = self.onset_history.iter().copied().collect();
+
+        // ─────────────────────────────────────────────────────────────────
+        // Tempo discontinuity detector (v2) + fast re-lock (v1 дренаж)
+        //
+        // Шаг 1 — детектируем сдвиг по хвостовому срезу onset_history.
+        //   Хвост (последние RELOCK_WINDOW_SECS) накапливает новый темп в
+        //   первую очередь; топ-кандидат там меняется через ~1–2 с.
+        //
+        // Шаг 2 — накапливаем счётчик подряд идущих кадров со сдвигом.
+        //   При >= RELOCK_CONFIRM_FRAMES активируем fast re-lock.
+        //
+        // Шаг 3 (v1 дренаж, `adaptive_window == false`) — физически
+        //   обрезаем onset_history до RELOCK_WINDOW_SECS.
+        //
+        // Шаг 4 (v2 tempo jump, `adaptive_window == true`) — если сдвиг
+        //   >= tempo_jump_threshold BPM, это «прыжок», не джиттер:
+        //   - сбрасываем bpm_history (медианный буфер кандидатов)
+        //   - выставляем force_next_searching = true
+        //   Adaptive-window срез (п. ниже) уже даёт чистый горизонт.
+        //
+        // Anti-fake: любая операция работает только с реальными onset-данными.
+        // ─────────────────────────────────────────────────────────────────
+        if self.hop_sec > 0.0 {
+            let relock_frames = (RELOCK_WINDOW_SECS / self.hop_sec).round() as usize;
+            let tail_start = self.onset_history.len().saturating_sub(relock_frames);
+            let raw_snapshot: Vec<f32> = self.onset_history
+                .iter()
+                .skip(tail_start)
+                .copied()
+                .collect();
+            let snap_envelope = finalize_envelope(raw_snapshot);
+            let snap_peaks = if !snap_envelope.is_empty() {
+                tempo_autocorrelation(
+                    &snap_envelope,
+                    self.hop_sec,
+                    self.config.broad_bpm_min,
+                    self.config.broad_bpm_max,
+                )
+            } else {
+                Vec::new()
+            };
+            let current_top_bpm = snap_peaks.first().map(|p| p.bpm);
+
+            let shift_detected = match (self.last_stable_bpm, current_top_bpm) {
+                (Some(last), Some(cur)) => {
+                    let was_or_is_not_stable = !matches!(self.prev_lock_state, None);
+                    // Нормализуем cur относительно last: cur, cur*2, cur/2.
+                    // Это предотвращает ложный детект от half/double гармоники.
+                    let diff_direct = (cur - last).abs();
+                    let diff_double = (cur * 2.0 - last).abs();
+                    let diff_half = (cur / 2.0 - last).abs();
+                    let min_diff = diff_direct.min(diff_double).min(diff_half);
+                    was_or_is_not_stable && min_diff > RELOCK_BPM_SHIFT_THRESHOLD
+                }
+                _ => false,
+            };
+
+            if shift_detected {
+                self.tempo_shift_counter += 1;
+            } else {
+                self.tempo_shift_counter = 0;
+            }
+
+            if self.tempo_shift_counter >= RELOCK_CONFIRM_FRAMES {
+                if !self.config.adaptive_window {
+                    // v1 дренаж: физически обрезаем onset_history.
+                    if self.onset_history.len() > relock_frames {
+                        let keep_from = self.onset_history.len() - relock_frames;
+                        self.onset_history.drain(0..keep_from);
+                    }
+                    // Сбросить счётчик после усечения.
+                    self.tempo_shift_counter = 0;
+                } else {
+                    // v2 tempo jump detector: если расхождение >= tempo_jump_threshold,
+                    // это не джиттер — принудительно обнуляем состояние захвата.
+                    let jump_detected = match (self.last_stable_bpm, current_top_bpm) {
+                        (Some(last), Some(cur)) => {
+                            let diff_direct = (cur - last).abs();
+                            let diff_double = (cur * 2.0 - last).abs();
+                            let diff_half = (cur / 2.0 - last).abs();
+                            let min_diff = diff_direct.min(diff_double).min(diff_half);
+                            min_diff > self.config.tempo_jump_threshold
+                        }
+                        _ => false,
+                    };
+                    if jump_detected {
+                        // Темп резко сменился — сбрасываем медианный буфер,
+                        // форсируем SEARCHING на следующем кадре.
+                        self.bpm_history.clear();
+                        self.force_next_searching = true;
+                    }
+                    // В v2 не дренируем onset_history физически;
+                    // вместо этого adaptive_window-срез (ниже) берёт только хвост.
+                    // Сбрасываем счётчик, чтобы не срабатывать каждый кадр.
+                    self.tempo_shift_counter = 0;
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // Adaptive-window срез onset_history для анализа (v2).
+        //
+        // При `config.adaptive_window == true` выбираем эффективную длину
+        // хвоста по prev_lock_state (состоянию предыдущего кадра):
+        //   STABLE                  → полная история (без изменений)
+        //   LOCKING                 → min(полная, ADAPTIVE_WINDOW_LOCKING_SECS)
+        //   SEARCHING / UNSTABLE    → min(полная, ADAPTIVE_WINDOW_SEARCHING_SECS)
+        //   None (start / after reset) → полная история
+        //
+        // Важно: onset_history не модифицируется — берётся только срез
+        // (`tail`). Это исключает realloc и сохраняет историю для возврата
+        // к STABLE после кратковременного UNSTABLE.
+        // ─────────────────────────────────────────────────────────────────
+        let raw_envelope: Vec<f32> = if self.config.adaptive_window && self.hop_sec > 0.0 {
+            let effective_secs: Option<f32> = if !self.has_ever_been_stable {
+                // Первый захват: ни разу не достигали STABLE.
+                // Используем полную историю — 8–12 с даёт ~25–50 ударов для
+                // надёжного пика автокорреляции и уверенности ≥ 0.72.
+                // Адаптивное усечение в 2 с при SEARCHING сломало бы первый
+                // захват: только 5–8 ударов → слабый пик → confidence < 0.72.
+                None
+            } else {
+                // Повторный захват после смены трека: адаптивное окно
+                // ограничивает анализ свежими онсетами нового темпа.
+                match self.prev_lock_state {
+                    Some(LockState::Stable) | None => None,
+                    Some(LockState::Locking) => Some(ADAPTIVE_WINDOW_LOCKING_SECS),
+                    Some(_) => Some(ADAPTIVE_WINDOW_SEARCHING_SECS),
+                }
+            };
+            if let Some(secs) = effective_secs {
+                let tail_frames = (secs / self.hop_sec).round() as usize;
+                let tail_start = self.onset_history.len().saturating_sub(tail_frames);
+                self.onset_history.iter().skip(tail_start).copied().collect()
+            } else {
+                self.onset_history.iter().copied().collect()
+            }
+        } else {
+            self.onset_history.iter().copied().collect()
+        };
+
         let envelope = finalize_envelope(raw_envelope);
+
+        // Применяем force_next_searching: если флаг выставлен, форсируем
+        // SEARCHING вместо UNSTABLE на этом кадре. Флаг сбрасывается здесь же.
+        let force_searching = self.force_next_searching;
+        if force_searching {
+            self.force_next_searching = false;
+        }
+
         let mut result = analyze_from_envelope(
-            &pcm,
+            pcm,
             self.config.sample_rate,
             &envelope,
             self.hop_sec,
@@ -275,11 +514,42 @@ impl DspEngine {
             self.prev_lock_state,
         );
 
+        // Применяем форсированное состояние: если это «прыжок темпа», делаем
+        // SEARCHING вместо любого не-критического состояния. CLIPPED_MIC и
+        // BREAKDOWN не трогаем — они сигнализируют о проблеме входного сигнала,
+        // а не о смене темпа; их пробрасываем немедленно без задержки.
+        //
+        // STABLE включён намеренно: если analyze_from_envelope вернул STABLE в
+        // тот же кадр где был детектирован tempo jump (onset-история ещё содержит
+        // смешанные данные двух треков), пропускать STABLE опасно — он обновит
+        // last_stable_bpm переходным BPM. Форсируем SEARCHING, чтобы движок
+        // начал чистый захват с нуля.
+        if force_searching
+            && matches!(
+                result.lock_state,
+                LockState::Unstable
+                    | LockState::Locking
+                    | LockState::NoiseOnly
+                    | LockState::Stable
+            )
+        {
+            result.lock_state = LockState::Searching;
+            result.primary_bpm = None;
+            // Сбросить якорный BPM, чтобы jump-детектор не продолжал
+            // срабатывать на каждом последующем кадре (пока last_stable_bpm
+            // содержит старое значение, а новый кандидат ≠ last_stable_bpm —
+            // детектор переводил бы force_next_searching в true бесконечно).
+            // После сброса нормальная прогрессия SEARCHING→LOCKING→STABLE
+            // обновит last_stable_bpm при первом новом STABLE.
+            self.last_stable_bpm = None;
+        }
+
         // BPM candidate history — медиана N=BPM_HISTORY_N значений в STABLE.
         // Снижает остаточный джиттер после параболической интерполяции без
         // заметной задержки смены темпа: буфер очищается на первом не-STABLE
         // кадре, поэтому новый захват начинается с нуля.
         if result.lock_state == LockState::Stable {
+            self.has_ever_been_stable = true;
             if let Some(bpm) = result.primary_bpm {
                 self.bpm_history.push_back(bpm);
                 while self.bpm_history.len() > BPM_HISTORY_N {
@@ -289,6 +559,10 @@ impl DspEngine {
                 sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                 result.primary_bpm = Some(sorted[sorted.len() / 2]);
             }
+            // Обновляем last_stable_bpm при каждом STABLE-кадре,
+            // сбрасываем счётчик сдвига.
+            self.last_stable_bpm = result.primary_bpm;
+            self.tempo_shift_counter = 0;
         } else {
             self.bpm_history.clear();
         }
@@ -306,6 +580,10 @@ impl DspEngine {
         self.prev_frame_rms = None;
         self.prev_lock_state = None;
         self.bpm_history.clear();
+        self.last_stable_bpm = None;
+        self.tempo_shift_counter = 0;
+        self.force_next_searching = false;
+        self.has_ever_been_stable = false;
     }
 
     fn observed_seconds(&self) -> f32 {
