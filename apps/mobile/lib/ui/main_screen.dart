@@ -1,40 +1,34 @@
-// Живой экран BPM. Через StreamBuilder подписывается на
-// CaptureBridge.results и напрямую рисует каждое поле из последнего
-// DspResult — никакого производного состояния, никаких запасных
-// значений, никакого фейкового BPM.
+// Главный экран BPM-радара — Phase 7 premium design.
 //
-// Структура:
-//   • ~45 % высоты — SpectrumBarsView: 48 анимированных FFT-баров, 30–6000 Гц.
-//   • ~15 % высоты — WaveformView: амплитуда PCM + level-meter, краснеет при клиппинге.
-//   • ~40 % высоты — InfoTable: поля из DspResult, badge lock_state.
+// Layout (top to bottom):
+//   • 35 % — WaveformView: oscilloscope rolling PCM waveform (bpm pulse visible).
+//   • 22 % — LiveSpectrumView: current FFT frame as smooth curve + gradient fill
+//             + peak-hold ticks.
+//   • 43 % — GlassmorphismCard: DspResult info (BPM, badge, confidence, etc.)
+//             with BackdropFilter blur + semi-transparent surface.
 //
-// Динамические элементы (все driven by реальными данными, без таймеров):
-//   • Beat glow на BPM-числе — VizController.beatDecay (PCM RMS с decay).
-//   • Confidence bar под BPM — TweenAnimationBuilder по DspResult.confidence.
-//   • Level meter — WaveformPainter.inputLevel по DspResult.inputLevelDbfs.
-//   • BpmDisplay (Phase 6): EMA α=0.2 в STABLE; raw в LOCKING с меньшей яркостью.
+// VizController computes a single FFT per audio hop (~50 ms) and publishes:
+//   • waveCache (300 PCM samples) → WaveformPainter
+//   • latestNorms / peakHoldValues → LiveSpectrumPainter
+// Anti-fake: no BPM maths here.
 //
-// Обе визуализации питаются реальным PCM из CaptureBridge.rawPcm.
-// VizController живёт в State и освобождается в dispose().
+// Design tokens in design_tokens.dart.
+// BpmDisplay (Phase 6 EMA) is preserved and not modified.
+// Debug button (AppBar trailing) is not moved.
 
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart' hide LockState;
 
 import '../capture/bpm_display.dart';
 import '../capture/capture_bridge.dart';
 import '../dsp/dsp_result.dart';
-import '../viz/spectrum_bars_painter.dart';
+import '../viz/live_spectrum_painter.dart';
 import '../viz/viz_controller.dart';
 import '../viz/waveform_painter.dart';
-
-// ── Design tokens ─────────────────────────────────────────────────────────────
-
-const _kBg = Color(0xFF0A0A0F);
-const _kSurface = Color(0xFF12121A);
-const _kMono = TextStyle(fontFamily: 'monospace');
-const _kTeal = Color(0xFF00BFA5);
+import 'design_tokens.dart';
 
 // ── MainScreen ────────────────────────────────────────────────────────────────
 
@@ -50,7 +44,7 @@ class MainScreen extends StatefulWidget {
   final Stream<DspResult> results;
   final Stream<CaptureError> errors;
 
-  /// Как строится debug-экран, когда пользователь нажимает иконку жука.
+  /// How to build the debug screen when the bug icon is tapped.
   final WidgetBuilder debugBuilder;
 
   /// Raw PCM-16 LE mono bytes from CaptureBridge.rawPcm. Null in unit tests
@@ -89,32 +83,25 @@ class _MainScreenState extends State<MainScreen> {
     super.dispose();
   }
 
-  // Converts dBFS to normalised 0..1 for the level meter.
-  // −60 dBFS → 0.0, 0 dBFS → 1.0.
-  double _dbfsToLevel(double? dbfs) {
-    if (dbfs == null) return 0.0;
-    return ((dbfs + 60.0) / 60.0).clamp(0.0, 1.0);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _kBg,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: _kBg,
+        backgroundColor: AppTheme.background,
         elevation: 0,
-        title: const Text(
-          'Hitech BPM Radar',
-          style: TextStyle(
-            color: Colors.white70,
-            fontSize: 15,
-            letterSpacing: 1.5,
-            fontFamily: 'monospace',
+        title: Text(
+          'HITECH BPM RADAR',
+          style: AppTheme.mono(
+            fontSize: 13,
+            color: AppTheme.textSecondary,
+            letterSpacing: 2.0,
           ),
         ),
         actions: [
+          // Debug button — not moved, not changed per task constraints.
           IconButton(
-            icon: const Icon(Icons.bug_report_outlined, color: Colors.white54),
+            icon: const Icon(Icons.bug_report_outlined, color: AppTheme.textSecondary),
             tooltip: 'Отладка',
             onPressed: () {
               Navigator.of(context).push(MaterialPageRoute(
@@ -125,7 +112,10 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
       body: SafeArea(
-        child: StreamBuilder<DspResult>(
+        child: Padding(
+          // Uniform horizontal inset so nothing touches the screen edges.
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: StreamBuilder<DspResult>(
           stream: widget.results,
           builder: (context, snap) {
             if (snap.data != null) _lastResult = snap.data;
@@ -138,200 +128,137 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 if (_lastError != null) _ErrorBanner(error: _lastError!),
 
-                // ── Spectrum bars (45 %) ────────────────────────────────────
-                // 48 log-spaced bars (30 Hz → 6 kHz), fast-attack / ~300 ms
-                // decay. Colour through thermal LUT: quiet=blue, loud=orange.
+                // ── Waveform / oscilloscope (35 %) ─────────────────────────
                 Expanded(
-                  flex: 45,
+                  flex: 35,
                   child: RepaintBoundary(
-                    child: ListenableBuilder(
-                      listenable: _viz,
-                      builder: (_, __) {
-                        if (_viz.smoothedBars.isEmpty) {
-                          return Container(
-                            color: _kBg,
-                            alignment: Alignment.center,
-                            child: const Text(
-                              'Ожидание микрофона…',
-                              style: TextStyle(
-                                color: Color(0xFF444466),
-                                fontFamily: 'monospace',
-                                fontSize: 14,
-                              ),
-                            ),
-                          );
-                        }
-                        return CustomPaint(
-                          painter: SpectrumBarsPainter(
-                            bars: _viz.smoothedBars,
-                            lutPaints: _viz.lutPaints,
-                          ),
-                          child: const SizedBox.expand(),
-                        );
-                      },
+                    child: _WaveformView(
+                      viz: _viz,
+                      isClipping:
+                          result?.signalQuality.clipping ?? false,
                     ),
                   ),
                 ),
 
-                // ── Waveform + level meter (15 %) ───────────────────────────
+                // ── Live spectrum (22 %) ────────────────────────────────────
                 Expanded(
-                  flex: 15,
+                  flex: 22,
                   child: RepaintBoundary(
-                    child: ListenableBuilder(
-                      listenable: _viz,
-                      builder: (_, __) => CustomPaint(
-                        painter: WaveformPainter(
-                          samples: _viz.waveCache,
-                          isClipping:
-                              _lastResult?.signalQuality.clipping ?? false,
-                          inputLevel: _dbfsToLevel(
-                              _lastResult?.signalQuality.inputLevelDbfs),
-                        ),
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
+                    child: _LiveSpectrumView(viz: _viz),
                   ),
                 ),
 
-                // ── Info table (40 %) ───────────────────────────────────────
+                // ── Glassmorphism info card (43 %) ─────────────────────────
+                // RepaintBoundary isolates BackdropFilter compositing from
+                // the ~20 Hz VizController and DspResult StreamBuilder above.
                 Expanded(
-                  flex: 40,
-                  child: _InfoTable(
-                    result: result,
-                    viz: _viz,
-                    displayBpm: displayBpm,
-                    isLockingDisplay: isLockingDisplay,
+                  flex: 43,
+                  child: RepaintBoundary(
+                    child: _GlassmorphismCard(
+                      result: result,
+                      viz: _viz,
+                      displayBpm: displayBpm,
+                      isLockingDisplay: isLockingDisplay,
+                    ),
                   ),
                 ),
               ],
             );
           },
         ),
+        ),
       ),
     );
   }
 }
 
-// ── Animated BPM display ──────────────────────────────────────────────────────
-//
-// Beat glow: ListenableBuilder on VizController.beatDecay (PCM chunk RMS).
-// Fast attack (immediate), ~200 ms decay — reflects real audio transients.
-// No timer, no fake pulse.
-//
-// Confidence bar: TweenAnimationBuilder<double> targeting DspResult.confidence.
-// Animates over 500 ms so the bar glides smoothly to new values.
-//
-// Phase 6: isLockingDisplay dims the BPM text to white54 during LOCKING.
+// ── Waveform / oscilloscope view ──────────────────────────────────────────────
 
-class _AnimatedBpmDisplay extends StatelessWidget {
-  const _AnimatedBpmDisplay({
-    required this.bpm,
-    required this.confidence,
-    required this.viz,
-    this.isLockingDisplay = false,
-  });
-
-  final double? bpm;
-  final double confidence;
+class _WaveformView extends StatelessWidget {
+  const _WaveformView({required this.viz, required this.isClipping});
   final VizController viz;
-  final bool isLockingDisplay;
-
-  static const _kBaseStyle = TextStyle(
-    fontSize: 52,
-    fontWeight: FontWeight.w800,
-    color: Colors.white,
-    fontFamily: 'monospace',
-    height: 1.0,
-  );
+  final bool isClipping;
 
   @override
   Widget build(BuildContext context) {
-    final bpmText = bpm == null ? '—' : bpm!.toStringAsFixed(1);
-    final baseColor = isLockingDisplay ? Colors.white54 : Colors.white;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // BPM text with beat-reactive teal glow.
-        RepaintBoundary(
-          child: ListenableBuilder(
-            listenable: viz,
-            builder: (_, __) {
-              final g = viz.beatDecay;
-              final style = _kBaseStyle.copyWith(color: baseColor);
-              return Text(
-                bpmText,
-                style: g > 0.04
-                    ? style.copyWith(
-                        shadows: [
-                          Shadow(
-                            color: _kTeal
-                                .withValues(alpha: (g * 0.9).clamp(0.0, 1.0)),
-                            blurRadius: 6.0 + g * 26.0,
-                          ),
-                        ],
-                      )
-                    : style,
-              );
-            },
+    return ListenableBuilder(
+      listenable: viz,
+      builder: (_, __) {
+        if (viz.waveCache.isEmpty) {
+          return const _Placeholder(label: 'Ожидание микрофона…');
+        }
+        return CustomPaint(
+          painter: WaveformPainter(
+            samples: viz.waveCache,
+            accentColor: AppTheme.accent,
+            isClipping: isClipping,
           ),
-        ),
-        const SizedBox(height: 2),
-        // Confidence progress bar — grey→teal, smoothly animated.
-        TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.0, end: confidence),
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeOut,
-          builder: (_, c, __) => SizedBox(
-            width: 128,
-            height: 2,
-            child: CustomPaint(painter: _ConfidenceBarPainter(c)),
-          ),
-        ),
-      ],
+          child: const SizedBox.expand(),
+        );
+      },
     );
   }
 }
 
-// ── Confidence bar painter ────────────────────────────────────────────────────
+// ── Live spectrum view ────────────────────────────────────────────────────────
 
-class _ConfidenceBarPainter extends CustomPainter {
-  const _ConfidenceBarPainter(this.level);
-  final double level;
-
-  static const _kTrack = Color(0x22FFFFFF);
-  static const _kLow = Color(0xFF455A64);
-  static const _kHigh = _kTeal;
+class _LiveSpectrumView extends StatelessWidget {
+  const _LiveSpectrumView({required this.viz});
+  final VizController viz;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final rr = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      const Radius.circular(1),
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppTheme.background,
+      child: ListenableBuilder(
+        listenable: viz,
+        builder: (_, __) {
+          if (viz.latestNorms.isEmpty) {
+            return const _Placeholder(label: 'Ожидание микрофона…');
+          }
+          return CustomPaint(
+            painter: LiveSpectrumPainter(
+              norms: viz.latestNorms,
+              peakHold: viz.peakHoldValues,
+              accentColor: AppTheme.accent,
+            ),
+            child: const SizedBox.expand(),
+          );
+        },
+      ),
     );
-    canvas.drawRRect(rr, Paint()..color = _kTrack);
-
-    if (level > 0) {
-      final filled = RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, size.width * level, size.height),
-        const Radius.circular(1),
-      );
-      canvas.drawRRect(
-        filled,
-        Paint()..color = Color.lerp(_kLow, _kHigh, level)!,
-      );
-    }
   }
-
-  @override
-  bool shouldRepaint(_ConfidenceBarPainter old) => level != old.level;
 }
 
-// ── Info table ────────────────────────────────────────────────────────────────
+// ── Shared placeholder ────────────────────────────────────────────────────────
+// Shown by both panels when VizController has no audio data.
+// Rendered as a Flutter Text widget (not Canvas) so widget tests can find it.
 
-class _InfoTable extends StatelessWidget {
-  const _InfoTable({
+class _Placeholder extends StatelessWidget {
+  const _Placeholder({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppTheme.background,
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: AppTheme.textDim,
+          fontFamily: 'monospace',
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Glassmorphism info card ───────────────────────────────────────────────────
+
+class _GlassmorphismCard extends StatelessWidget {
+  const _GlassmorphismCard({
     required this.result,
     required this.viz,
     this.displayBpm,
@@ -340,10 +267,57 @@ class _InfoTable extends StatelessWidget {
 
   final DspResult? result;
   final VizController viz;
-  /// EMA-сглаженное значение BPM (STABLE) или raw primaryBpm (LOCKING).
-  /// null когда не STABLE и не LOCKING, или primary_bpm ещё не доступен.
   final double? displayBpm;
-  /// true когда displayBpm из LOCKING — рендерить с меньшей яркостью.
+  final bool isLockingDisplay;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 4, 0, 10),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withAlpha(18),
+            width: 0.5,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            // Reduced from 12→8: meaningful perf improvement on real devices
+            // since the background repaints every ~50 ms with live waveform.
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              color: Colors.white.withAlpha(8),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              child: _InfoTableContent(
+                result: result,
+                viz: viz,
+                displayBpm: displayBpm,
+                isLockingDisplay: isLockingDisplay,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Info table content ────────────────────────────────────────────────────────
+
+class _InfoTableContent extends StatelessWidget {
+  const _InfoTableContent({
+    required this.result,
+    required this.viz,
+    this.displayBpm,
+    this.isLockingDisplay = false,
+  });
+
+  final DspResult? result;
+  final VizController viz;
+  final double? displayBpm;
   final bool isLockingDisplay;
 
   @override
@@ -364,16 +338,10 @@ class _InfoTable extends StatelessWidget {
       }
     }
 
-    // Half-time and double-time for display.
-    final halfCand = r?.candidates
-        .where((c) =>
-            c.relation == 'half_time' || c.relation == 'normalized_from_half')
-        .toList();
-    final doubleCand = r?.candidates
-        .where((c) =>
-            c.relation == 'double_time' ||
-            c.relation == 'normalized_from_double')
-        .toList();
+    final halfCand = r?.candidates.where((c) =>
+        c.relation == 'half_time' || c.relation == 'normalized_from_half');
+    final doubleCand = r?.candidates.where((c) =>
+        c.relation == 'double_time' || c.relation == 'normalized_from_double');
 
     final halfBpm = (halfCand?.isNotEmpty ?? false)
         ? halfCand!.first.bpm.toStringAsFixed(1)
@@ -382,105 +350,101 @@ class _InfoTable extends StatelessWidget {
         ? doubleCand!.first.bpm.toStringAsFixed(1)
         : '—';
 
-    return Container(
-      color: _kSurface,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ── Row 1: animated BPM + confidence bar + lock badge ─────────────
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _AnimatedBpmDisplay(
-                bpm: bpm,
-                confidence: conf,
-                viz: viz,
-                isLockingDisplay: isLockingDisplay,
-              ),
-              const Padding(
-                padding: EdgeInsets.only(left: 6),
-                child: Text(
-                  'BPM',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white38,
-                    letterSpacing: 1.5,
-                  ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Row 1: BPM display + lock badge ──────────────────────────────────
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _AnimatedBpmDisplay(
+              bpm: bpm,
+              confidence: conf,
+              viz: viz,
+              isLockingDisplay: isLockingDisplay,
+            ),
+            const Padding(
+              padding: EdgeInsets.only(left: 6),
+              child: Text(
+                'BPM',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.textSecondary,
+                  letterSpacing: 1.5,
                 ),
               ),
-              const Spacer(),
-              _LockBadge(state: lock),
-            ],
-          ),
-          const SizedBox(height: 6),
+            ),
+            const Spacer(),
+            _LockBadge(state: lock),
+          ],
+        ),
+        const SizedBox(height: 8),
 
-          // ── Row 2: confidence % + input level ─────────────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: _Cell(
-                  label: 'Уверенность',
-                  value: '${(conf * 100).round()}%',
-                ),
+        // ── Row 2: confidence + input level ──────────────────────────────────
+        Row(
+          children: [
+            Expanded(
+              child: _Cell(
+                label: 'УВЕРЕННОСТЬ',
+                value: '${(conf * 100).round()}%',
               ),
-              Expanded(
-                child: _Cell(
-                  label: 'Уровень входа',
-                  value: sq?.inputLevelDbfs != null
-                      ? '${sq!.inputLevelDbfs!.toStringAsFixed(1)} dBFS'
-                      : '—',
-                ),
+            ),
+            Expanded(
+              child: _Cell(
+                label: 'УРОВЕНЬ ВХОДА',
+                value: sq?.inputLevelDbfs != null
+                    ? '${sq!.inputLevelDbfs!.toStringAsFixed(1)} dBFS'
+                    : '—',
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
 
-          // ── Row 3: best candidate + half / double ──────────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: _Cell(
-                  label: 'Лучший кандидат',
-                  value:
-                      best != null ? '${best.bpm.toStringAsFixed(1)} BPM' : '—',
-                ),
+        // ── Row 3: best candidate + half / double ─────────────────────────────
+        Row(
+          children: [
+            Expanded(
+              child: _Cell(
+                label: 'ЛУЧШИЙ КАНДИДАТ',
+                value: best != null
+                    ? '${best.bpm.toStringAsFixed(1)} BPM'
+                    : '—',
               ),
-              Expanded(
-                child: _Cell(
-                  label: '×½ / ×2',
-                  value: '$halfBpm / $doubleBpm',
-                ),
+            ),
+            Expanded(
+              child: _Cell(
+                label: '×½ / ×2',
+                value: '$halfBpm / $doubleBpm',
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
 
-          // ── Row 4: clipping + noise level ─────────────────────────────────
-          Row(
-            children: [
-              Expanded(
-                child: _Cell(
-                  label: 'Клиппинг',
-                  value: sq?.clipping == true ? '⚠ ПЕРЕГРУЗ' : 'нет',
-                  valueColor:
-                      sq?.clipping == true ? Colors.red.shade300 : null,
-                ),
+        // ── Row 4: clipping + noise ────────────────────────────────────────────
+        Row(
+          children: [
+            Expanded(
+              child: _Cell(
+                label: 'КЛИППИНГ',
+                value: sq?.clipping == true ? '⚠ ПЕРЕГРУЗ' : 'нет',
+                valueColor: sq?.clipping == true ? AppTheme.danger : null,
               ),
-              Expanded(
-                child: _Cell(
-                  label: 'Шум',
-                  value: _noiseLabel(sq?.noiseLevel),
-                ),
+            ),
+            Expanded(
+              child: _Cell(
+                label: 'ШУМ',
+                value: _noiseLabel(sq?.noiseLevel),
               ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  String _noiseLabel(String? level) {
+  static String _noiseLabel(String? level) {
     switch (level) {
       case 'low':
         return 'низкий';
@@ -496,6 +460,133 @@ class _InfoTable extends StatelessWidget {
   }
 }
 
+// ── Animated BPM display ──────────────────────────────────────────────────────
+//
+// Beat glow: ListenableBuilder on VizController.beatDecay (PCM chunk RMS).
+// Fast attack (immediate), ~200 ms decay — driven by real audio transients.
+// No timer, no fake pulse. (Phase 6 unchanged.)
+//
+// Confidence bar: TweenAnimationBuilder<double> targeting DspResult.confidence.
+// Animates over 500 ms so the bar glides smoothly to new values.
+//
+// isLockingDisplay dims the BPM text to 54 % opacity during LOCKING.
+
+class _AnimatedBpmDisplay extends StatelessWidget {
+  const _AnimatedBpmDisplay({
+    required this.bpm,
+    required this.confidence,
+    required this.viz,
+    this.isLockingDisplay = false,
+  });
+
+  final double? bpm;
+  final double confidence;
+  final VizController viz;
+  final bool isLockingDisplay;
+
+  @override
+  Widget build(BuildContext context) {
+    final bpmText = bpm == null ? '—' : bpm!.toStringAsFixed(1);
+    final baseColor =
+        isLockingDisplay ? AppTheme.textPrimary.withAlpha(138) : AppTheme.textPrimary;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // BPM number with beat-reactive accent glow.
+        // AnimatedSwitcher crossfades when the text changes (e.g. "195.9" ↔ "—")
+        // so state transitions don't appear as instant flashes.
+        RepaintBoundary(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeIn,
+            switchOutCurve: Curves.easeOut,
+            transitionBuilder: (child, anim) =>
+                FadeTransition(opacity: anim, child: child),
+            child: ListenableBuilder(
+              key: ValueKey(bpmText),
+              listenable: viz,
+              builder: (_, __) {
+                final g = viz.beatDecay;
+                final style = AppTheme.mono(
+                  fontSize: 52,
+                  color: baseColor,
+                  weight: FontWeight.w800,
+                  height: 1.0,
+                );
+                return Text(
+                  bpmText,
+                  style: g > 0.04
+                      ? style.copyWith(
+                          shadows: [
+                            Shadow(
+                              color: AppTheme.accent.withAlpha(
+                                  (g * 0.9 * 255).round().clamp(0, 255)),
+                              blurRadius: 6.0 + g * 26.0,
+                            ),
+                          ],
+                        )
+                      : style,
+                );
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 3),
+        // Confidence progress bar — grey → accent, smoothly animated.
+        TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.0, end: confidence),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOut,
+          builder: (_, c, __) => SizedBox(
+            width: 128,
+            height: 2,
+            child: CustomPaint(painter: _ConfidenceBarPainter(c)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Confidence bar ────────────────────────────────────────────────────────────
+
+class _ConfidenceBarPainter extends CustomPainter {
+  const _ConfidenceBarPainter(this.level);
+  final double level;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rr = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      const Radius.circular(1),
+    );
+    canvas.drawRRect(rr, Paint()..color = const Color(0x22FFFFFF));
+
+    if (level > 0) {
+      final filled = RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, size.width * level, size.height),
+        const Radius.circular(1),
+      );
+      canvas.drawRRect(
+        filled,
+        Paint()
+          ..color = Color.lerp(
+            AppTheme.textSecondary,
+            AppTheme.accent,
+            level,
+          )!,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ConfidenceBarPainter old) => level != old.level;
+}
+
+// ── Metric cell ───────────────────────────────────────────────────────────────
+
 class _Cell extends StatelessWidget {
   const _Cell({required this.label, required this.value, this.valueColor});
   final String label;
@@ -510,17 +601,17 @@ class _Cell extends StatelessWidget {
         Text(
           label,
           style: const TextStyle(
-            fontSize: 10,
-            color: Colors.white38,
-            letterSpacing: 1.0,
+            fontSize: 9,
+            color: AppTheme.textDim,
+            letterSpacing: 1.2,
           ),
         ),
         const SizedBox(height: 2),
         Text(
           value,
-          style: _kMono.copyWith(
+          style: AppTheme.mono(
             fontSize: 13,
-            color: valueColor ?? Colors.white70,
+            color: valueColor ?? AppTheme.textPrimary,
           ),
         ),
       ],
@@ -528,7 +619,10 @@ class _Cell extends StatelessWidget {
   }
 }
 
-// ── Lock badge ────────────────────────────────────────────────────────────────
+// ── Lock state badge ──────────────────────────────────────────────────────────
+//
+// Pill-shaped badge that fades between states via AnimatedSwitcher.
+// The child carries ValueKey<LockState>(state) so the switcher detects changes.
 
 class _LockBadge extends StatelessWidget {
   const _LockBadge({required this.state});
@@ -536,40 +630,68 @@ class _LockBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (label, bg) = _scheme(state);
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: _BadgePill(state: state, key: ValueKey(state)),
+    );
+  }
+}
+
+class _BadgePill extends StatelessWidget {
+  const _BadgePill({required this.state, super.key});
+  final LockState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, bg, fg) = _scheme(state);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration:
-          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
-          letterSpacing: 0.8,
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: fg, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: fg,
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  (String, Color) _scheme(LockState s) {
+  static (String, Color, Color) _scheme(LockState s) {
     switch (s) {
       case LockState.stable:
-        return ('стабильно', const Color(0xFF2E7D32));
+        return ('стабильно', AppTheme.successDim, AppTheme.success);
       case LockState.locking:
-        return ('захват', const Color(0xFFF57F17));
+        return ('захват', AppTheme.warningDim, AppTheme.warning);
       case LockState.unstable:
-        return ('нестабильно', const Color(0xFFE65100));
+        return ('нестабильно', AppTheme.warningDim, AppTheme.warning);
       case LockState.breakdown:
-        return ('брейк', const Color(0xFF1565C0));
+        return ('брейк', AppTheme.accentDim, AppTheme.accent);
       case LockState.clippedMic:
-        return ('перегруз микрофона', const Color(0xFFC62828));
+        return ('перегруз', AppTheme.dangerDim, AppTheme.danger);
       case LockState.noiseOnly:
-        return ('только шум', const Color(0xFF4A148C));
+        return ('только шум', AppTheme.noiseDim, AppTheme.noisePurple);
       case LockState.searching:
       case LockState.unknown:
-        return ('поиск', const Color(0xFF37474F));
+        return ('поиск', AppTheme.surfaceHigh, AppTheme.textDim);
     }
   }
 }
@@ -584,15 +706,18 @@ class _ErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(10),
-      color: const Color(0xFF7F0000),
+      color: AppTheme.danger.withAlpha(60),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, color: Colors.white70, size: 16),
+          const Icon(Icons.error_outline, color: AppTheme.danger, size: 16),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Ошибка захвата: ${error.message}',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
