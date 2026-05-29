@@ -219,17 +219,22 @@ interface DspDebug {
 
 ### Решение A: state-based адаптивный срез
 
-При каждом вызове `analyze()` движок берёт не полную `onset_history`, а срез, ограниченный эффективным окном, зависящим от предыдущего состояния захвата:
+При каждом вызове `analyze()` движок берёт не полную `onset_history`, а срез, ограниченный эффективным окном. Размер зависит от двух факторов: (1) был ли движок хотя бы раз в `STABLE` (поле `has_ever_been_stable`), (2) предыдущего состояния захвата (`prev_lock_state`):
 
-| Состояние (`prev_lock_state`) | Эффективное окно автокорреляции |
+| Условие | Эффективное окно автокорреляции |
 | --- | --- |
-| `STABLE` или `None` (старт) | полная история (`analysis_window_seconds`) |
-| `LOCKING` | min(полная, `ADAPTIVE_WINDOW_LOCKING_SECS` = 6.0 с) |
-| `SEARCHING` / `UNSTABLE` / `BREAKDOWN` / `NOISE_ONLY` / `CLIPPED_MIC` | min(полная, `ADAPTIVE_WINDOW_SEARCHING_SECS` = 2.0 с) |
+| `has_ever_been_stable == false` (первый захват, никогда не достигали STABLE) | **полная история** — независимо от состояния |
+| `has_ever_been_stable == true` + `STABLE` или `None` | полная история (`analysis_window_seconds`) |
+| `has_ever_been_stable == true` + `LOCKING` | min(полная, `ADAPTIVE_WINDOW_LOCKING_SECS` = 6.0 с) |
+| `has_ever_been_stable == true` + `SEARCHING` / `UNSTABLE` / `BREAKDOWN` / `NOISE_ONLY` / `CLIPPED_MIC` | min(полная, `ADAPTIVE_WINDOW_SEARCHING_SECS` = 2.0 с) |
+
+Ключевой инвариант: **адаптивное усечение применяется только при повторном захвате** (после уже достигнутого STABLE). При первом захвате (флаг `false`) всегда используется полная история. Это обеспечивает ~25–50 ударов для надёжного пика автокорреляции и уверенности ≥ 0.72 на первом захвате.
 
 Буфер `onset_history` не усекается — только срез для автокорреляции. Это сохраняет полное состояние при возвращении в `STABLE`.
 
 Поведение управляется флагом `DspConfig.adaptive_window` (default: `true`). При `false` движок всегда использует полную историю (режим совместимости для тестов parity).
+
+**Phase 8.1 regression fix (2026-05-29):** До этого фикса adaptive_window усекал onset_history до `ADAPTIVE_WINDOW_SEARCHING_SECS = 2.0 с` при состоянии SEARCHING — включая первый захват, когда `has_ever_been_stable == false`. Это означало, что к t=8s накоплено 8 секунд истории, но анализируются только последние 2 с (~5–8 ударов) → слабый пик автокорреляции → confidence < 0.72 → STABLE недостижим. Фикс добавляет поле `has_ever_been_stable: bool` в `DspEngine`: выставляется в `true` при первом STABLE и никогда не сбрасывается в `false`. При `false` — полная история; при `true` — адаптивное окно работает штатно для fast re-lock.
 
 ### Решение C: tempo jump detector
 
@@ -254,23 +259,31 @@ RELOCK_CONFIRM_FRAMES          = 1
 
 ### Конфигурация
 
-Два поля добавлены в `DspConfig`:
+Два поля в `DspConfig` (введены в Phase 4.5):
 
 ```rust
 pub adaptive_window: bool,       // default: true
 pub tempo_jump_threshold: f32,   // default: 15.0 BPM
 ```
 
-Оба поля имеют значения по умолчанию через `Default`; существующий код, создающий `DspConfig::default()`, не требует изменений.
+Поле `has_ever_been_stable` в `DspEngine` (введено в Phase 8.1):
+
+```rust
+has_ever_been_stable: bool,  // default: false; выставляется в true при первом STABLE
+```
+
+Все поля имеют значения по умолчанию через `Default`; существующий код не требует изменений.
 
 ### Результат
 
-Re-lock после смены трека (смена темпа > 10 BPM) сокращён с 6–8 сек (до Phase 4) до ≤ 3 сек. Регрессионное покрытие в `core/dsp/tests/streaming.rs` включает 6 новых тестов:
+Re-lock после смены трека (смена темпа > 10 BPM) сокращён с 6–8 сек (до Phase 4) до ≤ 3 сек. Первый захват достигает STABLE за ≤ 12 сек на чистом синтетическом входе. Регрессионное покрытие в `core/dsp/tests/streaming.rs` включает 8 новых тестов (6 для fast re-lock + 2 для first-lock фикса):
 
 - `tempo_change_185_to_200` — перезахват 200 BPM после 185 BPM в пределах 3 сек.
 - `tempo_change_200_to_170` — перезахват 170 BPM после 200 BPM в пределах 3 сек.
-- `no_false_stable_during_transition` — состояние захвата проходит через не-`STABLE` фазу при смене темпа (не молчит и не подменяет числа).
+- `no_false_stable_during_transition` — состояние захвата проходит через не-`STABLE` фазу при смене темпа.
 - Три дополнительных кейса на граничные значения порога прыжка.
+- `first_lock_uses_full_window_no_prior_stable` — первый захват достигает STABLE за ≤ 12 сек с `adaptive_window: true`.
+- `relock_adaptive_window_still_fast_after_stable` — ре-лок после смены трека по-прежнему ≤ 3 сек.
 
 ### Известные ограничения
 
