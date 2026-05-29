@@ -898,3 +898,96 @@ fn force_next_searching_overrides_stable_on_tempo_jump() {
          (last_stable_bpm должен быть сброшен при jump, иначе feedback loop)"
     );
 }
+
+/// При первом захвате (has_ever_been_stable == false) движок должен
+/// достигать STABLE в пределах stable_min_seconds — даже при включённом
+/// адаптивном окне.
+///
+/// Регрессионный тест для фикса Phase 8: до фикса adaptive_window обрезал
+/// onset_history до 2 с при SEARCHING, что при первом захвате давало лишь
+/// 5–8 ударов → уверенность < 0.72 → LOCKING не переходил в STABLE.
+#[test]
+fn first_lock_uses_full_window_no_prior_stable() {
+    let config = DspConfig {
+        adaptive_window: true, // включено явно — проверяем именно этот путь
+        ..DspConfig::default()
+    };
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize; // 100 мс
+    let samples = pulse_track(200.0, config.stable_min_seconds, 0.9);
+
+    let mut engine = DspEngine::new(config);
+    let mut stable_at: Option<f32> = None;
+    let mut fed = 0usize;
+
+    for chunk in samples.chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_sec = fed as f32 / SAMPLE_RATE as f32;
+        let result = engine.analyze();
+        if matches!(result.lock_state, LockState::Stable) && stable_at.is_none() {
+            stable_at = Some(elapsed_sec);
+        }
+    }
+
+    let stable_time = stable_at.expect(
+        "движок обязан достичь STABLE на чистом 200 BPM пульсе при первом захвате \
+         (регрессия: adaptive_window 2 с при SEARCHING блокировал first lock)",
+    );
+    assert!(
+        stable_time <= config.stable_min_seconds,
+        "первый захват STABLE на {stable_time:.2}s превысил stable_min_seconds={}s",
+        config.stable_min_seconds
+    );
+}
+
+/// Ре-лок после смены трека по-прежнему происходит за ≤ 3 с при включённом
+/// адаптивном окне — проверяем, что фикс has_ever_been_stable не сломал
+/// быстрый повторный захват.
+#[test]
+fn relock_adaptive_window_still_fast_after_stable() {
+    let config = DspConfig::default(); // adaptive_window: true
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+    let mut engine = DspEngine::new(config);
+
+    // Шаг 1: захватить STABLE на 180 BPM (~14 с достаточно).
+    for chunk in pulse_track(180.0, 14.0, 0.9).chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+    }
+    let pre = engine.analyze();
+    assert_eq!(
+        pre.lock_state,
+        LockState::Stable,
+        "движок должен достичь STABLE на 180 BPM перед тестом ре-лока"
+    );
+
+    // Шаг 2: подать новый трек 200 BPM и замерить время до следующего STABLE.
+    let relock_budget_sec = 3.0_f32;
+    let relock_samples = pulse_track(200.0, relock_budget_sec + 2.0, 0.9);
+    let mut relocked_at: Option<f32> = None;
+    let mut fed = 0usize;
+
+    for chunk in relock_samples.chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_sec = fed as f32 / SAMPLE_RATE as f32;
+        let result = engine.analyze();
+        if let Some(bpm) = result.primary_bpm {
+            if matches!(result.lock_state, LockState::Stable)
+                && (bpm - 200.0).abs() <= 3.0
+                && relocked_at.is_none()
+            {
+                relocked_at = Some(elapsed_sec);
+            }
+        }
+    }
+
+    let relock_time = relocked_at.expect(
+        "движок должен перезахватить 200 BPM после смены трека с 180 BPM \
+         (adaptive_window должен по-прежнему ускорять ре-лок)",
+    );
+    assert!(
+        relock_time <= relock_budget_sec,
+        "ре-лок занял {relock_time:.2}s, превысив бюджет {relock_budget_sec}s — \
+         адаптивное окно перестало работать после фикса has_ever_been_stable"
+    );
+}

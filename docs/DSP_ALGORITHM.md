@@ -224,7 +224,7 @@ interface DspDebug {
 | Состояние (`prev_lock_state`) | Эффективное окно автокорреляции |
 | --- | --- |
 | `STABLE` или `None` (старт) | полная история (`analysis_window_seconds`) |
-| `LOCKING` | min(полная, `ADAPTIVE_WINDOW_LOCKING_SECS` = 4.0 с) |
+| `LOCKING` | min(полная, `ADAPTIVE_WINDOW_LOCKING_SECS` = 6.0 с) |
 | `SEARCHING` / `UNSTABLE` / `BREAKDOWN` / `NOISE_ONLY` / `CLIPPED_MIC` | min(полная, `ADAPTIVE_WINDOW_SEARCHING_SECS` = 2.0 с) |
 
 Буфер `onset_history` не усекается — только срез для автокорреляции. Это сохраняет полное состояние при возвращении в `STABLE`.
@@ -243,12 +243,14 @@ interface DspDebug {
 Константы в `core/dsp/src/lib.rs`:
 
 ```
-ADAPTIVE_WINDOW_LOCKING_SECS   = 4.0
+ADAPTIVE_WINDOW_LOCKING_SECS   = 6.0  // Phase 8: исправлено с 4.0 → 6.0
 ADAPTIVE_WINDOW_SEARCHING_SECS = 2.0
 RELOCK_WINDOW_SECS             = 2.0
 RELOCK_BPM_SHIFT_THRESHOLD     = 10.0
 RELOCK_CONFIRM_FRAMES          = 1
 ```
+
+**Phase 8 regression fix (2026-05-29):** `ADAPTIVE_WINDOW_LOCKING_SECS` увеличено с 4.0 до 6.0 секунд. При 4.0 с движок получал только ~13 ударов при 200 BPM, что давало confidence ~0.68 — ниже порога 0.72 для перехода в STABLE. Это вызывало зависание в состоянии LOCKING с низкой уверенностью. 6.0 с совпадает с `lock_min_seconds` (default 6.0) и даёт ~20 ударов → confidence ≥ 0.72 → успешный переход в STABLE.
 
 ### Конфигурация
 

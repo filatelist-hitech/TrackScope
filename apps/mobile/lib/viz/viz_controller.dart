@@ -19,6 +19,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart' show Color, Paint;
 import 'package:fftea/fftea.dart';
 
+import 'waveform_column.dart';
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const _kFftSize = 1024;
@@ -211,6 +213,15 @@ class VizController extends ChangeNotifier {
   /// Read-only view used by SpectrogramPainter.
   List<Int32List> get specCols => _specCols;
 
+  // Bar waveform: ring of band-split energy columns for WaveformColumnPainter.
+  // Updated every FFT hop — same cadence as spectrogram, no extra FFT.
+  final List<WaveformColumn> _waveColBuffer = [];
+  List<WaveformColumn> _waveColumns = const <WaveformColumn>[];
+
+  /// Band-split energy columns for the bar waveform (WaveformColumnPainter).
+  /// Identity-replaced each FFT hop so shouldRepaint() fires correctly.
+  List<WaveformColumn> get waveColumns => _waveColumns;
+
   /// Downsampled PCM slice for WaveformPainter (300 points).
   List<double> _waveCache = const [];
   List<double> get waveCache => _waveCache;
@@ -319,6 +330,31 @@ class VizController extends ChangeNotifier {
       while (_specCols.length > _kMaxCols) {
         _specCols.removeAt(0);
       }
+
+      // ── Bar waveform columns ─────────────────────────────────────────────
+      // Compute band-split energy from the same mags[] — no extra FFT.
+      // Band boundaries (bin_hz ≈ 46.875 Hz at 48 kHz / 1024):
+      //   bass : bins  0– 6 (  0– 328 Hz)
+      //   mid  : bins  7–63 (329–2953 Hz)
+      //   high : bins 64–127 (up to _kDisplayBins)
+      var bassE = 0.0;
+      var midE = 0.0;
+      var highE = 0.0;
+      for (var i = 0; i <= 6; i++) { bassE += mags[i]; }
+      for (var i = 7; i <= 63; i++) { midE += mags[i]; }
+      for (var i = 64; i < _kDisplayBins; i++) { highE += mags[i]; }
+      final totalE = bassE + midE + highE;
+      final colAmp = (colMax / _adaptiveMaxMag).clamp(0.0, 1.0);
+      _waveColBuffer.add(WaveformColumn(
+        amplitude: colAmp,
+        bassWeight: totalE > 0 ? (bassE / totalE).clamp(0.0, 1.0) : 0.0,
+        midWeight: totalE > 0 ? (midE / totalE).clamp(0.0, 1.0) : 0.0,
+        highWeight: totalE > 0 ? (highE / totalE).clamp(0.0, 1.0) : 0.0,
+      ));
+      while (_waveColBuffer.length > _kMaxCols) {
+        _waveColBuffer.removeAt(0);
+      }
+      _waveColumns = List<WaveformColumn>.unmodifiable(_waveColBuffer);
       // ── Animated spectrum bars ────────────────────────────────────────────
       // Group linear FFT bins into log-spaced bars (30 Hz → 6 kHz),
       // apply fast-attack / slow-decay envelope (~300 ms at 20 fps).
@@ -385,6 +421,8 @@ class VizController extends ChangeNotifier {
   void reset() {
     _pcmQueue.clear();
     _specCols.clear();
+    _waveColBuffer.clear();
+    _waveColumns = const <WaveformColumn>[];
     _waveCache = const [];
     _newSampleCount = 0;
     _beatDecay = 0.0;

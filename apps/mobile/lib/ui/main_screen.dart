@@ -1,14 +1,14 @@
 // Главный экран BPM-радара — Phase 7 premium design.
 //
 // Layout (top to bottom):
-//   • 35 % — WaveformView: oscilloscope rolling PCM waveform (bpm pulse visible).
+//   • 35 % — WaveformView: Traktor DJ–style bar waveform (band-split energy columns).
 //   • 22 % — LiveSpectrumView: current FFT frame as smooth curve + gradient fill
 //             + peak-hold ticks.
 //   • 43 % — GlassmorphismCard: DspResult info (BPM, badge, confidence, etc.)
 //             with BackdropFilter blur + semi-transparent surface.
 //
 // VizController computes a single FFT per audio hop (~50 ms) and publishes:
-//   • waveCache (300 PCM samples) → WaveformPainter
+//   • waveColumns (band-split energy ring) → WaveformColumnPainter
 //   • latestNorms / peakHoldValues → LiveSpectrumPainter
 // Anti-fake: no BPM maths here.
 //
@@ -27,7 +27,7 @@ import '../capture/capture_bridge.dart';
 import '../dsp/dsp_result.dart';
 import '../viz/live_spectrum_painter.dart';
 import '../viz/viz_controller.dart';
-import '../viz/waveform_painter.dart';
+import '../viz/waveform_painter.dart' show WaveformColumnPainter;
 import 'design_tokens.dart';
 
 // ── MainScreen ────────────────────────────────────────────────────────────────
@@ -132,11 +132,7 @@ class _MainScreenState extends State<MainScreen> {
                 Expanded(
                   flex: 35,
                   child: RepaintBoundary(
-                    child: _WaveformView(
-                      viz: _viz,
-                      isClipping:
-                          result?.signalQuality.clipping ?? false,
-                    ),
+                    child: _WaveformView(viz: _viz),
                   ),
                 ),
 
@@ -175,24 +171,19 @@ class _MainScreenState extends State<MainScreen> {
 // ── Waveform / oscilloscope view ──────────────────────────────────────────────
 
 class _WaveformView extends StatelessWidget {
-  const _WaveformView({required this.viz, required this.isClipping});
+  const _WaveformView({required this.viz});
   final VizController viz;
-  final bool isClipping;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: viz,
       builder: (_, __) {
-        if (viz.waveCache.isEmpty) {
+        if (viz.waveColumns.isEmpty) {
           return const _Placeholder(label: 'Ожидание микрофона…');
         }
         return CustomPaint(
-          painter: WaveformPainter(
-            samples: viz.waveCache,
-            accentColor: AppTheme.accent,
-            isClipping: isClipping,
-          ),
+          painter: WaveformColumnPainter(columns: viz.waveColumns),
           child: const SizedBox.expand(),
         );
       },

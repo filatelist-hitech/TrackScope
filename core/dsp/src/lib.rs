@@ -189,6 +189,14 @@ pub struct DspEngine {
     /// При `true` следующий `analyze()` форсирует SEARCHING вместо UNSTABLE,
     /// независимо от текущего скора кандидата. Сбрасывается после применения.
     force_next_searching: bool,
+    /// Выставляется в `true` при первом достижении STABLE и никогда не
+    /// сбрасывается в `false` (в отличие от `last_stable_bpm`).
+    /// Используется для гейтирования адаптивного окна: при первом захвате
+    /// (флаг `false`) всегда берётся полная onset-история — 8–12 сек
+    /// (~25–50 ударов) дают надёжный пик автокорреляции и уверенность ≥ 0.72.
+    /// После первого STABLE флаг становится `true`, и адаптивное окно
+    /// начинает работать штатно для ускорения повторного захвата.
+    has_ever_been_stable: bool,
     hop_size: usize,
     frame_size: usize,
     pcm_capacity: usize,
@@ -227,11 +235,11 @@ const RELOCK_CONFIRM_FRAMES: u32 = 1;
 // по состоянию захвата. Используются только при `config.adaptive_window == true`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Размер хвостового среза в LOCKING: 4 секунды.
-/// 4 с = 16–24 периода для 170–230 BPM → достаточно для надёжного пика
-/// автокорреляции, но короче полного 12-секундного окна → новый темп
-/// начинает доминировать раньше.
-const ADAPTIVE_WINDOW_LOCKING_SECS: f32 = 4.0;
+/// Размер хвостового среза в LOCKING: 6 секунд.
+/// Совпадает с lock_min_seconds (default 6.0). 6 с = ~20 ударов при 200 BPM →
+/// достаточно для уверенности ≥ 0.72 и перехода в STABLE. Было 4.0 с в Phase 4.5 —
+/// регрессия: только ~13 ударов → confidence ~0.68, застревание в LOCKING.
+const ADAPTIVE_WINDOW_LOCKING_SECS: f32 = 6.0;
 
 /// Размер хвостового среза в SEARCHING/UNSTABLE: 2 секунды.
 /// Совпадает с RELOCK_WINDOW_SECS — обеспечивает согласованность:
@@ -263,6 +271,7 @@ impl DspEngine {
             last_stable_bpm: None,
             tempo_shift_counter: 0,
             force_next_searching: false,
+            has_ever_been_stable: false,
             hop_size,
             frame_size,
             pcm_capacity,
@@ -460,10 +469,21 @@ impl DspEngine {
         // к STABLE после кратковременного UNSTABLE.
         // ─────────────────────────────────────────────────────────────────
         let raw_envelope: Vec<f32> = if self.config.adaptive_window && self.hop_sec > 0.0 {
-            let effective_secs: Option<f32> = match self.prev_lock_state {
-                Some(LockState::Stable) | None => None, // полная история
-                Some(LockState::Locking) => Some(ADAPTIVE_WINDOW_LOCKING_SECS),
-                Some(_) => Some(ADAPTIVE_WINDOW_SEARCHING_SECS),
+            let effective_secs: Option<f32> = if !self.has_ever_been_stable {
+                // Первый захват: ни разу не достигали STABLE.
+                // Используем полную историю — 8–12 с даёт ~25–50 ударов для
+                // надёжного пика автокорреляции и уверенности ≥ 0.72.
+                // Адаптивное усечение в 2 с при SEARCHING сломало бы первый
+                // захват: только 5–8 ударов → слабый пик → confidence < 0.72.
+                None
+            } else {
+                // Повторный захват после смены трека: адаптивное окно
+                // ограничивает анализ свежими онсетами нового темпа.
+                match self.prev_lock_state {
+                    Some(LockState::Stable) | None => None,
+                    Some(LockState::Locking) => Some(ADAPTIVE_WINDOW_LOCKING_SECS),
+                    Some(_) => Some(ADAPTIVE_WINDOW_SEARCHING_SECS),
+                }
             };
             if let Some(secs) = effective_secs {
                 let tail_frames = (secs / self.hop_sec).round() as usize;
@@ -529,6 +549,7 @@ impl DspEngine {
         // заметной задержки смены темпа: буфер очищается на первом не-STABLE
         // кадре, поэтому новый захват начинается с нуля.
         if result.lock_state == LockState::Stable {
+            self.has_ever_been_stable = true;
             if let Some(bpm) = result.primary_bpm {
                 self.bpm_history.push_back(bpm);
                 while self.bpm_history.len() > BPM_HISTORY_N {
@@ -562,6 +583,7 @@ impl DspEngine {
         self.last_stable_bpm = None;
         self.tempo_shift_counter = 0;
         self.force_next_searching = false;
+        self.has_ever_been_stable = false;
     }
 
     fn observed_seconds(&self) -> f32 {

@@ -6,9 +6,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **DSP regression (Phase 8, 2026-05-29):** Исправлено зависание в состоянии LOCKING с низкой уверенностью (~30–50%) на стабильных треках. Корневая причина: `ADAPTIVE_WINDOW_LOCKING_SECS` был установлен в 4.0 с (Phase 4.5), что давало только ~13 ударов при 200 BPM → confidence ~0.68, ниже порога 0.72 для STABLE. Увеличено до 6.0 с (совпадает с `lock_min_seconds`), теперь ~20 ударов → confidence ≥ 0.72 → успешный переход в STABLE за ≤12 секунд. (core/dsp/src/lib.rs:242)
+
 ### Changed
+
+- **Waveform visualization (Phase 8, 2026-05-29):** Подтверждено соответствие спецификации Traktor DJ bar-column style — острые вертикальные прямоугольные колонки (drawRect), цветовой градиент по bass-энергии (0xFF003D35 → 0xFF00E5CC), без пунктирных линий. Реализация уже корректна с Phase 7. (apps/mobile/lib/viz/waveform_painter.dart, apps/mobile/lib/viz/waveform_column.dart)
+
 - **DSP fast re-lock v2**: re-lock after track change now ≤ 3 s (was 6–8 s)
-  - State-based adaptive analysis window: STABLE=full history, LOCKING=4 s, SEARCHING/UNSTABLE=2 s
+  - State-based adaptive analysis window: STABLE=full history, LOCKING=6 s (updated from 4 s), SEARCHING/UNSTABLE=2 s
   - Tempo jump detector: threshold 15 BPM triggers `bpm_history` reset + force SEARCHING
   - New `DspConfig` fields: `adaptive_window` (default `true`), `tempo_jump_threshold` (default `15.0`)
   - 6 new streaming regression tests including `tempo_change_185_to_200`, `tempo_change_200_to_170`, `no_false_stable_during_transition`
