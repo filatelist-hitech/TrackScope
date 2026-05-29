@@ -55,6 +55,11 @@ const _kBarMinFreq = 30.0;
 /// Highest frequency for log-spaced bar grouping (Hz).
 const _kBarMaxFreq = 6000.0;
 
+/// Peak-hold column count for the live-spectrum panel.
+/// At ~20 fps (one FFT per 50 ms hop): 30 columns ≈ 1.5 seconds.
+/// After the hold window expires, the value decays by ×0.90 per column.
+const _kPeakHoldCols = 30;
+
 /// Sample rate assumed for bar-to-bin mapping (must match the audio source).
 const _kBarSampleRate = 48000.0;
 
@@ -162,6 +167,28 @@ class VizController extends ChangeNotifier {
   /// 48 smoothed bar heights in [0, 1], fast attack / ~300 ms decay.
   /// Replaced on every FFT column — use identity check in shouldRepaint.
   List<double> get smoothedBars => _smoothedBars;
+
+  // ── Live-spectrum data ─────────────────────────────────────────────────────
+  // Fixed-dBFS normalized magnitudes and peak-hold for LiveSpectrumPainter.
+  // These use _kRefMag / _kFloorDb directly — NOT _adaptiveMaxMag — so the
+  // Y-axis represents absolute signal levels rather than drifting with gain.
+  final _latestNormData = List<double>.filled(_kFftSize ~/ 2, 0.0);
+  final _peakHoldData = List<double>.filled(_kFftSize ~/ 2, 0.0);
+  final _peakHoldCounter = List<int>.filled(_kFftSize ~/ 2, 0);
+
+  List<double> _latestNorms = const <double>[];
+  List<double> _peakHoldValues = const <double>[];
+
+  /// Latest FFT column as fixed-dBFS normalized [0..1] values (512 bins,
+  /// 0 Hz to 24 kHz at 48 kHz sample rate). Updated every FFT hop (~50 ms).
+  /// Empty before the first audio chunk arrives. Identity-replaced each hop
+  /// so LiveSpectrumPainter.shouldRepaint() fires correctly.
+  List<double> get latestNorms => _latestNorms;
+
+  /// Per-bin peak-hold values in [0..1]. Each bin tracks the maximum
+  /// latestNorms value seen in the last _kPeakHoldCols columns (~1.5 s),
+  /// then decays by ×0.90 per column until a new peak resets it.
+  List<double> get peakHoldValues => _peakHoldValues;
 
   // Beat energy: chunk RMS with fast-attack / slow-decay envelope.
   // Driven exclusively by incoming PCM — reflects real audio transients.
@@ -306,6 +333,33 @@ class VizController extends ChangeNotifier {
       // Publish an immutable snapshot so shouldRepaint(identical) fires.
       _smoothedBars = List<double>.unmodifiable(_barSmoothData);
 
+      // ── Live-spectrum: fixed-dBFS norms (third FFT consumer) ─────────────
+      // Uses _kRefMag and _kFloorDb, NOT adaptive _adaptiveMaxMag, so the
+      // Y-axis represents absolute signal levels rather than drifting.
+      // @dspman confirmed: fixed reference is correct for a live spectrum
+      // whose purpose is to show "what the sound looks like now" in dBFS.
+      const halfBins = _kFftSize ~/ 2;
+      for (var i = 0; i < halfBins; i++) {
+        final mag = mags[i];
+        final db = mag > 0
+            ? 20.0 * math.log(mag / _kRefMag) / math.ln10
+            : _kFloorDb;
+        _latestNormData[i] = ((db - _kFloorDb) / (-_kFloorDb)).clamp(0.0, 1.0);
+      }
+      // ── Peak hold (pure display artifact — 30-column decay ~1.5 s) ───────
+      for (var i = 0; i < halfBins; i++) {
+        if (_latestNormData[i] >= _peakHoldData[i]) {
+          _peakHoldData[i] = _latestNormData[i];
+          _peakHoldCounter[i] = _kPeakHoldCols;
+        } else if (_peakHoldCounter[i] > 0) {
+          _peakHoldCounter[i]--;
+        } else {
+          _peakHoldData[i] = (_peakHoldData[i] * 0.90).clamp(0.0, 1.0);
+        }
+      }
+      _latestNorms = List<double>.unmodifiable(_latestNormData);
+      _peakHoldValues = List<double>.unmodifiable(_peakHoldData);
+
       notifyListeners();
     } catch (_) {
       // FFT failure is non-fatal — skip this column.
@@ -335,6 +389,12 @@ class VizController extends ChangeNotifier {
     _adaptiveMaxMag = _kRefMag;
     _barSmoothData.fillRange(0, _kBarCount, 0.0);
     _smoothedBars = const <double>[];
+    const halfBins = _kFftSize ~/ 2;
+    _latestNormData.fillRange(0, halfBins, 0.0);
+    _latestNorms = const <double>[];
+    _peakHoldData.fillRange(0, halfBins, 0.0);
+    _peakHoldCounter.fillRange(0, halfBins, 0);
+    _peakHoldValues = const <double>[];
     notifyListeners();
   }
 

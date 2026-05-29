@@ -15,6 +15,10 @@ dependencies:
   # Pure-Dart FFT for the Dart-side spectrogram visualisation. No platform
   # channels — safe to call from any isolate. Added Phase 5 UI.
   fftea: ^1.5.0
+  # JetBrains Mono for BPM numerals and numeric metrics (Phase 7 design system).
+  # Pure-Dart, no platform channel — safe in any isolate. google_fonts 6.x
+  # is compatible with Flutter 3.44 / Dart 3.12.
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:

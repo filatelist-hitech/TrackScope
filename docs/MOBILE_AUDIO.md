@@ -239,4 +239,68 @@ LUT предвычисляется при инициализации `VizControl
 
 - `compute()` спавнит новый Dart-изолят при каждом FFT-вызове (~20/с). На слабых устройствах возможна задержка обновления спектрограммы; при необходимости — замена на персистентный viz-изолят (паттерн аналогичен `dsp_worker.dart`).
 - iOS-симулятор не поддерживает захват микрофона — визуализации будут показывать плейсхолдер; тестировать на реальном устройстве.
-- Волноформа использует поточечную выборку без RMS-усреднения — может выглядеть «зубчато» на очень тихом сигнале.
+- `BackdropFilter` (glassmorphism card) несёт измеримую GPU-стоимость на устройствах со слабым GPU. Оборачивается в `RepaintBoundary` + `ClipRRect`; если производительность критична — заменить на сплошной фон без blur.
+
+---
+
+## Unified FFT Pipeline (Phase 7)
+
+Phase 7 расширяет `VizController._scheduleFFT()` третьим последовательным потребителем FFT без дополнительного вычисления.
+
+### Топология пайплайна
+
+```
+Raw PCM (Float32List)  →  VizController._scheduleFFT()
+                               │
+                  compute()    │  (Dart isolate, ~20 Hz)
+                    ↓ mags: Float64List (512 positive-frequency bins, read-only after return)
+                               │
+              ┌────────────────┼────────────────────────┐
+              ▼                ▼                        ▼
+        specCols          smoothedBars           latestNorms
+    (waterfall ring)   (bar heights for      (normalized dBFS
+     List<Int32List>)   AnimatedBars)          magnitudes [0,1])
+                                                     │
+                                               peakHoldValues
+                                          (per-bin peak [0,1])
+```
+
+Ключевое свойство: **FFT вычисляется ровно один раз за hop**, `mags` — read-only Float64List, который последовательно читают все три потребителя в `_scheduleFFT()` до `notifyListeners()`.
+
+### Параметры FFT
+
+| Параметр | Значение |
+|---|---|
+| FFT size (`_kFftSize`) | 1024 |
+| Частота дискретизации | 48 000 Hz |
+| Положительных бинов | 512 (индексы 0–511) |
+| Разрешение по частоте | 46.9 Hz/bin |
+| Видимый диапазон LiveSpectrum | 20–20 000 Hz (~426 бинов) |
+| Видимый диапазон Spectrogram | 0–6 000 Hz (~128 дисплей-бинов) |
+| Hop size (`_kHopSamples`) | 2400 сэмплов = 50 мс при 48 kHz |
+
+### Нормализация latestNorms (fixed dBFS)
+
+`latestNorms` используют **фиксированный dBFS-референс** (`_kRefMag = 256.0`), а не адаптивный `_adaptiveMaxMag`:
+
+```
+db   = 20 × log₁₀(mag / _kRefMag)          ≈ [-60, 0] dBFS
+norm = (db − floorDb) / (−floorDb)           ∈ [0, 1]
+```
+
+где `floorDb = _kFloorDb` (−60 dBFS). Адаптивная нормализация была отклонена: она дрейфует по оси Y и не отражает абсолютные уровни сигнала.
+
+### Peak hold (display artifact)
+
+`peakHoldValues` — чистый дисплейный артефакт, нигде не используется в DSP:
+
+- Удерживает значение **30 FFT-колонок** (~1.5 с при 20 fps) после нового максимума.
+- После истечения счётчика значение множится на 0.90 каждую колонку — мягкий tail-fade.
+- Счётчик и данные живут в `_peakHoldCounter: List<int>` и `_peakHoldData: List<double>` (оба 512 элементов, 512 × 8 + 512 × 8 = 8 КБ) — аллокации в инициализации, не в горячем пути.
+- Публикуется через `List.unmodifiable(_peakHoldData)` — гарантирует атомарность замены.
+
+### Consumers: SpectrogramPainter и LiveSpectrumPainter
+
+Оба `CustomPainter` подписаны на `VizController` через `ListenableBuilder`. `shouldRepaint` выполняет проверку идентичности списка (`!identical(norms, old.norms)`) — повторная отрисовка пропускается, если указатель не изменился.
+
+`RepaintBoundary` обёрнут вокруг каждого `CustomPaint`-виджета и вокруг glassmorphism-карточки, чтобы update одного не вызывал layout/paint другого.

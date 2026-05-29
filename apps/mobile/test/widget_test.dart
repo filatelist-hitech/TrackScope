@@ -1,7 +1,14 @@
-// UI smoke tests. The mic / FFI path is exercised by
+// UI smoke tests (Phase 7 updated). The mic / FFI path is exercised by
 // `dsp_engine_test.dart`; these tests pump synthetic `DspResult`
 // snapshots into the screens to assert wiring (StreamBuilder, lock
 // badge, candidate visibility) without needing a real mic or device.
+//
+// Phase 7 changes:
+//   • CLIPPED_MIC badge label changed from 'перегруз микрофона' to 'перегруз'.
+//   • Two visualization panels ('Ожидание микрофона…') — assertion updated to
+//     findsWidgets.
+//   • Added smoke tests for all remaining badge states (UNSTABLE, BREAKDOWN,
+//     NOISE_ONLY, LOCKING).
 
 import 'dart:async';
 
@@ -102,6 +109,30 @@ DspResult _clippingSnapshot() => DspResult.fromJson({
       },
     });
 
+/// Generic lock-state snapshot helper for badge smoke tests.
+DspResult _lockSnapshot(String lockState) => DspResult.fromJson({
+      'primary_bpm': null,
+      'confidence': 0.0,
+      'lock_state': lockState,
+      'signal_quality': {
+        'input_level_dbfs': null,
+        'peak_dbfs': null,
+        'clipping': false,
+        'clipped_frame_ratio': 0.0,
+        'noise_level': 'unknown',
+        'snr_estimate_db': null,
+        'silence': false,
+        'breakdown_likely': false,
+      },
+      'candidates': <Map<String, dynamic>>[],
+      'timing': {
+        'analysis_time_sec': 0.0,
+        'window_time_sec': 6.0,
+        'hop_time_sec': 0.0025,
+        'first_lock_time_sec': null,
+      },
+    });
+
 /// Helper: wraps [MainScreen] without a rawPcm stream (simulates pre-mic state).
 Widget _buildMainScreen(
   Stream<DspResult> results,
@@ -133,8 +164,9 @@ void main() {
 
     // No result yet → BPM field shows em-dash placeholder.
     expect(find.text('—'), findsWidgets);
-    // Spectrogram placeholder visible (no rawPcm).
-    expect(find.textContaining('Ожидание микрофона'), findsOneWidget);
+    // Both Spectrogram and LiveSpectrum panels show placeholder (no rawPcm).
+    // Phase 7: two panels → findsWidgets (one or more) rather than findsOneWidget.
+    expect(find.textContaining('Ожидание микрофона'), findsWidgets);
   });
 
   testWidgets(
@@ -184,7 +216,7 @@ void main() {
     expect(find.text('поиск'), findsOneWidget);
   });
 
-  testWidgets('MainScreen shows перегруз микрофона badge for CLIPPED_MIC',
+  testWidgets('MainScreen shows перегруз badge for CLIPPED_MIC',
       (tester) async {
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
@@ -200,12 +232,74 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('перегруз микрофона'), findsOneWidget);
-    // Clipping warning in table.
+    // Phase 7: badge label shortened to 'перегруз'.
+    expect(find.text('перегруз'), findsOneWidget);
+    // Clipping warning in table cell.
     expect(find.textContaining('ПЕРЕГРУЗ'), findsOneWidget);
     // BPM must be null, not a fake number.
     expect(find.text('—'), findsWidgets,
         reason: 'CLIPPED_MIC with null primary_bpm must show placeholder');
+  });
+
+  // ── Phase 7: all 7 badge states smoke tests ────────────────────────────────
+  // Each badge state gets its own test. Verifies correct label text is rendered
+  // with the correct lock_state snapshot. (STABLE and SEARCHING already covered
+  // above; CLIPPED_MIC covered above.)
+
+  testWidgets('MainScreen shows нестабильно badge for UNSTABLE', (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async { await ctrl.close(); await errs.close(); });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+    ctrl.add(_lockSnapshot('UNSTABLE'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('нестабильно'), findsOneWidget);
+  });
+
+  testWidgets('MainScreen shows брейк badge for BREAKDOWN', (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async { await ctrl.close(); await errs.close(); });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+    ctrl.add(_lockSnapshot('BREAKDOWN'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('брейк'), findsOneWidget);
+  });
+
+  testWidgets('MainScreen shows только шум badge for NOISE_ONLY', (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async { await ctrl.close(); await errs.close(); });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+    ctrl.add(_lockSnapshot('NOISE_ONLY'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('только шум'), findsOneWidget);
+  });
+
+  testWidgets('MainScreen shows захват badge for LOCKING', (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async { await ctrl.close(); await errs.close(); });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+    ctrl.add(_lockSnapshot('LOCKING'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('захват'), findsOneWidget);
   });
 
   testWidgets('MainScreen surfaces capture errors from the error stream',

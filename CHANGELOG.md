@@ -6,6 +6,38 @@
 
 ## [Unreleased]
 
+### Phase 7 — UI overhaul: метрическая спектрограмма, live-спектр, design system (2026-05-29)
+
+#### Added
+
+- **`SpectrogramPainter` с метрическими осями** (`apps/mobile/lib/viz/spectrogram_painter.dart`): Y-ось — Hz-метки ([63, 125, 250, 500, 1000, 2000, 4000] Hz) на лог-шкале с горизонтальными gridlines; X-ось — временны́е метки [−8s … 0] с вертикальными gridlines. Курсор «Now» изменён с `Color(0x66FFFFFF)` на `accentColor.withAlpha(153)`. Метка «SPECTROGRAM» в левом верхнем углу.
+
+- **`LiveSpectrumPainter`** (`apps/mobile/lib/viz/live_spectrum_painter.dart`, новый файл): smooth real-time FFT-кривая с gradient fill и peak hold тиками. Логарифмическая X-ось 20 Hz–20 kHz. Получает `latestNorms` и `peakHoldValues` из `VizController`, читает ровно один раз за hop. Метка «LIVE SPECTRUM» в левом верхнем углу.
+
+- **`AppTheme`** (`apps/mobile/lib/ui/design_tokens.dart`, новый файл): централизованные цветовые и типографические константы. Акцент `#00E5CC`, фон `#07070F`, JetBrains Mono через `google_fonts`.
+
+- **`VizController.latestNorms` + `peakHoldValues`** (`apps/mobile/lib/viz/viz_controller.dart`): третий FFT-потребитель в `_scheduleFFT()` — fixed-dBFS нормализация (ref `_kRefMag`, floor `_kFloorDb`). Peak hold: 30 колонок (~1.5 с), decay ×0.90 после истечения. FFT вычисляется ровно один раз за hop.
+
+- **Glassmorphism-карточка** (`apps/mobile/lib/ui/main_screen.dart`): `BackdropFilter(ImageFilter.blur(12, 12))` + `ClipRRect(r=16)` + border `Colors.white.withAlpha(18)`.
+
+- **`AnimatedSwitcher`-бейджи** с `ValueKey<LockState>` — плавный fade 200 мс при смене состояния захвата.
+
+- **JetBrains Mono** (`pubspec.yaml`: `google_fonts: ^6.2.1`) для BPM-числа и числовых метрик.
+
+- **4 новых widget-теста** (`apps/mobile/test/widget_test.dart`): UNSTABLE→'нестабильно', BREAKDOWN→'брейк', NOISE_ONLY→'только шум', LOCKING→'захват'.
+
+#### Changed
+
+- Раскладка главного экрана: `SpectrumBarsPainter (45%) + WaveformPainter (15%)` заменены на `Spectrogram (35%) + LiveSpectrum (22%)`. Info-блок увеличен до 43%.
+
+- Бейдж CLIPPED_MIC: метка изменена с `'перегруз микрофона'` на `'перегруз'` (короче, умещается в pill).
+
+- Все локальные цветовые константы (`_kBg`, `_kSurface`, `_kTeal`) заменены на `AppTheme.*`.
+
+- `RepaintBoundary` обёрнут вокруг `SpectrogramPainter`, `LiveSpectrumPainter` и glassmorphism-карточки.
+
+---
+
 ### Phase 6 — стабилизация BPM-отображения (2026-05-29)
 
 #### Added
