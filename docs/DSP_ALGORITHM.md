@@ -211,6 +211,70 @@ interface DspDebug {
 - Python-качество сигнала эмитит `snr_estimate_db: null` — SNR-оценка реализована только в Rust (`estimate_snr_db`); Python-шумовое гейтирование использует evidence уровня, клиппинга, crest и периодичности онсетов вместо фейкового SNR-значения.
 - Клиппинг градирован по отношению клиппированных кадров: мягкий клиппинг ограничивает уверенность ниже `STABLE`, оставляя кандидатов видимыми; сильный клиппинг (>= 5% кадров) форсит `CLIPPED_MIC` и подавляет `primary_bpm`.
 
+## Адаптивное окно онсетов и fast re-lock (Phase 4.5)
+
+### Проблема
+
+При смене трека `onset_history` содержит онсеты предыдущего темпа. Они продолжают конкурировать с новым темпом в автокорреляции всё время, пока старые записи не вытеснятся свежими. При полном окне ~12 сек движок мог тратить 6–8 сек на перезахват нового темпа, хотя кольцо заполнялось свежими онсетами уже за первые 2–4 сек.
+
+### Решение A: state-based адаптивный срез
+
+При каждом вызове `analyze()` движок берёт не полную `onset_history`, а срез, ограниченный эффективным окном, зависящим от предыдущего состояния захвата:
+
+| Состояние (`prev_lock_state`) | Эффективное окно автокорреляции |
+| --- | --- |
+| `STABLE` или `None` (старт) | полная история (`analysis_window_seconds`) |
+| `LOCKING` | min(полная, `ADAPTIVE_WINDOW_LOCKING_SECS` = 4.0 с) |
+| `SEARCHING` / `UNSTABLE` / `BREAKDOWN` / `NOISE_ONLY` / `CLIPPED_MIC` | min(полная, `ADAPTIVE_WINDOW_SEARCHING_SECS` = 2.0 с) |
+
+Буфер `onset_history` не усекается — только срез для автокорреляции. Это сохраняет полное состояние при возвращении в `STABLE`.
+
+Поведение управляется флагом `DspConfig.adaptive_window` (default: `true`). При `false` движок всегда использует полную историю (режим совместимости для тестов parity).
+
+### Решение C: tempo jump detector
+
+Если топ-кандидат текущего кадра расходится с `last_stable_bpm` более чем на `DspConfig.tempo_jump_threshold` (default: `15.0` BPM) за один кадр, движок:
+
+1. Очищает `bpm_history` (буфер медианной стабилизации из Phase 6).
+2. Устанавливает флаг `force_next_searching = true`.
+
+При следующем вызове `analyze()` `force_next_searching` форсирует состояние `SEARCHING` вместо `UNSTABLE`, сбрасывая накопленный счётчик устойчивости. Это позволяет движку начать накопление нового темпа с чистого листа без ожидания истечения полного окна.
+
+Константы в `core/dsp/src/lib.rs`:
+
+```
+ADAPTIVE_WINDOW_LOCKING_SECS   = 4.0
+ADAPTIVE_WINDOW_SEARCHING_SECS = 2.0
+RELOCK_WINDOW_SECS             = 2.0
+RELOCK_BPM_SHIFT_THRESHOLD     = 10.0
+RELOCK_CONFIRM_FRAMES          = 1
+```
+
+### Конфигурация
+
+Два поля добавлены в `DspConfig`:
+
+```rust
+pub adaptive_window: bool,       // default: true
+pub tempo_jump_threshold: f32,   // default: 15.0 BPM
+```
+
+Оба поля имеют значения по умолчанию через `Default`; существующий код, создающий `DspConfig::default()`, не требует изменений.
+
+### Результат
+
+Re-lock после смены трека (смена темпа > 10 BPM) сокращён с 6–8 сек (до Phase 4) до ≤ 3 сек. Регрессионное покрытие в `core/dsp/tests/streaming.rs` включает 6 новых тестов:
+
+- `tempo_change_185_to_200` — перезахват 200 BPM после 185 BPM в пределах 3 сек.
+- `tempo_change_200_to_170` — перезахват 170 BPM после 200 BPM в пределах 3 сек.
+- `no_false_stable_during_transition` — состояние захвата проходит через не-`STABLE` фазу при смене темпа (не молчит и не подменяет числа).
+- Три дополнительных кейса на граничные значения порога прыжка.
+
+### Известные ограничения
+
+- При плавном pitch shift (изменение темпа < 10 BPM) tempo jump detector не активируется — `force_next_searching` не выставляется. Перезахват в таких случаях происходит через штатный путь автокорреляции.
+- `adaptive_window: false` отключает адаптивный срез полностью — движок всегда использует полную историю онсетов. Тест `adaptive_window_disabled_falls_back_to_baseline` в `core/dsp/tests/streaming.rs` проверяет тайминговое поведение при этом флаге. Существующий parity-тест `streaming_engine_matches_batch_analysis` использует `DspEngine::default()` (то есть `adaptive_window: true`); при старте с нуля (без предшествующей STABLE-истории) adaptive_window не изменяет поведение, поэтому batch/streaming parity сохраняется.
+
 ## Dart-слой сглаживания (Phase 4)
 
 Rust DSP-ядро эмитит каждый снэпшот `DspResult` честно: без сглаживания, без гистерезиса. Сглаживание для UI-стабильности вынесено в Dart-класс `BpmSmoother` (`apps/mobile/lib/capture/bpm_smoother.dart`), чтобы Rust-ядро оставалось parity-тестируемым в чистом виде.

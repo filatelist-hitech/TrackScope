@@ -158,6 +158,97 @@ fn streaming_reflects_mid_stream_tempo_change_within_one_window() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Phase 8 — fast re-lock после смены трека
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Быстрый перезахват после потери STABLE при смене темпа — базовый тест.
+///
+/// Сценарий:
+///   1. Движок достигает STABLE на 200 BPM (≤ 12 с).
+///   2. Подаётся 180 BPM — новый трек.
+///   3. Измеряется время от первого не-STABLE кадра до достижения
+///      надёжного LOCKING или нового STABLE.
+///
+/// Цель v2: перезахват (LOCKING или STABLE с ~180 BPM) в пределах 3 секунд
+/// после первого не-STABLE кадра. Adaptive-window + discontinuity detector
+/// ускоряют перезахват до ≤ 3 с (было ≤ 4 с в v1).
+///
+/// Anti-fake: BPM берётся из DSP-evidence; тест не хардкодит BPM.
+#[test]
+fn streaming_re_lock_baseline() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize; // 100 мс
+
+    // Сегмент 1: достаточно для STABLE (≥ stable_min_seconds).
+    let mut samples = pulse_track(200.0, config.stable_min_seconds + 2.0, 0.9);
+    // Сегмент 2: новый трек — 180 BPM. Даём 8 секунд, ожидаем LOCKING за 3.
+    samples.extend(pulse_track(180.0, 8.0, 0.9));
+
+    let transition_sample =
+        ((config.stable_min_seconds + 2.0) * SAMPLE_RATE as f32) as usize;
+
+    let mut engine = DspEngine::new(config);
+    let mut fed = 0usize;
+
+    // Фаза 1: прогоняем первый сегмент до STABLE.
+    let mut reached_stable = false;
+    for chunk in samples[..transition_sample].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let result = engine.analyze();
+        if matches!(result.lock_state, LockState::Stable) {
+            reached_stable = true;
+        }
+    }
+    assert!(
+        reached_stable,
+        "движок должен достичь STABLE на 200 BPM до начала теста re-lock"
+    );
+
+    // Фаза 2: подаём новый трек (180 BPM), отсчитываем время с первого
+    // не-STABLE кадра.
+    let mut first_non_stable_at: Option<f32> = None;
+    let mut relock_at: Option<f32> = None; // LOCKING или STABLE с ~180 BPM
+
+    for chunk in samples[transition_sample..].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_total = fed as f32 / SAMPLE_RATE as f32;
+        let result = engine.analyze();
+
+        if first_non_stable_at.is_none() && !matches!(result.lock_state, LockState::Stable) {
+            first_non_stable_at = Some(elapsed_total);
+        }
+
+        if let Some(t0) = first_non_stable_at {
+            let since_loss = elapsed_total - t0;
+            if relock_at.is_none()
+                && matches!(
+                    result.lock_state,
+                    LockState::Locking | LockState::Stable
+                )
+                && result.primary_bpm.is_some_and(|bpm| (bpm - 180.0).abs() <= 4.0)
+            {
+                relock_at = Some(since_loss);
+            }
+        }
+    }
+
+    let first_loss = first_non_stable_at
+        .expect("движок должен покинуть STABLE после смены темпа с 200 на 180 BPM");
+    let _ = first_loss; // информационный
+
+    let relock_time = relock_at.expect(
+        "движок должен достичь LOCKING/STABLE на ~180 BPM после смены трека",
+    );
+    assert!(
+        relock_time <= 3.0,
+        "fast re-lock на 180 BPM занял {relock_time:.2}s после потери STABLE \
+         (ожидалось ≤ 3.0s с v2 adaptive window)"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Phase 4.2 — тесты адаптивного сглаживания огибающей (club-mic low-pass)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -260,6 +351,440 @@ fn streaming_unstable_club_simulation_never_reaches_stable() {
     let _ = ever_locking; // информационный, не assertion
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 8 v2 — диагностика тайминга и structured re-lock тесты
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Диагностический тест тайминга смены темпа 185 → 200 BPM.
+///
+/// Замеряет три события:
+/// 1. Когда топ-кандидат сменился с ~185 на ~200 BPM (> 5 BPM разница).
+///    Должно быть ≤ 2.5 с после T=8s.
+/// 2. Когда движок достиг LOCKING на новом темпе.
+///    Должно быть ≤ 3.0 с после T=8s.
+/// 3. Отсутствие ложного STABLE с BPM > 8 BPM от 200.0 в период T=8s..T=11s.
+#[test]
+fn tempo_change_timing_diagnosis() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+
+    let segment1_secs = 8.0_f32;
+    let segment2_secs = 8.0_f32;
+    let mut samples = pulse_track(185.0, segment1_secs, 0.9);
+    samples.extend(pulse_track(200.0, segment2_secs, 0.9));
+
+    let transition_sample = (segment1_secs * SAMPLE_RATE as f32) as usize;
+    let transition_sec = segment1_secs;
+
+    let mut engine = DspEngine::new(config);
+    let mut fed = 0usize;
+
+    // Фаза 1: прогоняем 185 BPM сегмент.
+    for chunk in samples[..transition_sample].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let _ = engine.analyze();
+    }
+
+    // Фаза 2: подаём 200 BPM, замеряем события.
+    let mut candidate_changed_at: Option<f32> = None;
+    let mut locking_on_new_at: Option<f32> = None;
+    let mut false_stable_found = false;
+
+    for chunk in samples[transition_sample..].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_total = fed as f32 / SAMPLE_RATE as f32;
+        let since_transition = elapsed_total - transition_sec; // используется ниже
+        let result = engine.analyze();
+
+        // Событие 1: топ-кандидат сменился на ~200 BPM.
+        if candidate_changed_at.is_none() {
+            let top_bpm = result.candidates.iter()
+                .find(|c| matches!(c.relation, hitech_bpm_dsp::TempoRelation::Main | hitech_bpm_dsp::TempoRelation::Raw))
+                .map(|c| c.bpm);
+            if let Some(bpm) = top_bpm {
+                if (bpm - 200.0).abs() <= 5.0 && (bpm - 185.0).abs() > 5.0 {
+                    candidate_changed_at = Some(since_transition);
+                }
+            }
+        }
+
+        // Событие 2: LOCKING на новом темпе.
+        if locking_on_new_at.is_none()
+            && matches!(result.lock_state, LockState::Locking | LockState::Stable)
+            && result.primary_bpm.is_some_and(|bpm| (bpm - 200.0).abs() <= 4.0)
+        {
+            locking_on_new_at = Some(since_transition);
+        }
+
+        // Событие 3: ложный STABLE (BPM далеко от ОБОИХ темпов) в первые 3 с.
+        // Допускаем: STABLE на ~185 (удержание старого темпа) — нормально.
+        // Допускаем: STABLE на ~200 (уже захватил новый темп) — нормально.
+        // Запрещаем: STABLE на BPM далёком от обоих (галлюцинация).
+        if since_transition <= 3.0
+            && matches!(result.lock_state, LockState::Stable)
+            && result.primary_bpm.is_some_and(|bpm| {
+                (bpm - 200.0).abs() > 8.0 && (bpm - 185.0).abs() > 8.0
+            })
+        {
+            false_stable_found = true;
+        }
+    }
+
+    // Допускаем что кандидат мог не поменяться (тест диагностический),
+    // но если поменялся — должен был сделать это быстро.
+    if let Some(t) = candidate_changed_at {
+        assert!(
+            t <= 2.5,
+            "топ-кандидат сменился на ~200 BPM через {t:.2}s после перехода (ожидалось ≤ 2.5s)"
+        );
+    }
+
+    let locking_time = locking_on_new_at
+        .expect("движок должен достичь LOCKING на ~200 BPM после перехода от 185");
+    assert!(
+        locking_time <= 3.0,
+        "LOCKING на 200 BPM через {locking_time:.2}s (ожидалось ≤ 3.0s)"
+    );
+
+    assert!(
+        !false_stable_found,
+        "обнаружен ложный STABLE с BPM далёким от обоих темпов в первые 3 с после перехода"
+    );
+}
+
+/// Re-lock: 185 BPM → 200 BPM.
+///
+/// После первого не-STABLE кадра LOCKING или STABLE на ~200 BPM
+/// должен быть достигнут за ≤ 3.0 с. Никакого ложного STABLE на ~185 BPM
+/// в переходный период.
+#[test]
+fn tempo_change_185_to_200() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+
+    let stable_secs = config.stable_min_seconds + 2.0;
+    let mut samples = pulse_track(185.0, stable_secs, 0.9);
+    samples.extend(pulse_track(200.0, 8.0, 0.9));
+
+    let transition_sample = (stable_secs * SAMPLE_RATE as f32) as usize;
+
+    let mut engine = DspEngine::new(config);
+    let mut fed = 0usize;
+    let mut reached_stable_185 = false;
+
+    // Фаза 1: ждём STABLE на 185 BPM.
+    for chunk in samples[..transition_sample].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let result = engine.analyze();
+        if matches!(result.lock_state, LockState::Stable)
+            && result.primary_bpm.is_some_and(|bpm| (bpm - 185.0).abs() <= 4.0)
+        {
+            reached_stable_185 = true;
+        }
+    }
+    assert!(reached_stable_185, "движок должен достичь STABLE на 185 BPM");
+
+    let mut first_non_stable_at: Option<f32> = None;
+    let mut relock_at: Option<f32> = None;
+    let mut false_stable_185 = false;
+
+    for chunk in samples[transition_sample..].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_total = fed as f32 / SAMPLE_RATE as f32;
+        let result = engine.analyze();
+
+        if first_non_stable_at.is_none() && !matches!(result.lock_state, LockState::Stable) {
+            first_non_stable_at = Some(elapsed_total);
+        }
+
+        if let Some(t0) = first_non_stable_at {
+            let since_loss = elapsed_total - t0;
+
+            // Ложный STABLE на старом темпе в переходный период.
+            if since_loss <= 3.0
+                && matches!(result.lock_state, LockState::Stable)
+                && result.primary_bpm.is_some_and(|bpm| (bpm - 185.0).abs() <= 4.0)
+            {
+                false_stable_185 = true;
+            }
+
+            if relock_at.is_none()
+                && matches!(result.lock_state, LockState::Locking | LockState::Stable)
+                && result.primary_bpm.is_some_and(|bpm| (bpm - 200.0).abs() <= 4.0)
+            {
+                relock_at = Some(since_loss);
+            }
+        }
+    }
+
+    assert!(
+        !false_stable_185,
+        "ложный STABLE на ~185 BPM в первые 3 с переходного периода"
+    );
+
+    let relock_time = relock_at
+        .expect("движок должен достичь LOCKING/STABLE на ~200 BPM после смены 185→200");
+    assert!(
+        relock_time <= 3.0,
+        "re-lock на 200 BPM занял {relock_time:.2}s (ожидалось ≤ 3.0s)"
+    );
+}
+
+/// Re-lock: 200 BPM → 170 BPM.
+///
+/// Проверяет что:
+/// 1. Re-lock за ≤ 3.0 с.
+/// 2. Hitech-нормализация работает: 170 BPM (не 85 BPM) детектируется.
+#[test]
+fn tempo_change_200_to_170() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+
+    let stable_secs = config.stable_min_seconds + 2.0;
+    let mut samples = pulse_track(200.0, stable_secs, 0.9);
+    samples.extend(pulse_track(170.0, 8.0, 0.9));
+
+    let transition_sample = (stable_secs * SAMPLE_RATE as f32) as usize;
+    let transition_sec = stable_secs;
+
+    let mut engine = DspEngine::new(config);
+    let mut fed = 0usize;
+    let mut reached_stable_200 = false;
+
+    for chunk in samples[..transition_sample].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let result = engine.analyze();
+        if matches!(result.lock_state, LockState::Stable) {
+            reached_stable_200 = true;
+        }
+    }
+    assert!(reached_stable_200, "движок должен достичь STABLE на 200 BPM");
+
+    let mut first_non_stable_at: Option<f32> = None;
+    let mut relock_at: Option<f32> = None;
+
+    for chunk in samples[transition_sample..].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_total = fed as f32 / SAMPLE_RATE as f32;
+        let _since_transition = elapsed_total - transition_sec;
+        let result = engine.analyze();
+
+        if first_non_stable_at.is_none() && !matches!(result.lock_state, LockState::Stable) {
+            first_non_stable_at = Some(elapsed_total);
+        }
+
+        if let Some(t0) = first_non_stable_at {
+            let since_loss = elapsed_total - t0;
+            if relock_at.is_none()
+                && matches!(result.lock_state, LockState::Locking | LockState::Stable)
+                && result.primary_bpm.is_some_and(|bpm| {
+                    // 170 BPM (не 85 — hitech нормализация)
+                    (bpm - 170.0).abs() <= 4.0 && bpm > 100.0
+                })
+            {
+                relock_at = Some(since_loss);
+            }
+        }
+    }
+
+    let relock_time = relock_at
+        .expect("движок должен достичь LOCKING/STABLE на ~170 BPM после смены 200→170");
+    assert!(
+        relock_time <= 3.0,
+        "re-lock на 170 BPM занял {relock_time:.2}s (ожидалось ≤ 3.0s)"
+    );
+}
+
+/// Стабильность после re-lock: 20 подряд идущих STABLE-кадров с BPM в ±2 BPM.
+///
+/// Быстрый перезахват не должен жертвовать стабильностью — после re-lock
+/// движок удерживает STABLE без осцилляций.
+#[test]
+fn stability_after_tempo_change() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+
+    let stable_secs = config.stable_min_seconds + 2.0;
+    // Даём 16 с нового трека — достаточно для повторного STABLE и наблюдения.
+    let new_secs = 16.0;
+    let mut samples = pulse_track(200.0, stable_secs, 0.9);
+    samples.extend(pulse_track(185.0, new_secs, 0.9));
+
+    let transition_sample = (stable_secs * SAMPLE_RATE as f32) as usize;
+
+    let mut engine = DspEngine::new(config);
+
+    for chunk in samples[..transition_sample].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        let _ = engine.analyze();
+    }
+
+    let mut consecutive_stable = 0u32;
+    let required_consecutive = 20;
+
+    for chunk in samples[transition_sample..].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        let result = engine.analyze();
+
+        if matches!(result.lock_state, LockState::Stable)
+            && result.primary_bpm.is_some_and(|bpm| (bpm - 185.0).abs() <= 2.0)
+        {
+            consecutive_stable += 1;
+        } else if consecutive_stable > 0 && !matches!(result.lock_state, LockState::Stable) {
+            // Прерывание — сбрасываем счётчик.
+            consecutive_stable = 0;
+        }
+
+        if consecutive_stable >= required_consecutive {
+            break;
+        }
+    }
+
+    assert!(
+        consecutive_stable >= required_consecutive,
+        "движок не набрал {required_consecutive} подряд идущих STABLE-кадров на ~185 BPM \
+         после re-lock (набрано: {consecutive_stable})"
+    );
+}
+
+/// Нет ложного STABLE в переходный период 200 → 185 BPM.
+///
+/// В первые 3 с после смены темпа не должно быть STABLE с BPM,
+/// отличающимся > 8 BPM от обоих темпов (ни 200, ни 185 BPM).
+#[test]
+fn no_false_stable_during_transition() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+
+    let stable_secs = config.stable_min_seconds + 2.0;
+    let mut samples = pulse_track(200.0, stable_secs, 0.9);
+    samples.extend(pulse_track(185.0, 8.0, 0.9));
+
+    let transition_sample = (stable_secs * SAMPLE_RATE as f32) as usize;
+    let transition_sec = stable_secs;
+
+    let mut engine = DspEngine::new(config);
+    let mut fed = 0usize;
+
+    for chunk in samples[..transition_sample].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let _ = engine.analyze();
+    }
+
+    let mut false_stable_found = false;
+    let mut first_non_stable_at: Option<f32> = None;
+
+    for chunk in samples[transition_sample..].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_total = fed as f32 / SAMPLE_RATE as f32;
+        let since_transition = elapsed_total - transition_sec;
+        let result = engine.analyze();
+
+        if first_non_stable_at.is_none() && !matches!(result.lock_state, LockState::Stable) {
+            first_non_stable_at = Some(elapsed_total);
+        }
+
+        // Проверяем только первые 3 с после начала перехода.
+        if let Some(t0) = first_non_stable_at {
+            let since_loss = elapsed_total - t0;
+            if since_loss <= 3.0 && matches!(result.lock_state, LockState::Stable) {
+                if let Some(bpm) = result.primary_bpm {
+                    // Допустимо: BPM близко к 200.0 ИЛИ близко к 185.0.
+                    let near_200 = (bpm - 200.0).abs() <= 8.0;
+                    let near_185 = (bpm - 185.0).abs() <= 8.0;
+                    if !near_200 && !near_185 {
+                        false_stable_found = true;
+                    }
+                }
+            }
+        }
+
+        // Выходим после первых 3 с переходного периода.
+        if first_non_stable_at.is_some()
+            && since_transition > 3.0
+        {
+            break;
+        }
+    }
+
+    assert!(
+        !false_stable_found,
+        "ложный STABLE с BPM > 8 BPM от обоих темпов в первые 3 с перехода 200→185"
+    );
+}
+
+/// Fallback при `adaptive_window = false`: поведение совпадает с v1 (≤ 4 с).
+///
+/// При отключённом адаптивном окне движок должен перезахватиться за ≤ 4 с
+/// (старая гарантия), но не обязательно за ≤ 3 с.
+#[test]
+fn adaptive_window_disabled_falls_back_to_baseline() {
+    use hitech_bpm_dsp::DspConfig;
+    let config = DspConfig { adaptive_window: false, ..DspConfig::default() };
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+
+    let stable_secs = config.stable_min_seconds + 2.0;
+    let mut samples = pulse_track(200.0, stable_secs, 0.9);
+    samples.extend(pulse_track(180.0, 8.0, 0.9));
+
+    let transition_sample = (stable_secs * SAMPLE_RATE as f32) as usize;
+
+    let mut engine = DspEngine::new(config);
+    let mut fed = 0usize;
+    let mut reached_stable = false;
+
+    for chunk in samples[..transition_sample].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let result = engine.analyze();
+        if matches!(result.lock_state, LockState::Stable) {
+            reached_stable = true;
+        }
+    }
+    assert!(reached_stable, "движок должен достичь STABLE с adaptive_window=false");
+
+    let mut first_non_stable_at: Option<f32> = None;
+    let mut relock_at: Option<f32> = None;
+
+    for chunk in samples[transition_sample..].chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_total = fed as f32 / SAMPLE_RATE as f32;
+        let result = engine.analyze();
+
+        if first_non_stable_at.is_none() && !matches!(result.lock_state, LockState::Stable) {
+            first_non_stable_at = Some(elapsed_total);
+        }
+
+        if let Some(t0) = first_non_stable_at {
+            let since_loss = elapsed_total - t0;
+            if relock_at.is_none()
+                && matches!(result.lock_state, LockState::Locking | LockState::Stable)
+                && result.primary_bpm.is_some_and(|bpm| (bpm - 180.0).abs() <= 4.0)
+            {
+                relock_at = Some(since_loss);
+            }
+        }
+    }
+
+    let relock_time = relock_at
+        .expect("движок с adaptive_window=false должен достичь LOCKING/STABLE на ~180 BPM");
+    assert!(
+        relock_time <= 4.0,
+        "re-lock с adaptive_window=false занял {relock_time:.2}s (ожидалось ≤ 4.0s)"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// `DspEngine::reset()` сбрасывает `prev_lock_state`, чтобы следующая сессия
 /// начинала без истории предыдущей. Если не сбросить, сглаживание может
 /// применяться на чистом старте, когда нет доказательства темпа.
@@ -287,4 +812,89 @@ fn streaming_reset_clears_prev_lock_state() {
         "после reset() движок обязан вернуться в SEARCHING"
     );
     assert_eq!(result.primary_bpm, None, "после reset() primary_bpm должен быть null");
+}
+
+/// Проверяет: после tempo jump движок не продолжает эмитить STABLE со старым BPM
+/// и не застревает в бесконечном SEARCHING из-за feedback loop в jump-детекторе.
+///
+/// Сценарий: 200 BPM (STABLE) → 3 с 185 BPM → jump детектирован → force_next_searching
+/// применён → last_stable_bpm сброшен → нормальная прогрессия на 185 BPM.
+///
+/// Инварианты:
+/// 1. В переходном периоде (первые 2 с после смены) нет STABLE с BPM далеко от обоих темпов.
+/// 2. После 3+ с нового трека движок НЕ возвращает STABLE с ~200 BPM (старый якорь).
+/// 3. Anti-fake: при SEARCHING primary_bpm == null.
+#[test]
+fn force_next_searching_overrides_stable_on_tempo_jump() {
+    let config = DspConfig::default(); // adaptive_window: true
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize; // 100 мс
+    let mut engine = DspEngine::new(config);
+
+    // Шаг 1: захватить STABLE на 200 BPM.
+    let track_a = pulse_track(200.0, 14.0, 0.9);
+    for chunk in track_a.chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+    }
+    let pre = engine.analyze();
+    assert_eq!(
+        pre.lock_state,
+        LockState::Stable,
+        "движок должен выйти на STABLE перед тестом jump"
+    );
+
+    // Шаг 2: подать 4 с нового трека (185 BPM).
+    // Первые ~2 с: onset_history ещё доминирована 200 BPM.
+    // Через ~2–3 с: snap_peaks (хвостовые 2 с) показывает 185 BPM → jump детектирован.
+    // После jump: last_stable_bpm сброшен → детектор не срабатывает повторно →
+    // нормальная прогрессия SEARCHING→LOCKING.
+    let track_b = pulse_track(185.0, 4.0, 0.9);
+
+    let mut found_false_stable = false;
+    let mut found_old_stable_after_jump = false;
+
+    for (i, chunk) in track_b.chunks(chunk_size).enumerate() {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        let r = engine.analyze();
+        let elapsed_sec = (i + 1) as f32 * 0.1;
+
+        // Инвариант: SEARCHING всегда имеет primary_bpm == null.
+        if r.lock_state == LockState::Searching {
+            assert_eq!(
+                r.primary_bpm, None,
+                "SEARCHING кадр должен иметь primary_bpm = null (anti-fake)"
+            );
+        }
+
+        // Инвариант 1: в первые 2 с переходного периода нет STABLE с BPM
+        // далеко от обоих корректных темпов (переходный BPM = evidence артефакт).
+        if elapsed_sec <= 2.0 && r.lock_state == LockState::Stable {
+            if let Some(bpm) = r.primary_bpm {
+                let close_to_old = (bpm - 200.0).abs() < 8.0;
+                let close_to_new = (bpm - 185.0).abs() < 8.0;
+                if !close_to_old && !close_to_new {
+                    found_false_stable = true;
+                }
+            }
+        }
+
+        // Инвариант 2: после 3 с нового трека движок не должен быть STABLE с ~200 BPM.
+        // Если jump-детектор и last_stable_bpm работают корректно, старый якорь уже сброшен.
+        if elapsed_sec >= 3.0 && r.lock_state == LockState::Stable {
+            if let Some(bpm) = r.primary_bpm {
+                if (bpm - 200.0).abs() < 3.0 {
+                    found_old_stable_after_jump = true;
+                }
+            }
+        }
+    }
+
+    assert!(
+        !found_false_stable,
+        "в переходном периоде не должно быть STABLE с BPM за пределами диапазона обоих треков"
+    );
+    assert!(
+        !found_old_stable_after_jump,
+        "после 3 с нового трека движок не должен фиксировать STABLE со старым BPM ~200 \
+         (last_stable_bpm должен быть сброшен при jump, иначе feedback loop)"
+    );
 }

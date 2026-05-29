@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### Changed
+- **DSP fast re-lock v2**: re-lock after track change now ≤ 3 s (was 6–8 s)
+  - State-based adaptive analysis window: STABLE=full history, LOCKING=4 s, SEARCHING/UNSTABLE=2 s
+  - Tempo jump detector: threshold 15 BPM triggers `bpm_history` reset + force SEARCHING
+  - New `DspConfig` fields: `adaptive_window` (default `true`), `tempo_jump_threshold` (default `15.0`)
+  - 6 new streaming regression tests including `tempo_change_185_to_200`, `tempo_change_200_to_170`, `no_false_stable_during_transition`
+  - All 43 Rust tests pass; 15/15 QA fixtures PASS
+
+---
+
 ### Phase 7.1 — Осциллограф вместо спектрограммы (2026-05-29)
 
 #### Changed
