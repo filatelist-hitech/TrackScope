@@ -83,12 +83,6 @@ class _MainScreenState extends State<MainScreen> {
     super.dispose();
   }
 
-  // Converts dBFS to normalised 0..1 for the level meter (−60 → 0.0, 0 → 1.0).
-  double _dbfsToLevel(double? dbfs) {
-    if (dbfs == null) return 0.0;
-    return ((dbfs + 60.0) / 60.0).clamp(0.0, 1.0);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -158,9 +152,6 @@ class _MainScreenState extends State<MainScreen> {
                       viz: _viz,
                       displayBpm: displayBpm,
                       isLockingDisplay: isLockingDisplay,
-                      dbfsLevel: _dbfsToLevel(
-                        result?.signalQuality.inputLevelDbfs,
-                      ),
                     ),
                   ),
                 ),
@@ -262,7 +253,6 @@ class _GlassmorphismCard extends StatelessWidget {
   const _GlassmorphismCard({
     required this.result,
     required this.viz,
-    required this.dbfsLevel,
     this.displayBpm,
     this.isLockingDisplay = false,
   });
@@ -271,10 +261,6 @@ class _GlassmorphismCard extends StatelessWidget {
   final VizController viz;
   final double? displayBpm;
   final bool isLockingDisplay;
-
-  /// Normalised input level 0..1 (for potential future level indicator).
-  // ignore: unused_field
-  final double dbfsLevel;
 
   @override
   Widget build(BuildContext context) {
