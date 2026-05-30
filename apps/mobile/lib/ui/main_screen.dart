@@ -23,7 +23,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart' hide LockState;
 
 import '../capture/bpm_display.dart';
-import '../capture/capture_bridge.dart';
+import '../capture/capture_error.dart';
 import '../dsp/dsp_result.dart';
 import '../viz/live_spectrum_painter.dart';
 import '../viz/viz_controller.dart';

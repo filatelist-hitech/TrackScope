@@ -36,6 +36,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Flutter Web UI preview (2026-05-30):** Быстрый цикл итерации по UI без устройства. Web-платформа добавлена (`apps/mobile/web/`), отдельный entrypoint `apps/mobile/lib/main_web.dart` рендерит реальный `MainScreen` поверх `MockDspStream` (симулированные `DspResult` — только UI, не детектор; Rust/FFI в браузере недоступны). На экране баннер «PREVIEW · MOCK». Запуск: `./apps/mobile/run_preview.sh` → `http://localhost:7654` с hot-reload.
+  - `MockDspStream` (`apps/mobile/lib/mock/mock_dsp_stream.dart`): SEARCHING → LOCKING → STABLE, `primaryBpm` = `null` до захвата, виден half-time-кандидат — соблюдает контракт и anti-fake-правила. Импортируется ТОЛЬКО из `main_web.dart`, никогда из `lib/main.dart`.
+  - Skill `ui-preview` (`.claude/skills/ui-preview/SKILL.md`) и slash-команда `/preview` (`.claude/commands/preview.md`) для показа превью после правок UI; `.claude/launch.json` → конфигурация `ui-preview`; `.mcp.json` с `mockup`-сервером.
+  - **Production-safe рефакторинг:** `CaptureError` вынесен из `capture/capture_bridge.dart` в лист-модуль `capture/capture_error.dart` (без ffi/io/isolate) и ре-экспортирован, чтобы `MainScreen` собирался под web, не втягивая `dart:ffi`. Мобильная сборка не затронута (`flutter analyze` чист).
+  - **Анимированные waveform и live-spectrum в превью (2026-05-30):** `MockDspStream.rawPcm()` генерирует синтетический поток PCM-16 LE mono 48 кГц (2400 сэмплов / 50 мс), форма сигнала — kick+bass+hat+rumble, синхронизированные с ~193 BPM (зеркало `.claude/mockup/index.html`). Подаётся как `rawPcm:` в `main_web.dart` → `VizController.attachRawPcm()`. Оба визуализатора (осциллограф + live-spectrum с kick-горбом на 50–200 Hz и peak-hold) теперь анимируются без «Ожидание микрофона…».
+
 ### Fixed
 
 - **DSP first-lock regression (Phase 8.1, 2026-05-29):** Исправлено зависание в состоянии LOCKING (~30–50% уверенности) при первом захвате на стабильном треке. Корневая причина — гипотеза E (не из четырёх изначальных): адаптивное окно Phase 4.5 усекало `onset_history` до `ADAPTIVE_WINDOW_SEARCHING_SECS = 2.0 с` при состоянии SEARCHING — включая первый захват, когда prior STABLE ещё не было. К t=8s накоплено 8 секунд истории, но анализировались только последние 2 с (~5–8 ударов) → слабый пик автокорреляции → confidence < 0.72 → STABLE недостижим. Фикс: добавлено поле `has_ever_been_stable: bool` в `DspEngine`. При `false` (первый захват) — всегда полная история. При `true` (после первого STABLE) — адаптивное окно работает штатно для fast re-lock. Проверено 2 новыми тестами: `first_lock_uses_full_window_no_prior_stable` и `relock_adaptive_window_still_fast_after_stable`. (core/dsp/src/lib.rs)
