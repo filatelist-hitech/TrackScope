@@ -59,13 +59,57 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 
 ## Текущая фаза
 
-**Phase 3 завершена** (подтверждено на iPhone 11, 2026-05-26). Flutter-приложение захватывает звук с микрофона через `package:record 6.x`, отправляет PCM в отдельный изолят DSP-воркера, который владеет Rust-FFI-хэндлом (статическая `.a` на iOS), и рендерит скользящие снэпшоты `DspResult` через `StreamBuilder` на живом BPM-экране + отладочном экране.
+**Phases 1–8 завершены.** Проект готовится к первому production-APK.
 
-Следующая фаза — **Phase 4: закалка** (адаптивные пороги, сглаживание BPM, реальные тестовые записи, цель ±2–4 BPM через живой микрофон).
+Последний подтверждённый запуск на реальном устройстве — iPhone 11, iOS 26.3.1, 2026-05-26.
+Целевой диапазон расширен до **155–230 BPM** (Phase 8.2: поддержка раннего hitech от 155 BPM).
 
-Rust-крейт в `core/dsp/` — продакшен-источник истины: извлечение онсетов, оценка темпа автокорреляцией, hitech-нормализация кандидатов, скоринг уверенности и классификация состояния захвата на нативном Rust. `core/dsp/tempo.py` и `core/dsp/synthetic.py` остаются как читаемая алгоритмическая референс-реализация.
+Rust-крейт в `core/dsp/` — продакшен-источник истины: извлечение онсетов, оценка темпа
+автокорреляцией, hitech-нормализация кандидатов, скоринг уверенности и классификация
+состояния захвата на нативном Rust. `core/dsp/tempo.py` и `core/dsp/synthetic.py`
+остаются как читаемая алгоритмическая референс-реализация.
 
-### Запуск мобильного приложения (Android / macOS)
+### Android APK (macOS, без физического устройства)
+
+Требования: Android Studio с NDK 27.x, rustup.
+
+```sh
+# 1. Задать путь к Android SDK
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$(ls $ANDROID_HOME/ndk | sort -V | tail -1)"
+
+# 2. Добавить Rust Android таргеты (однократно)
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+
+# 3. Собрать нативную библиотеку для Android
+bash scripts/build_android_native.sh
+# → apps/mobile/android/app/src/main/jniLibs/<abi>/libhitech_bpm_ffi.so
+
+# 4. Debug APK (не требует подписи)
+cd apps/mobile && flutter build apk --debug
+# → build/app/outputs/flutter-apk/app-debug.apk
+
+# 5. Запустить в эмуляторе AVD
+flutter emulators --launch <emulator_id>
+flutter run
+```
+
+**Release APK** (нужен keystore):
+```sh
+# Сгенерировать keystore (однократно):
+keytool -genkey -v -keystore apps/mobile/android/android-release.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias hitech-bpm
+
+# Создать apps/mobile/android/key.properties из шаблона и заполнить пароли
+cp apps/mobile/android/key.properties.template apps/mobile/android/key.properties
+
+cd apps/mobile && flutter build apk --release
+# → build/app/outputs/flutter-apk/app-release.apk
+```
+
+Подробности: [docs/ANDROID_TEST_PLAN.md](docs/ANDROID_TEST_PLAN.md)
+
+### Запуск мобильного приложения (macOS Desktop / тесты)
 
 ```sh
 # 1. Собрать Rust FFI dylib
@@ -79,7 +123,7 @@ cd apps/mobile
 /opt/homebrew/bin/flutter analyze
 /opt/homebrew/bin/flutter test
 
-# 4. Запуск
+# 4. Запуск (macOS desktop)
 /opt/homebrew/bin/flutter run
 ```
 

@@ -1,6 +1,20 @@
-# TEMPLATE — скопируй в key.properties и заполни реальными значениями
-# key.properties уже в .gitignore
+# ШАБЛОН — скопируй в key.properties и заполни реальными значениями.
+# key.properties добавлен в .gitignore — НИКОГДА не коммитить.
+#
+# Как сгенерировать keystore (однократно, нужен JDK 17+):
+#
+#   keytool -genkey -v \
+#     -keystore apps/mobile/android/android-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 \
+#     -alias hitech-bpm
+#
+# На macOS JDK можно установить через: brew install openjdk@17
+# Затем:
+#   cp apps/mobile/android/key.properties.template \
+#      apps/mobile/android/key.properties
+# и заполни поля ниже реальными значениями из keytool.
+
 storePassword=YOUR_KEYSTORE_PASSWORD
 keyPassword=YOUR_KEY_PASSWORD
-keyAlias=upload
-storeFile=../upload-keystore.jks
+keyAlias=hitech-bpm
+storeFile=android-release.jks
