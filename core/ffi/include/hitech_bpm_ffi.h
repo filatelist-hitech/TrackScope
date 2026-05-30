@@ -33,6 +33,7 @@ extern "C" {
 typedef struct HitechBpmEngine HitechBpmEngine;
 
 HitechBpmEngine *hitech_bpm_engine_new(void);
+HitechBpmEngine *hitech_bpm_engine_new_with_min_bpm(float min_bpm);
 void hitech_bpm_engine_free(HitechBpmEngine *engine);
 void hitech_bpm_engine_reset(HitechBpmEngine *engine);
 
