@@ -19,6 +19,13 @@ dependencies:
   # Pure-Dart, no platform channel — safe in any isolate. google_fonts 6.x
   # is compatible with Flutter 3.44 / Dart 3.12.
   google_fonts: ^6.2.1
+  # RevenueCat IAP SDK — only imported by revenuecat_gateway.dart;
+  # web/test builds are unaffected because no other file touches it.
+  purchases_flutter: ^8.0.0
+  # Share files (CSV/JSON export) via platform share sheet.
+  share_plus: ^10.0.0
+  # Temp directory for export files before sharing.
+  path_provider: ^2.1.0
 
 dev_dependencies:
   flutter_test:

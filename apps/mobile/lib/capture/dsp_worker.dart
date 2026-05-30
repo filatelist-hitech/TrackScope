@@ -32,6 +32,7 @@ void dspWorkerEntry(WorkerInit init) {
       // Воркер сам опрашивает FFI, так что встроенный таймер потока
       // движка отключаем длинным интервалом — мы на него не подписываемся.
       pollInterval: const Duration(hours: 1),
+      minBpm: init.minBpm,
     );
   } catch (e, st) {
     reply.send(WorkerError('не удалось открыть нативный DSP: $e', st));
