@@ -264,3 +264,27 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - `flutter build apk --release` → `app-release.apk` с release-подписью.
 
 Известное ограничение: виртуальный микрофон AVD не позволяет проверить реальную точность детектора — для этого нужно физическое Android-устройство.
+
+## Phase 10: Freemium monetization (Free / Pro) — **ЗАВЕРШЕНО** (2026-05-31)
+
+Цель: двухуровневая монетизация (Free / Pro) с RevenueCat IAP, paywall, гейтинг BPM-диапазона, debug-экрана, истории и экспорта.
+
+Артефакты:
+
+- FFI: `hitech_bpm_engine_new_with_min_bpm(float)` — обратно-совместимый второй конструктор; Free = 170–230, Pro = 155–230.
+- `lib/monetization/`: `PurchasesGateway` (абстракция), `RevenueCatGateway` (единственный импорт `purchases_flutter`), `ProStatusService` (ChangeNotifier), `FeatureFlags`, `PaywallScreen`.
+- `lib/history/`: `BpmHistory`, `SessionHistoryController` (даунсэмплер ~1 Hz), `HistoryScreen`.
+- `lib/export/`: `buildCsv`/`buildJson` (чистые билдеры), `exportCsv`/`exportJson` (share_plus).
+- `main.dart`: ProStatusService init, ListenableBuilder для tier-reactive CaptureBridge.
+- `main_web.dart`: web-safe, без revenuecat-зависимостей.
+- `config.dart.template` + `.gitignore` для `config.dart`.
+- Тесты: feature_flags, pro_status_service, paywall_screen, bpm_history, bpm_exporter, widget_test (debug-gate).
+
+Критерии выхода:
+
+- `cargo test --workspace`, `flutter analyze` (0 errors), `flutter test` — все зелёные.
+- FFI: Free engine 170–230, Pro engine 155–230; смена tier без перезапуска.
+- Debug screen + export → paywall в Free; доступны в Pro.
+- History: 30 сек (Free) / 24 ч (Pro) на выделенном экране.
+- Restore работает. Widget показывает «Скоро».
+- `config.dart` gitignored; Free работает keyless/offline.

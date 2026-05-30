@@ -214,3 +214,27 @@ flutter run --release
 Субагенты и навыки сопоставляются по `description` и активируются автоматически по триггерам; их также можно вызвать явно через `@agent-name` или сослаться на навык по имени.
 
 > `.codex/` и `.agents/` сохранены как легаси-референс из исходного окружения OpenAI Codex. Не удаляйте и не модифицируйте их. Маппинг агентов Codex → субагентов Claude Code описан внизу `CLAUDE.md`.
+
+## Монетизация (Free / Pro)
+
+Приложение использует двухуровневую модель с RevenueCat IAP:
+
+| Фича | Free | Pro |
+|---|---|---|
+| BPM Range | 170–230 | 155–230 |
+| Debug Screen | ✕ (paywall) | ✓ |
+| History | 30 сек | 24 ч |
+| Export CSV/JSON | ✕ (paywall) | ✓ |
+| Lock-screen Widget | Скоро | Скоро |
+
+### Monetization Setup
+
+1. Скопируйте `apps/mobile/lib/monetization/config.dart.template` → `config.dart` (gitignored).
+2. Заполните RevenueCat API keys.
+3. Либо передайте ключи через `--dart-define`:
+
+```sh
+flutter run --dart-define=REVENUECAT_IOS_KEY=your_ios_key --dart-define=REVENUECAT_ANDROID_KEY=your_android_key
+```
+
+Если оба ключа пусты, приложение работает полностью в Free tier (offline / keyless).

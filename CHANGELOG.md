@@ -361,3 +361,21 @@ iPhone 11, iOS 26.3.1, 2026-05-26. Треки hitech-psytrance 192/200/207 BPM, 
 - Half-time- и double-time-кандидаты никогда не скрываются — они остаются в списке кандидатов с relation/source-метаданными.
 
 [Unreleased]: https://github.com/filatelist-hitech/hitech-bpm-radar/compare/main...HEAD
+
+### Added
+
+- **Freemium monetization (Free / Pro)** — двухуровневая модель с RevenueCat IAP.
+  - FFI: `hitech_bpm_engine_new_with_min_bpm(float)` — Free 170–230, Pro 155–230.
+  - `lib/monetization/`: `PurchasesGateway`, `RevenueCatGateway`, `ProStatusService`,
+    `FeatureFlags`, `PaywallScreen` (сравнение Free/Pro, Lifetime $4.99, Annual $3.99/yr,
+    Restore, «Скоро» виджет).
+  - `lib/history/`: `BpmHistory`, `SessionHistoryController` (~1 Hz даунсэмплер),
+    `HistoryScreen` (Free: 30 сек cap + upgrade баннер; Pro: 24 ч + экспорт).
+  - `lib/export/`: `buildCsv`/`buildJson` (чистые билдеры), `exportCsv`/`exportJson`
+    (share_plus + path_provider).
+  - `main.dart`: ProStatusService init через `--dart-define`, ListenableBuilder для
+    tier-reactive CaptureBridge (смена minBpm без перезапуска).
+  - `main_web.dart`: web-safe — без revenuecat-зависимостей, fixed `isPro: false`.
+  - `config.dart.template` + `.gitignore` для `config.dart`.
+  - Тесты: feature_flags, pro_status_service, paywall_screen, bpm_history,
+    bpm_exporter, widget_test (debug-gate, PRO badge).

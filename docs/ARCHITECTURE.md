@@ -78,8 +78,19 @@ docs/ ----------------------------> контракты репозитория
 - `lib/capture/` — `MicrophoneSource` (тонкая обёртка над `package:record`), `CaptureBridge` (запускает изолят DSP-воркера, прокидывает байтовые PCM-чанки через `SendPort`, переэмитит распарсенный `DspResult` и `CaptureError` в broadcast-стримах), `dsp_worker.dart` (точка входа изолята, владеет FFI-хэндлом, делает конверсию PCM16 → f32, поллит `analyzeJson` на UI-частоте).
 - `lib/permissions/` — `PermissionGate` оборачивает `package:permission_handler`, перепроверяет на resume.
 - `lib/ui/` — `MainScreen`, `DebugScreen`, `PermissionDeniedScreen`. Оба экрана с данными принимают `Stream<DspResult>` напрямую, поэтому тестируемы изолированно; продакшен-проводка живёт в `main.dart`.
+- `lib/monetization/` — фримиум-монетизация (Free / Pro): `PurchasesGateway` (абстракция), `RevenueCatGateway` (единственный импорт `purchases_flutter`), `ProStatusService` (ChangeNotifier singleton), `FeatureFlags` (BPM-диапазон, доступ к debug/history/export), `PaywallScreen`. `config.dart` gitignored; ключи передаются через `--dart-define`.
+- `lib/history/` — BPM-история сессии: `BpmHistory` ( capped по длительности/количеству), `SessionHistoryController` (ChangeNotifier, даунсэмплер ~1 Hz), `HistoryScreen`.
+- `lib/export/` — экспорт CSV/JSON: чистые билдеры `buildCsv`/`buildJson` + IO `exportCsv`/`exportJson` через `share_plus`.
 
 Пайплайн захвата задокументирован в `docs/MOBILE_AUDIO.md`. UI подписан только на `CaptureBridge.results` — параллельного состояния нет.
+
+### FFI `min_bpm` knob
+
+FFI-слой предоставляет `hitech_bpm_engine_new_with_min_bpm(float min_bpm)` —
+обратно-совместимый второй конструктор. Free tier = 170, Pro tier = 155.
+`DspConfig.target_bpm_min` уже поддерживается DSP-ядром; изменений в
+алгоритме нет. `CaptureBridge` пересоздаётся при смене tier (новый minBpm)
+через `ListenableBuilder` на `ProStatusService.instance`.
 
 ## Форма публичного DSP API
 
