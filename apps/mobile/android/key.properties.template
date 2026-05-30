@@ -1,0 +1,6 @@
+# TEMPLATE — скопируй в key.properties и заполни реальными значениями
+# key.properties уже в .gitignore
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=../upload-keystore.jks

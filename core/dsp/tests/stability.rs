@@ -100,6 +100,12 @@ fn streak_stability_180_bpm() {
     run_streak_stability(180.0);
 }
 
+/// Streak-тест 170 BPM: нижняя граница hitech-диапазона.
+#[test]
+fn streak_stability_170_bpm() {
+    run_streak_stability(170.0);
+}
+
 /// Streak-тест 195 BPM (не-целый лаг = 123.077): основной регрессионный тест
 /// для описанного дефекта дрожания BPM-отображения.
 #[test]

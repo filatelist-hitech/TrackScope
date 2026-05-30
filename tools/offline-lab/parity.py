@@ -88,6 +88,8 @@ class ManifestParityRow:
     lock_match: bool
     passed: bool
     reason: str
+    known_fail: bool = False
+    known_fail_reason: str = ""
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
@@ -211,6 +213,8 @@ def _run_manifest_parity(
         snapshot = json.loads(snapshot_path.read_text())
         tolerance = float(entry.get("bpm_tolerance", 4.0))
         lock_must_match = bool(entry.get("lock_state_must_match", False))
+        known_fail = bool(entry.get("known_fail", False))
+        known_fail_reason = entry.get("known_fail_reason", "")
 
         if live:
             row = _compare_manifest_live(
@@ -222,6 +226,8 @@ def _run_manifest_parity(
                 release=release,
                 input_dir=input_dir,
             )
+            row.known_fail = known_fail
+            row.known_fail_reason = known_fail_reason
         else:
             py_result = snapshot.get("python", {})
             rust_result = snapshot.get("rust", {})
@@ -232,16 +238,23 @@ def _run_manifest_parity(
                 rust=rust_result,
                 tolerance=tolerance,
                 lock_must_match=lock_must_match,
+                known_fail=known_fail,
+                known_fail_reason=known_fail_reason,
             )
 
         rows.append(row)
 
-    failed = [r for r in rows if not r.passed]
+    failed = [r for r in rows if not r.passed and not r.known_fail]
+    known_fails = [r for r in rows if not r.passed and r.known_fail]
 
     if json_mode:
         print(json.dumps([r.__dict__ for r in rows], indent=2, sort_keys=True))
     else:
         _print_manifest_table(rows)
+        if known_fails:
+            print(f"\n{len(known_fails)} known fail(s) (not counted as regression):")
+            for r in known_fails:
+                print(f"  - {r.name}: {r.known_fail_reason}")
         if failed:
             print(f"\n{len(failed)} fixture(s) failed parity:", file=sys.stderr)
             for r in failed:
@@ -325,6 +338,8 @@ def _compare_manifest(
     rust: dict[str, Any],
     tolerance: float,
     lock_must_match: bool,
+    known_fail: bool = False,
+    known_fail_reason: str = "",
 ) -> ManifestParityRow:
     py_bpm = py.get("primary_bpm")
     rust_bpm = rust.get("primary_bpm")
@@ -367,6 +382,8 @@ def _compare_manifest(
         lock_match=lock_ok,
         passed=bpm_ok and lock_ok,
         reason="; ".join(reasons) or "ok",
+        known_fail=known_fail,
+        known_fail_reason=known_fail_reason,
     )
 
 
@@ -383,7 +400,10 @@ def _print_manifest_table(rows: list[ManifestParityRow]) -> None:
         rust_bpm = f"{row.rust_bpm:.1f}" if row.rust_bpm is not None else "null"
         delta = f"{row.delta:.2f}" if row.delta is not None else "-"
         lock_tag = "ok" if row.lock_match else "DIFF"
-        flag = "PASS" if row.passed else "FAIL"
+        if row.known_fail:
+            flag = "KNOWN"
+        else:
+            flag = "PASS" if row.passed else "FAIL"
         print(
             f"{row.name:<28} {row.category:>6} {row.tolerance:>5.1f} "
             f"{py_bpm:>8} {rust_bpm:>9} {delta:>7} "

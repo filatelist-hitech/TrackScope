@@ -1,7 +1,7 @@
 name: hitech_bpm_radar
 description: Realtime hitech/psytrance BPM radar mobile shell.
 publish_to: "none"
-version: 0.1.0+1
+version: 1.0.0+1
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
