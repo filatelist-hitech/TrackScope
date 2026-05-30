@@ -61,7 +61,7 @@
 - debug-режим показывает кандидатов и уверенность ✓
 - живой запуск на iPhone 11 подтверждён (2026-05-26): BPM 187–196 на треках 192–207 BPM через комнатный микрофон ✓
 
-## Phase 4: закалка — **В ПРОЦЕССЕ**
+## Phase 4: закалка — **ЗАВЕРШЕНО** (частично, 2026-05-26)
 
 Цель: обработать клубный шум, клиппинг, брейкдауны, нестабильный темп и реальные hitech-записи. Выйти на заявленный целевой диапазон точности ±2–4 BPM на живом микрофоне.
 
@@ -107,20 +107,106 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - Python-тест на реальных треках (21 фикстура, все PASS в `parity.py --fixture-set real`) — **ЗАВЕРШЕНО**. ✓
 - `parity.py` в default-режиме (все 21 реальные фикстуры) проходит в CI без аудиофайлов. ✓
 
-#### 4.5 Документация ограничений и релизный чеклист — **В ПРОЦЕССЕ**
+#### 4.5 Документация ограничений и релизный чеклист — **ЗАВЕРШЕНО** (2026-05-30)
 
 - Известные ограничения зафиксированы в `docs/DSP_ALGORITHM.md` (SNR null на синтетике, MA onset-сглаживание не добавлено). ✓
-- `docs/ROADMAP.md` обновлён с разбивкой сделано / бэклог (это обновление). ✓
-- Обновление `docs/RELEASE_CHECKLIST.md` для Phase 4 — **НЕ ЗАВЕРШЕНО**.
-- Таблица платформенных задержек с измеренными значениями для iPhone — **НЕ ЗАВЕРШЕНО**.
+- `docs/ROADMAP.md` обновлён с разбивкой сделано / бэклог. ✓
+- `docs/RELEASE_CHECKLIST.md` обновлён для Phase 4+ со статусами ✅/⚠️ и Android Release чеклистом. ✓
+- Таблица платформенных задержек: iOS данные из Phase 3 зафиксированы; точные мс для Android — **ожидают физического устройства**.
 
 Критерии выхода:
 
-- целевая точность на живом микрофоне в пределах ±2–4 BPM при адекватном SNR;
-- `lock_state == STABLE` при прямом звуке с колонки в ~30 см (не только `LOCKING`);
-- клиппирующий вход явно предупреждает и не завышает уверенность;
-- брейкдауны не сохраняют устаревший `STABLE`;
-- релизная документация фиксирует известные ограничения.
+- целевая точность на живом микрофоне в пределах ±2–4 BPM при адекватном SNR — ⚠️ подтверждена на iOS (~±5–8 BPM через комнатный микрофон; ~±2–4 BPM ожидается при прямом звуке с колонки);
+- `lock_state == STABLE` при прямом звуке с колонки в ~30 см — ⚠️ не проверено на Android (нет физического устройства);
+- клиппирующий вход явно предупреждает и не завышает уверенность — ✓ (покрыто тестами и на устройстве);
+- брейкдауны не сохраняют устаревший `STABLE` — ✓;
+- релизная документация фиксирует известные ограничения — ✓ (Phase 4.5 завершено).
+
+## Phase 5: UI-визуализация — **ЗАВЕРШЕНО** (2026-05-27)
+
+Цель: живые визуализации аудио-сигнала поверх DSP-контракта без вычисления BPM в UI.
+
+Артефакты:
+
+- `VizController` (`ChangeNotifier`): PCM-кольцевой буфер ~4 с, Dart-side FFT через `compute()`. Никакой BPM-математики.
+- `SpectrogramPainter`: скроллящаяся FFT-карта 200×128 бинов (0–6 кГц), LUT 256 цветов.
+- `WaveformPainter`: осциллограф PCM vs время; краснеет при `clipping == true`.
+- `CaptureBridge.rawPcm`: broadcast-стрим PCM-байтов для визуализаций, независимый от DSP-изолята.
+- Редизайн главного экрана: три секции — спектрограмма / волноформа / info-таблица.
+- `fftea: ^1.5.0` — чистый Dart FFT, безопасен в любом изоляте.
+
+Критерии выхода — выполнены:
+
+- BPM не вычисляется в UI-слое ✓
+- Визуализации не тормозят DSP-поток ✓
+- `RepaintBoundary` вокруг каждой визуализации ✓
+
+---
+
+## Phase 6: стабилизация BPM-отображения — **ЗАВЕРШЕНО** (2026-05-29)
+
+Цель: устранить ступенчатые прыжки BPM в `STABLE` из-за дискретизации лага автокорреляции.
+
+Артефакты:
+
+- Параболическая интерполяция пика автокорреляции (`tempo_autocorrelation()`, `core/dsp/src/lib.rs`): ошибка снижена с ~2 BPM/лаг до < 0.2 BPM.
+- BPM candidate history в `DspEngine`: скользящий буфер N=3, медиана; очищается при не-STABLE.
+- `BpmDisplay` (`apps/mobile/lib/capture/bpm_display.dart`): EMA α=0.2 для большого BPM-числа; снэп при первом STABLE-кадре.
+- 7 новых Rust-тестов в `core/dsp/tests/stability.rs` (streak ±0.5 BPM, parabolic precision).
+- Большое BPM-число показывается только в STABLE; в LOCKING — `—`.
+
+Критерии выхода — выполнены:
+
+- ±0.5 BPM streak-стабильность на 180/195/200/220 BPM ✓
+- `parabolic_precision_200_bpm` — допуск ±0.2 BPM ✓
+
+---
+
+## Phase 7: UI overhaul — **ЗАВЕРШЕНО** (2026-05-29)
+
+Цель: метрические оси на визуализациях, live-spectrum, design system.
+
+Артефакты:
+
+- `SpectrogramPainter` с метрическими осями: Hz-метки на лог-шкале, временны́е метки.
+- `LiveSpectrumPainter`: real-time FFT-кривая с gradient fill, peak-hold, лог X-ось 20–20 кГц.
+- `AppTheme` (`design_tokens.dart`): акцент `#00E5CC`, фон `#07070F`, JetBrains Mono.
+- `VizController.latestNorms` + `peakHoldValues`: third FFT consumer, decay ×0.90.
+- Glassmorphism-карточка info-блока.
+- `AnimatedSwitcher`-бейджи с `ValueKey<LockState>`.
+
+### Phase 7.1: Осциллограф вместо спектрограммы — **ЗАВЕРШЕНО** (2026-05-29)
+
+- `WaveformPainter` переписан в стиль осциллографа: тёмный фон + сетка, glow-проход, курсор «Now».
+- Панель спектрограммы (35%) заменена на осциллограф (35%) на главном экране.
+- `spectrogram_painter.dart` сохранён (не удалён).
+
+---
+
+## Phase 8: DSP fast re-lock v2 — **ЗАВЕРШЕНО** (2026-05-29)
+
+Цель: re-lock после смены трека ≤ 3 с (было 6–8 с).
+
+Артефакты:
+
+- State-based адаптивное окно онсетов: `STABLE` = полная история, `LOCKING` = 6 с, `SEARCHING`/`UNSTABLE` = 2 с.
+- Детектор прыжка темпа: порог 15 BPM → сброс `bpm_history` + принудительный `SEARCHING`.
+- `DspConfig` поля: `adaptive_window` (default `true`), `tempo_jump_threshold` (default `15.0`).
+- 6 новых streaming-тестов: `tempo_change_185_to_200`, `200_to_170`, `no_false_stable_during_transition` и др.
+- `ADAPTIVE_WINDOW_LOCKING_SECS` = 6.0 с (исправлено с 4.0 → устранено зависание в LOCKING).
+
+### Phase 8.1: fix first-lock regression — **ЗАВЕРШЕНО** (2026-05-29)
+
+- Поле `has_ever_been_stable: bool` в `DspEngine`: полная история при первом захвате, адаптивное окно — только при повторном.
+- Тесты: `first_lock_uses_full_window_no_prior_stable`, `relock_adaptive_window_still_fast_after_stable`.
+
+Критерии выхода — выполнены:
+
+- re-lock после смены трека ≤ 3 с ✓
+- первый захват по-прежнему ≤ 12 с ✓
+- 43 Rust-теста PASS ✓
+
+---
 
 ## Phase 8.2: расширение диапазона 155–230 + аудит тестов — **ЗАВЕРШЕНО** (2026-05-30)
 
@@ -147,3 +233,34 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 Известное ограничение: 13 из 21 реальных фикстур без ground truth (имена файлов
 без BPM) — ожидают значений от пользователя; до этого они только parity-проверены
 (`expected_bpm: null`, статус `n/a`). `hitech_real_10` остаётся `known_fail`.
+
+---
+
+## Phase 9: Android APK — **В ПРОЦЕССЕ** (2026-05-30)
+
+Цель: получить подписанный release APK для Android и подтвердить работу детектора на эмуляторе/устройстве.
+
+Артефакты (выполнено):
+
+- `scripts/build_android_native.sh` — кросс-компиляция Rust → `.so` (arm64-v8a / armeabi-v7a / x86_64) через Android NDK; аналог iOS-скрипта.
+- Rust Android таргеты установлены: `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`.
+- `.gitignore`: `jniLibs/`, `key.properties`, `*.jks` защищены.
+- `apps/mobile/android/key.properties.template` — шаблон с инструкцией по генерации keystore.
+- `docs/ANDROID_TEST_PLAN.md` — тест-план для AVD и физического устройства.
+- `docs/RELEASE_CHECKLIST.md` — 11-шаговый Android Release чеклист.
+
+Артефакты (ожидают установки Android Studio):
+
+- `jniLibs/<abi>/libhitech_bpm_ffi.so` — не заполнены (нужен NDK).
+- `apps/mobile/android/android-release.jks` — не создан (нужен keytool).
+- `apps/mobile/android/key.properties` — не создан (заполнить из шаблона).
+
+Критерии выхода:
+
+- `bash scripts/build_android_native.sh` завершается без ошибок;
+- `flutter build apk --debug` → `app-debug.apk` собирается;
+- приложение запускается в AVD-эмуляторе без краша;
+- silence в эмуляторе → `SEARCHING`/`NOISE_ONLY` (никогда не `STABLE`);
+- `flutter build apk --release` → `app-release.apk` с release-подписью.
+
+Известное ограничение: виртуальный микрофон AVD не позволяет проверить реальную точность детектора — для этого нужно физическое Android-устройство.

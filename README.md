@@ -1,8 +1,8 @@
 # hitech-bpm-radar
 
-DSP-first определение BPM для hitech / psytrance — автоматический темп с микрофона в диапазоне 170–230 BPM.
+DSP-first определение BPM для hitech / psytrance — автоматический темп с микрофона в диапазоне **155–230 BPM**. Без tap-tempo, без хардкоженых значений.
 
-Это не tap-tempo и не UI-демо. Первая продакшен-веха — детерминированное DSP-ядро с синтетическими тестами и офлайн-анализатором. Захват микрофона и UI на мобильном устройстве подключаются только после стабилизации DSP-контракта.
+Rust DSP-ядро → Flutter FFI-мост → живой экран BPM. Все вычисления темпа — в Rust; Flutter только рендерит DSP-контракт.
 
 ## Продуктовый контракт
 
@@ -14,7 +14,7 @@ DSP-first определение BPM для hitech / psytrance — автома�
 - BPM-кандидаты со score;
 - связи half-time и double-time;
 - предупреждения о качестве сигнала;
-- историю сессий — после интеграции с мобильным приложением.
+- историю сессий.
 
 Продакшен-логика никогда не хардкодит демо-значения BPM и не выдумывает темп для тишины, шума-без-сигнала, перегруженного микрофона или брейкдаунов.
 
@@ -32,30 +32,40 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 .agents/skills/    Переиспользуемые навыки проекта для локальных воркфлоу с агентами.
 ```
 
-## Current Status — v1.0.0
+## Статус проекта
 
-### Completed Phases
-- **Phase 0** — Repository infrastructure
-- **Phase 1** — Offline Python DSP lab
-- **Phase 2** — Streaming Rust DSP core (first-lock <6s, stable-lock <12s)
-- **Phase 3** — Flutter mobile shell (iOS + Android, mic capture, FFI bridge)
-- **Phase 4** — Club hardening:
-  - BPM stability: parabolic interpolation (±0.5 BPM accuracy)
-  - Fast re-lock after tempo change (≤3s)
-  - Real fixture snapshot testing (21 hitech tracks)
-  - UI: Traktor-style waveform, spectrogram with metric axes, live spectrum
-  - UI: EMA display smoothing, lock-state badges
-  - Dart-side smoothing layer (median filter, confidence EMA, hysteresis)
+### Завершённые фазы
 
-### Key Features
-- Realtime BPM detection: 170–230 BPM (hitech/psytrance)
-- Parabolic interpolation for sub-sample lag accuracy
-- Adaptive analysis window per lock state
-- 7 lock states: SEARCHING → LOCKING → STABLE / UNSTABLE / BREAKDOWN / CLIPPED_MIC / NOISE_ONLY
-- Half-time and double-time candidate visibility
-- Anti-fake: no hardcoded BPM, no timer-based pulse
-- SNR estimation and signal quality gating
-- 50+ Rust tests, 21 real fixture snapshots, synthetic coverage
+| Фаза | Содержание |
+|---|---|
+| Phase 1 | Офлайн-DSP-лаборатория: Python-референс, синтетические фикстуры, CLI офлайн-анализатора |
+| Phase 2 | Потоковое Rust DSP-ядро: кольцевой буфер, история онсетов, first-lock <6 с, stable-lock <12 с |
+| Phase 3 | Flutter мобильный мост: iOS (static `.a`) + Android (`.so`), FFI-изолят, debug-экран, iPhone 11 ✓ |
+| Phase 4 | Закалка: SNR-оценка, BpmSmoother (медиана+EMA+гистерезис), 21 реальная hitech-фикстура |
+| Phase 5 | UI: VizController, SpectrogramPainter, WaveformPainter, live-spectrum, rawPcm-стрим |
+| Phase 6 | Точность BPM: параболическая интерполяция (±0.2 BPM), BPM candidate history N=3, BpmDisplay EMA |
+| Phase 7 | UI redesign: SpectrogramPainter с метрическими осями, LiveSpectrumPainter, AppTheme design tokens |
+| Phase 7.1 | Осциллограф вместо спектрограммы на главном экране |
+| Phase 8 | DSP fast re-lock v2: адаптивное окно по состоянию, детектор прыжка темпа, re-lock ≤3 с |
+| Phase 8.1 | Fix first-lock: `has_ever_been_stable` — полная история при первом захвате |
+| Phase 8.2 | Расширение диапазона 170→**155 BPM**, абсолютный гейт точности в `parity.py` |
+
+### В процессе
+
+| Фаза | Содержание |
+|---|---|
+| Phase 9 | Android APK: `build_android_native.sh` готов, ожидает установки Android Studio + NDK |
+
+### Ключевые характеристики
+
+- Детекция BPM: **155–230 BPM** (hitech / psytrance), поиск в диапазоне 80–460
+- Параболическая интерполяция пика автокорреляции — точность ±0.2 BPM на синтетике
+- Адаптивное окно онсетов по состоянию захвата; re-lock ≤ 3 с
+- 7 состояний: `SEARCHING` → `LOCKING` → `STABLE` / `UNSTABLE` / `BREAKDOWN` / `CLIPPED_MIC` / `NOISE_ONLY`
+- Half-time / double-time кандидаты всегда видны; никогда не скрываются
+- Anti-fake: нет хардкоженых BPM, нет фейкового пульса по таймеру
+- SNR-оценка и гейтинг качества сигнала
+- 43 Rust-теста + 21 Python-тест + 46 Flutter-тестов, 21 реальная hitech-фикстура (180–210 BPM)
 
 ## Текущая фаза
 
@@ -162,7 +172,7 @@ flutter run --release
 
 ## Критерии приёмки
 
-- Чистые синтетические фикстуры: ±1 BPM на 170, 180, 190, 200 и 220 BPM.
+- Чистые синтетические фикстуры: ±1 BPM на 155, 170, 180, 190, 200 и 220 BPM.
 - Шумный микрофонный вход: ±2–4 BPM при адекватном качестве сигнала.
 - Первый рабочий захват: до 6 секунд.
 - Стабильный захват: до 12 секунд.
@@ -178,6 +188,7 @@ flutter run --release
 - [Заметки по мобильному аудио](docs/MOBILE_AUDIO.md)
 - [Ручной тест-чеклист (mobile)](docs/MANUAL_TEST_CHECKLIST.md)
 - [Релизный чеклист](docs/RELEASE_CHECKLIST.md)
+- [Android тест-план](docs/ANDROID_TEST_PLAN.md)
 - [Глоссарий терминов](docs/GLOSSARY.md)
 
 ## Работа с Claude Code
