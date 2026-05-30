@@ -72,7 +72,7 @@ def analyze_pcm(
     *,
     min_bpm: float = 80.0,
     max_bpm: float = 460.0,
-    hitech_min_bpm: float = 170.0,
+    hitech_min_bpm: float = 155.0,
     hitech_max_bpm: float = 230.0,
 ) -> DspResult:
     """Проанализировать нормализованные моно PCM-сэмплы и вернуть DSP-контракт."""
@@ -148,7 +148,7 @@ def analyze_pcm(
         confidence = min(confidence, 0.28)
         primary_bpm = None
         warnings.append("weak periodic onset structure")
-    elif confidence >= 0.72 and duration_sec >= 6.0:
+    elif confidence >= 0.70 and duration_sec >= 6.0:
         lock_state = "STABLE"
         timing = DspTiming(
             analysis_time_sec=round(duration_sec, 3),

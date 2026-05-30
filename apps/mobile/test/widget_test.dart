@@ -194,6 +194,39 @@ void main() {
     expect(find.textContaining('87%'), findsOneWidget);
   });
 
+  testWidgets(
+      'MainScreen InfoCard renders all metric fields from STABLE snapshot',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshot()); // bpm 200, conf 0.87, level -14.2, half_time 100
+    await tester.pump();
+    await tester.pump();
+
+    // Metric labels.
+    expect(find.text('УВЕРЕННОСТЬ'), findsOneWidget);
+    expect(find.text('УРОВЕНЬ ВХОДА'), findsOneWidget);
+    expect(find.text('ЛУЧШИЙ КАНДИДАТ'), findsOneWidget);
+    expect(find.text('×½ / ×2'), findsOneWidget);
+    expect(find.text('КЛИППИНГ'), findsOneWidget);
+    expect(find.text('ШУМ'), findsOneWidget);
+
+    // Values.
+    expect(find.text('-14.2 dBFS'), findsOneWidget); // input level
+    expect(find.text('200.0 BPM'), findsOneWidget); // best (main) candidate
+    expect(find.text('100.0 / —'), findsOneWidget); // half / double cell
+    expect(find.text('нет'), findsOneWidget); // clipping == false
+    expect(find.text('низкий'), findsOneWidget); // noise_level == 'low'
+  });
+
   testWidgets('MainScreen shows поиск badge for SEARCHING snapshot',
       (tester) async {
     final ctrl = StreamController<DspResult>.broadcast();

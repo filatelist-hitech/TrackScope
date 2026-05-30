@@ -1,71 +1,101 @@
 {
   "fixtures": [
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 180.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_01",
       "snapshot": "datasets/hitech/snapshots/hitech_real_01.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 182.02,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_02",
       "snapshot": "datasets/hitech/snapshots/hitech_real_02.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 184.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_03",
       "snapshot": "datasets/hitech/snapshots/hitech_real_03.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 186.01,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_04",
       "snapshot": "datasets/hitech/snapshots/hitech_real_04.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 188.01,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_05",
       "snapshot": "datasets/hitech/snapshots/hitech_real_05.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 188.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_06",
       "snapshot": "datasets/hitech/snapshots/hitech_real_06.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 190.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_07",
       "snapshot": "datasets/hitech/snapshots/hitech_real_07.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 192.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_08",
       "snapshot": "datasets/hitech/snapshots/hitech_real_08.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 194.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_09",
       "snapshot": "datasets/hitech/snapshots/hitech_real_09.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 196.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "known_fail": true,
       "known_fail_reason": "Detected 146.7 BPM instead of ~196 BPM. Likely half-time detection error or breakdown section at analysis start. Tracked for Phase 5 investigation.",
       "known_fail_since": "2026-05-30",
@@ -74,78 +104,111 @@
       "snapshot": "datasets/hitech/snapshots/hitech_real_10.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 198.02,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_11",
       "snapshot": "datasets/hitech/snapshots/hitech_real_11.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 200.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_12",
       "snapshot": "datasets/hitech/snapshots/hitech_real_12.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 200.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_13",
       "snapshot": "datasets/hitech/snapshots/hitech_real_13.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 200.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_14",
       "snapshot": "datasets/hitech/snapshots/hitech_real_14.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 200.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_15",
       "snapshot": "datasets/hitech/snapshots/hitech_real_15.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 200.05,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_16",
       "snapshot": "datasets/hitech/snapshots/hitech_real_16.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 202.01,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_17",
       "snapshot": "datasets/hitech/snapshots/hitech_real_17.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 204.0,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_18",
       "snapshot": "datasets/hitech/snapshots/hitech_real_18.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 205.39,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_19",
       "snapshot": "datasets/hitech/snapshots/hitech_real_19.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 208.61,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_20",
       "snapshot": "datasets/hitech/snapshots/hitech_real_20.json"
     },
     {
+      "accuracy_tolerance": 2.0,
       "bpm_tolerance": 4.0,
       "category": "real",
+      "expected_bpm": 210.03,
+      "expected_bpm_source": "dj_software_screenshot",
       "lock_state_must_match": false,
       "name": "hitech_real_21",
       "snapshot": "datasets/hitech/snapshots/hitech_real_21.json"

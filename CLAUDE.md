@@ -1,6 +1,6 @@
 # CLAUDE.md — hitech-bpm-radar
 
-DSP-first мобильный детектор BPM для hitech / psytrance (целевой диапазон 170–230 BPM). Вход — микрофон, без tap-tempo.
+DSP-first мобильный детектор BPM для hitech / psytrance (целевой диапазон 155–230 BPM). Вход — микрофон, без tap-tempo.
 
 ## Стек и раскладка
 

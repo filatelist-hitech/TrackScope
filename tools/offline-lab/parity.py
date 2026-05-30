@@ -90,6 +90,13 @@ class ManifestParityRow:
     reason: str
     known_fail: bool = False
     known_fail_reason: str = ""
+    # Absolute-accuracy gate (independent ground truth vs detection).
+    # `expected_bpm` is None for unlabeled fixtures → accuracy is "n/a" (parity-only).
+    expected_bpm: float | None = None
+    accuracy_tolerance: float = 2.0
+    accuracy_delta: float | None = None
+    accuracy_status: str = "n/a"  # "ok" | "fail" | "no-lock" | "n/a"
+    no_lock: bool = False
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
@@ -215,6 +222,9 @@ def _run_manifest_parity(
         lock_must_match = bool(entry.get("lock_state_must_match", False))
         known_fail = bool(entry.get("known_fail", False))
         known_fail_reason = entry.get("known_fail_reason", "")
+        raw_expected = entry.get("expected_bpm")
+        expected_bpm = float(raw_expected) if raw_expected is not None else None
+        accuracy_tolerance = float(entry.get("accuracy_tolerance", 2.0))
 
         if live:
             row = _compare_manifest_live(
@@ -225,6 +235,8 @@ def _run_manifest_parity(
                 cargo=cargo,
                 release=release,
                 input_dir=input_dir,
+                expected_bpm=expected_bpm,
+                accuracy_tolerance=accuracy_tolerance,
             )
             row.known_fail = known_fail
             row.known_fail_reason = known_fail_reason
@@ -240,23 +252,31 @@ def _run_manifest_parity(
                 lock_must_match=lock_must_match,
                 known_fail=known_fail,
                 known_fail_reason=known_fail_reason,
+                expected_bpm=expected_bpm,
+                accuracy_tolerance=accuracy_tolerance,
             )
 
         rows.append(row)
 
-    failed = [r for r in rows if not r.passed and not r.known_fail]
+    # no_lock = labeled track that did not lock (contract-correct, WARN not regression).
+    failed = [r for r in rows if not r.passed and not r.known_fail and not r.no_lock]
     known_fails = [r for r in rows if not r.passed and r.known_fail]
+    no_locks = [r for r in rows if r.no_lock and not r.known_fail]
 
     if json_mode:
         print(json.dumps([r.__dict__ for r in rows], indent=2, sort_keys=True))
     else:
         _print_manifest_table(rows)
+        if no_locks:
+            print(f"\n{len(no_locks)} no-lock warning(s) (labeled track did not lock; not a regression):")
+            for r in no_locks:
+                print(f"  - {r.name}: expected {r.expected_bpm} BPM, detected null ({r.rust_lock})")
         if known_fails:
             print(f"\n{len(known_fails)} known fail(s) (not counted as regression):")
             for r in known_fails:
                 print(f"  - {r.name}: {r.known_fail_reason}")
         if failed:
-            print(f"\n{len(failed)} fixture(s) failed parity:", file=sys.stderr)
+            print(f"\n{len(failed)} fixture(s) failed:", file=sys.stderr)
             for r in failed:
                 print(f"  - {r.name}: {r.reason}", file=sys.stderr)
 
@@ -271,6 +291,8 @@ def _compare_manifest_live(
     cargo: str,
     release: bool,
     input_dir: str | None,
+    expected_bpm: float | None = None,
+    accuracy_tolerance: float = 2.0,
 ) -> ManifestParityRow:
     name = entry.get("name", "")
     category = entry.get("category", "unknown")
@@ -328,6 +350,8 @@ def _compare_manifest_live(
         rust=rust_result,
         tolerance=tolerance,
         lock_must_match=lock_must_match,
+        expected_bpm=expected_bpm,
+        accuracy_tolerance=accuracy_tolerance,
     )
 
 
@@ -340,6 +364,8 @@ def _compare_manifest(
     lock_must_match: bool,
     known_fail: bool = False,
     known_fail_reason: str = "",
+    expected_bpm: float | None = None,
+    accuracy_tolerance: float = 2.0,
 ) -> ManifestParityRow:
     py_bpm = py.get("primary_bpm")
     rust_bpm = rust.get("primary_bpm")
@@ -361,14 +387,38 @@ def _compare_manifest(
     else:
         lock_ok = True
 
+    # Absolute-accuracy gate: detection (Rust = source of truth) vs independent
+    # ground truth. This is the check the old parity lacked — Python↔Rust agreement
+    # never caught a wrong-but-consistent BPM (e.g. hitech_real_10: 146.7 vs 196).
+    accuracy_delta: float | None = None
+    accuracy_status = "n/a"
+    no_lock = False
+    if expected_bpm is not None:
+        detected = rust_bpm if rust_bpm is not None else py_bpm
+        if detected is None:
+            # Labeled track that did not lock in the analysis window. Contract-correct
+            # (no false STABLE), but a detector limitation — WARN, not a hard regression.
+            accuracy_status = "no-lock"
+            no_lock = True
+        else:
+            accuracy_delta = abs(float(detected) - float(expected_bpm))
+            accuracy_status = "ok" if accuracy_delta <= accuracy_tolerance else "fail"
+
     reasons = []
     if not bpm_ok:
-        reasons.append(
-            f"bpm drift {delta:.2f if delta is not None else '∞'} > {tolerance} "
-            f"(py={py_bpm}, rust={rust_bpm})"
-        )
+        drift_text = f"{delta:.2f}" if delta is not None else "∞"
+        reasons.append(f"py↔rust drift {drift_text} > {tolerance} (py={py_bpm}, rust={rust_bpm})")
     if not lock_ok:
         reasons.append(f"lock mismatch py={py_lock} rust={rust_lock}")
+    if accuracy_status == "fail":
+        reasons.append(
+            f"accuracy {accuracy_delta:.2f} > {accuracy_tolerance} "
+            f"(detected={rust_bpm if rust_bpm is not None else py_bpm}, expected={expected_bpm})"
+        )
+    if accuracy_status == "no-lock":
+        reasons.append(f"no lock on labeled track (expected={expected_bpm})")
+
+    passed = bpm_ok and lock_ok and accuracy_status in {"ok", "n/a"}
 
     return ManifestParityRow(
         name=name,
@@ -380,34 +430,41 @@ def _compare_manifest(
         python_lock=py_lock,
         rust_lock=rust_lock,
         lock_match=lock_ok,
-        passed=bpm_ok and lock_ok,
+        passed=passed,
         reason="; ".join(reasons) or "ok",
         known_fail=known_fail,
         known_fail_reason=known_fail_reason,
+        expected_bpm=expected_bpm,
+        accuracy_tolerance=accuracy_tolerance,
+        accuracy_delta=accuracy_delta,
+        accuracy_status=accuracy_status,
+        no_lock=no_lock,
     )
 
 
 def _print_manifest_table(rows: list[ManifestParityRow]) -> None:
     header = (
-        f"{'name':<28} {'cat':>6} {'tol':>5} "
-        f"{'py_bpm':>8} {'rust_bpm':>9} {'delta':>7} "
-        f"{'py_lock':<12} {'ru_lock':<12} {'lock':>5} pass"
+        f"{'name':<28} {'cat':>6} "
+        f"{'rust_bpm':>9} {'exp_bpm':>8} {'acc_Δ':>6} {'acc':>7} "
+        f"{'py↔ru':>6} {'ru_lock':<12} pass"
     )
     print(header)
     print("-" * len(header))
     for row in rows:
-        py_bpm = f"{row.python_bpm:.1f}" if row.python_bpm is not None else "null"
         rust_bpm = f"{row.rust_bpm:.1f}" if row.rust_bpm is not None else "null"
-        delta = f"{row.delta:.2f}" if row.delta is not None else "-"
-        lock_tag = "ok" if row.lock_match else "DIFF"
+        exp_bpm = f"{row.expected_bpm:.0f}" if row.expected_bpm is not None else "-"
+        acc_delta = f"{row.accuracy_delta:.2f}" if row.accuracy_delta is not None else "-"
+        drift = f"{row.delta:.2f}" if row.delta is not None else "-"
         if row.known_fail:
             flag = "KNOWN"
+        elif row.no_lock:
+            flag = "NOLOCK"
         else:
             flag = "PASS" if row.passed else "FAIL"
         print(
-            f"{row.name:<28} {row.category:>6} {row.tolerance:>5.1f} "
-            f"{py_bpm:>8} {rust_bpm:>9} {delta:>7} "
-            f"{row.python_lock:<12} {row.rust_lock:<12} {lock_tag:>5} {flag}"
+            f"{row.name:<28} {row.category:>6} "
+            f"{rust_bpm:>9} {exp_bpm:>8} {acc_delta:>6} {row.accuracy_status:>7} "
+            f"{drift:>6} {row.rust_lock:<12} {flag}"
         )
 
 

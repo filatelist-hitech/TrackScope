@@ -110,17 +110,16 @@ fn streaming_reflects_mid_stream_tempo_change_within_one_window() {
         let elapsed_sec = fed as f32 / SAMPLE_RATE as f32;
         let result = engine.analyze();
 
-        if elapsed_sec <= transition_sec - 0.5 {
-            if matches!(result.lock_state, LockState::Stable) {
-                pre_change_bpm = result.primary_bpm;
-                pre_change_lock = Some(result.lock_state);
-            }
+        if elapsed_sec <= transition_sec - 0.5 && matches!(result.lock_state, LockState::Stable) {
+            pre_change_bpm = result.primary_bpm;
+            pre_change_lock = Some(result.lock_state);
         }
 
-        if elapsed_sec > transition_sec + 0.5 && elapsed_sec <= transition_sec + window_sec {
-            if !matches!(result.lock_state, LockState::Stable) {
-                left_stable_during_change = true;
-            }
+        if elapsed_sec > transition_sec + 0.5
+            && elapsed_sec <= transition_sec + window_sec
+            && !matches!(result.lock_state, LockState::Stable)
+        {
+            left_stable_during_change = true;
         }
 
         if elapsed_sec > transition_sec
@@ -1069,11 +1068,9 @@ fn streaming_breakdown_exits_stable() {
     // Фаза 1: 8 с чистого 200 BPM → достичь STABLE
     let stable_samples = pulse_track(200.0, 8.0, 0.9);
     let mut engine = DspEngine::new(config);
-    let mut fed = 0usize;
 
     for chunk in stable_samples.chunks(chunk_size) {
         engine.push_samples(chunk, SAMPLE_RATE);
-        fed += chunk.len();
     }
     let pre_breakdown = engine.analyze();
     assert!(
