@@ -87,29 +87,15 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        backgroundColor: AppTheme.background,
-        elevation: 0,
-        title: Text(
-          'HITECH BPM RADAR',
-          style: AppTheme.mono(
-            fontSize: 13,
-            color: AppTheme.textSecondary,
-            letterSpacing: 2.0,
-          ),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(44),
+        child: _TraktorStyleAppBar(
+          onDebugTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: widget.debugBuilder,
+            ));
+          },
         ),
-        actions: [
-          // Debug button — not moved, not changed per task constraints.
-          IconButton(
-            icon: const Icon(Icons.bug_report_outlined, color: AppTheme.textSecondary),
-            tooltip: 'Отладка',
-            onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(
-                builder: widget.debugBuilder,
-              ));
-            },
-          ),
-        ],
       ),
       body: SafeArea(
         child: Padding(
@@ -684,6 +670,67 @@ class _BadgePill extends StatelessWidget {
       case LockState.unknown:
         return ('поиск', AppTheme.surfaceHigh, AppTheme.textDim);
     }
+  }
+}
+
+// ── Traktor-style AppBar ──────────────────────────────────────────────────────
+//
+// Minimal dark bar with thin bottom border, compact layout.
+// Left: app title in small caps. Right: debug icon button.
+
+class _TraktorStyleAppBar extends StatelessWidget {
+  const _TraktorStyleAppBar({required this.onDebugTap});
+  final VoidCallback onDebugTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppTheme.background,
+        border: Border(
+          bottom: BorderSide(
+            color: Color(0x18FFFFFF),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              // App title — small, uppercase, dim.
+              Text(
+                'HITECH BPM RADAR',
+                style: AppTheme.mono(
+                  fontSize: 11,
+                  color: AppTheme.textDim,
+                  letterSpacing: 1.8,
+                  weight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              // Debug button — compact, no splash, icon only.
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 16,
+                  splashRadius: 18,
+                  icon: const Icon(
+                    Icons.bug_report_outlined,
+                    color: AppTheme.textDim,
+                  ),
+                  onPressed: onDebugTap,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

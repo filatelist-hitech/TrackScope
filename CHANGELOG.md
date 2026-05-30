@@ -38,11 +38,13 @@
 
 ### Fixed
 
-- **DSP regression (Phase 8, 2026-05-29):** Исправлено зависание в состоянии LOCKING с низкой уверенностью (~30–50%) на стабильных треках. Корневая причина: `ADAPTIVE_WINDOW_LOCKING_SECS` был установлен в 4.0 с (Phase 4.5), что давало только ~13 ударов при 200 BPM → confidence ~0.68, ниже порога 0.72 для STABLE. Увеличено до 6.0 с (совпадает с `lock_min_seconds`), теперь ~20 ударов → confidence ≥ 0.72 → успешный переход в STABLE за ≤12 секунд. (core/dsp/src/lib.rs:242)
+- **DSP first-lock regression (Phase 8.1, 2026-05-29):** Исправлено зависание в состоянии LOCKING (~30–50% уверенности) при первом захвате на стабильном треке. Корневая причина — гипотеза E (не из четырёх изначальных): адаптивное окно Phase 4.5 усекало `onset_history` до `ADAPTIVE_WINDOW_SEARCHING_SECS = 2.0 с` при состоянии SEARCHING — включая первый захват, когда prior STABLE ещё не было. К t=8s накоплено 8 секунд истории, но анализировались только последние 2 с (~5–8 ударов) → слабый пик автокорреляции → confidence < 0.72 → STABLE недостижим. Фикс: добавлено поле `has_ever_been_stable: bool` в `DspEngine`. При `false` (первый захват) — всегда полная история. При `true` (после первого STABLE) — адаптивное окно работает штатно для fast re-lock. Проверено 2 новыми тестами: `first_lock_uses_full_window_no_prior_stable` и `relock_adaptive_window_still_fast_after_stable`. (core/dsp/src/lib.rs)
+
+- **DSP regression (Phase 8, 2026-05-29):** `ADAPTIVE_WINDOW_LOCKING_SECS` исправлен с 4.0 → 6.0 с (совпадает с `lock_min_seconds`), что даёт ~20 ударов при 200 BPM и confidence ≥ 0.72. (core/dsp/src/lib.rs)
 
 ### Changed
 
-- **Waveform visualization (Phase 8, 2026-05-29):** Подтверждено соответствие спецификации Traktor DJ bar-column style — острые вертикальные прямоугольные колонки (drawRect), цветовой градиент по bass-энергии (0xFF003D35 → 0xFF00E5CC), без пунктирных линий. Реализация уже корректна с Phase 7. (apps/mobile/lib/viz/waveform_painter.dart, apps/mobile/lib/viz/waveform_column.dart)
+- **Waveform visualization (Phase 8.1, 2026-05-29):** Осциллограф-стиль (`WaveformPainter`, smooth glow line) заменён на Traktor DJ–стиль (`WaveformColumnPainter`): острые вертикальные прямоугольники `drawRect`, цветовой градиент по bass-энергии (`0xFF003D35` → `0xFF00E5CC`). Пунктирная вертикальная линия «Now» удалена. Добавлен `WaveformColumn` data class с полями `amplitude`, `bassWeight`, `midWeight`, `highWeight`. `VizController` вычисляет band-split энергию из тех же FFT magnitudes без второго FFT. Границы бинов (48 kHz / 1024): bass 0–6 (0–328 Hz), mid 7–63 (329–2953 Hz), high 64–127 (2954–5953 Hz). (apps/mobile/lib/viz/)
 
 - **DSP fast re-lock v2**: re-lock after track change now ≤ 3 s (was 6–8 s)
   - State-based adaptive analysis window: STABLE=full history, LOCKING=6 s (updated from 4 s), SEARCHING/UNSTABLE=2 s
