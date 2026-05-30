@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# RevenueCat API keys (use config.dart.template)
+lib/monetization/config.dart
