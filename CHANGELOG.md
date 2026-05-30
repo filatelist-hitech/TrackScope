@@ -4,6 +4,43 @@
 
 Формат основан на [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), а проект придерживается семантического версионирования после старта релизов.
 
+## [Unreleased]
+
+### Changed
+
+- **Расширен диапазон детекции BPM 170–230 → 155–230** (Phase 8.2). Ранний hitech
+  начинается от ~155 BPM. Изменены только дефолты предпочитаемого диапазона:
+  `DspConfig::target_bpm_min` (Rust) и `analyze_pcm(hitech_min_bpm=…)` (Python) с
+  `170.0` на `155.0`. Поиск (80–460) и нормализация (`<130 → ×2`, `>260 → ÷2`) не
+  менялись. Детекция ≥170 BPM байт-идентична; 155–169 получают более высокий
+  range_score. 155–169 не удваиваются (проверено: 155 → 154.8, 160 → 160.0).
+- **Допуск реальных фикстур: добавлен абсолютный гейт точности ±2 BPM.** Прежний
+  `parity.py` сравнивал только Python↔Rust (delta 0.00 везде), из-за чего
+  неверная-но-согласованная детекция проходила молча (так `hitech_real_10` 146.7
+  вместо ~196 жил до ручного `known_fail`). Теперь `parity.py` дополнительно
+  проверяет `|detected − expected_bpm| ≤ accuracy_tolerance` для фикстур с
+  известным ground truth.
+
+### Added
+
+- `core/dsp/tests/range_coverage.rs` — потоковая матрица 155 + 160…230 (шаг 5,
+  16 точек): first-lock ≤6 с, STABLE ≤12 с, последние 20 STABLE-кадров ±1 BPM;
+  плюс `bpm_155_is_detected_not_doubled`.
+- `test_extended_range_low_end_locks_in_band_without_doubling` (Python) — 155/160/165.
+- `datasets/fixture_manifest.json` — поля `expected_bpm` + `accuracy_tolerance` на
+  все 21 реальную фикстуру (8 размечены по имени файла, 13 — `TODO_user_provided`).
+- `apps/mobile/test/waveform_painter_test.dart` — smoke-тесты `WaveformColumnPainter`
+  (пустой буфер, полный mock-буфер, `WaveformColumn.empty`).
+- `widget_test.dart` — покрытие всех полей InfoCard (уровень входа, лучший
+  кандидат, ×½/×2-ячейка, клиппинг, шум) из STABLE-снапшота.
+
+### Audit
+
+- Аудит Rust/FFI-тестов: все используют value-ассерты (`assert_bpm`,
+  `(bpm-200).abs()<=2`); голых `is_some()`-без-проверки не найдено — ложных
+  срабатываний в Rust-тестах нет. Единственный структурный пробел —
+  отсутствие абсолютного гейта в `parity.py` — закрыт (см. Changed).
+
 ## [1.0.0] — 2026-05-30
 
 ### Added

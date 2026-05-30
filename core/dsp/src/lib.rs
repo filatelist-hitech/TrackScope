@@ -70,7 +70,7 @@ impl Default for DspConfig {
     fn default() -> Self {
         Self {
             sample_rate: 48_000,
-            target_bpm_min: 170.0,
+            target_bpm_min: 155.0,
             target_bpm_max: 230.0,
             broad_bpm_min: 80.0,
             broad_bpm_max: 460.0,
@@ -210,8 +210,8 @@ pub struct DspEngine {
 const BPM_HISTORY_N: usize = 3;
 
 /// Fast re-lock (v1): длительность сохраняемой onset-истории после
-/// детектированного темпового сдвига. 2 сек onset-данных ≈ 6–9 периодов
-/// для 170–230 BPM (лаг 78–141 onset-кадров при hop=2.5 мс) — достаточно
+/// детектированного темпового сдвига. 2 сек onset-данных ≈ 5–8 периодов
+/// для 155–230 BPM (лаг 104–155 onset-кадров при hop=2.5 мс) — достаточно
 /// для надёжного autocorr-пика. После усечения новые онсеты нового темпа
 /// вытеснят остатки за ~1–2 сек, что даёт итоговый перезахват ~3–4 сек.
 const RELOCK_WINDOW_SECS: f32 = 2.0;

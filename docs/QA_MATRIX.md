@@ -180,3 +180,91 @@ Rust DSP-регрессионная обвязка (`core/dsp/tests/offline_cont
 | `unstable_club_simulation` | `unstable_club_simulation(…)` | `NOISE_ONLY` / `UNSTABLE` / `LOCKING` / `SEARCHING` | `null` |
 
 `canonical_fixture_inventory_round_trip` в `offline_contract.rs` обходит весь инвентарь и проверяет anti-fake-инварианты (никакого `STABLE` на тишине/шуме/сильном клиппинге, half/double-relations сохраняются на ловушках).
+
+## Phase 8.2: диапазон 155–230 + аудит ложных срабатываний (2026-05-30)
+
+### Расширение диапазона
+
+Предпочитаемый диапазон снижен 170–230 → **155–230 BPM**. Синтетическое покрытие —
+`core/dsp/tests/range_coverage.rs`: потоковая матрица 155 + 160…230 (шаг 5,
+16 точек). Каждая точка: first-lock ≤6 с, STABLE ≤12 с, последние 20 STABLE-кадров
+в пределах ±1 BPM. Все 16 — PASS. Граничный `bpm_155_is_detected_not_doubled`:
+155 → [153,157], не ~310. Python: `test_extended_range_low_end_locks_in_band_without_doubling`
+(155/160/165, ±1.5 BPM).
+
+### Аудит существующих тестов
+
+- **Rust/FFI-тесты — чисто.** Все используют value-ассерты с допуском
+  (`assert_bpm(..., tol)`, `(bpm-200).abs()<=2` в `ffi_contract.rs:99`). Голых
+  `assert!(result.primary_bpm.is_some())` без проверки значения **не найдено** —
+  ложных срабатываний в Rust-тестах нет.
+- **`parity.py` — структурный пробел (исправлен).** Прежде сравнивал только
+  `python.primary_bpm` vs `rust.primary_bpm`. Поскольку py==rust (delta 0.00 на
+  всех снапшотах), parity всегда проходил — даже когда оба согласны в *неверном*
+  числе. Так `hitech_real_10` (146.7 вместо ~196) проходил молча, пока не был
+  вручную помечен `known_fail`. **Фикс:** добавлен независимый абсолютный гейт
+  точности (детекция vs ground truth).
+
+### Абсолютный гейт точности реальных фикстур (±2 BPM)
+
+`parity.py` теперь проверяет `|detected − expected_bpm| ≤ accuracy_tolerance`
+(детекция = Rust, источник истины) **отдельно** от Python↔Rust drift-проверки.
+Политика статусов:
+
+- `expected_bpm` известен и детекция в допуске → **PASS**.
+- `expected_bpm` известен, детекция вне допуска → **FAIL** (если не `known_fail`).
+- `expected_bpm` известен, детекция `null` → **NOLOCK** (контракт-корректно:
+  нет ложного STABLE; не считается регрессией, не валит exit-code).
+- `expected_bpm` неизвестен (`null`) → **n/a** (только parity Python↔Rust).
+
+Ground truth: 8 треков размечены по BPM в имени файла (authoritative). 13 без
+разметки ожидают значений от пользователя (`TODO_user_provided`).
+
+| fixture | expected | detected (rust≈py) | acc Δ | py↔ru | acc-статус | результат |
+| --- | --- | --- | --- | --- | --- | --- |
+| hitech_real_01 | 180 | 180.2 | 0.20 | 0.00 | ok | PASS |
+| hitech_real_02 | — | 182.2 | — | 0.00 | n/a | PASS (parity-only) |
+| hitech_real_03 | 184 | 183.6 | 0.40 | 0.00 | ok | PASS |
+| hitech_real_04 | 186 | 186.5 | 0.50 | 0.00 | ok | PASS |
+| hitech_real_05 | — | 187.9 | — | 0.00 | n/a | PASS (parity-only) |
+| hitech_real_06 | 188 | null | — | — | no-lock | NOLOCK |
+| hitech_real_07 | — | 190.2 | — | 0.00 | n/a | PASS (parity-only) |
+| hitech_real_08 | — | 192.4 | — | 0.00 | n/a | PASS (parity-only) |
+| hitech_real_09 | — | null | — | — | n/a | PASS (parity-only) |
+| hitech_real_10 | 196 | 146.7 | 49.30 | 0.00 | fail | KNOWN_FAIL |
+| hitech_real_11 | — | 198.0 | — | 0.00 | n/a | PASS (parity-only) |
+| hitech_real_12 | — | 200.5 | — | 0.00 | n/a | PASS (parity-only) |
+| hitech_real_13 | 200 | null | — | — | no-lock | NOLOCK |
+| hitech_real_14 | 200 | null | — | — | no-lock | NOLOCK |
+| hitech_real_15 | — | null | — | — | n/a | PASS (parity-only) |
+| hitech_real_16 | — | 200.5 | — | 0.00 | n/a | PASS (parity-only) |
+| hitech_real_17 | — | 202.1 | — | 0.00 | n/a | PASS (parity-only) |
+| hitech_real_18 | — | null | — | — | n/a | PASS (parity-only) |
+| hitech_real_19 | 206 | 205.6 | 0.40 | 0.00 | ok | PASS |
+| hitech_real_20 | — | 207.4 | — | 0.00 | n/a | PASS (parity-only) |
+| hitech_real_21 | — | 210.1 | — | 0.00 | n/a | PASS (parity-only) |
+
+Итог: 4 PASS по абсолютной точности (01/03/04/19), 3 NOLOCK (06/13/14 — реальные
+треки не залочились за 30-сек окно; детектор не выдумывает STABLE), 1 KNOWN_FAIL
+(10), 13 parity-only (ожидают ground truth). Exit-code `parity.py --fixture-set
+real` = 0 (нет регрессий).
+
+> **TODO:** когда пользователь предоставит истинные BPM для 13 безымянных треков,
+> заполнить `expected_bpm` в `fixture_manifest.json` и перепроверить — гейт ±2
+> может выявить дополнительные FAIL/NOLOCK.
+
+### UI-тесты (Flutter)
+
+- `apps/mobile/test/waveform_painter_test.dart` — smoke `WaveformColumnPainter`
+  (пустой / mock / `WaveformColumn.empty`), без исключений.
+- `widget_test.dart` (расширен) — все поля InfoCard из STABLE-снапшота: уровень
+  входа (`-14.2 dBFS`), лучший кандидат (`200.0 BPM`), ×½/×2-ячейка (`100.0 / —`),
+  клиппинг (`нет`), шум (`низкий`). Существующее покрытие (7 badge-состояний,
+  null→`—`, debug-навигация, permission-экран, debug-кандидаты) сохранено в
+  `widget_test.dart`. Всего 50 Flutter-тестов — PASS.
+
+Примечание: standalone-виджеты из исходного задания (`LockStateBadge`, `InfoCard`,
+`BpmDisplayWidget`, `MockDspEngine`) не существуют — реальный UI использует
+приватные виджеты внутри `main_screen.dart`; тесты идут через реальные точки входа
+`MainScreen`/`DebugScreen`/`PermissionDeniedScreen` с mock `Stream<DspResult>`,
+без изменений production-UI.

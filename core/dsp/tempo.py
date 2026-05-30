@@ -72,7 +72,7 @@ def analyze_pcm(
     *,
     min_bpm: float = 80.0,
     max_bpm: float = 460.0,
-    hitech_min_bpm: float = 170.0,
+    hitech_min_bpm: float = 155.0,
     hitech_max_bpm: float = 230.0,
 ) -> DspResult:
     """Проанализировать нормализованные моно PCM-сэмплы и вернуть DSP-контракт."""
