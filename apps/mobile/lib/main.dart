@@ -2,17 +2,46 @@
 // FFI-мост захвата (который владеет изолятом DSP-воркера) и живой UI.
 // Никаких вычислений BPM, никаких фейковых значений, никакого отката на
 // синтетический звук при сбое захвата — UI показывает ошибку.
+//
+// Freemium: ProStatusService инициализируется при старте. FeatureFlags
+// вычисляются из Pro-статуса. CaptureBridge пересоздаётся при смене tier
+// (новый minBpm), без перезапуска приложения.
+//
+// RevenueCat gateway инжектируется только здесь — единственный файл,
+// импортирующий `revenuecat_gateway.dart` (и, через него, `purchases_flutter`).
 
 import 'package:flutter/material.dart';
 
 import 'capture/capture_bridge.dart';
 import 'capture/microphone_source.dart';
+import 'export/bpm_exporter.dart';
+import 'history/history_screen.dart';
+import 'history/session_history_controller.dart';
+import 'monetization/feature_flags.dart';
+import 'monetization/paywall_screen.dart';
+import 'monetization/pro_status_service.dart';
+import 'monetization/revenuecat_gateway.dart';
 import 'permissions/permission_gate.dart';
 import 'ui/debug_screen.dart';
 import 'ui/main_screen.dart';
 import 'ui/permission_denied_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Inject the real RevenueCat gateway before initializing.
+  ProStatusService.instance.configureGateway(RevenueCatGateway());
+
+  // Read RevenueCat keys from --dart-define / --dart-define-from-file.
+  // If both are empty, the app stays fully Free / offline / keyless.
+  const iosKey = String.fromEnvironment('REVENUECAT_IOS_KEY', defaultValue: '');
+  const androidKey = String.fromEnvironment('REVENUECAT_ANDROID_KEY', defaultValue: '');
+
+  await ProStatusService.instance.initialize(
+    iosKey: iosKey,
+    androidKey: androidKey,
+  );
+
   runApp(const HitechBpmRadarApp());
 }
 
@@ -48,21 +77,52 @@ class HitechBpmRadarApp extends StatelessWidget {
 /// экрана. Создаёт их в `initState`, освобождает в `dispose` — держим
 /// здесь (а не в состоянии приложения), чтобы handle моста не пережил
 /// отзыв разрешения на микрофон.
-class _LiveCaptureScaffold extends StatefulWidget {
+///
+/// Rebuilds the capture pipeline when the tier changes (new minBpm) via
+/// ListenableBuilder on ProStatusService.instance. Startup/capture errors are
+/// owned by [_CapturePipeline], so this wrapper is stateless.
+class _LiveCaptureScaffold extends StatelessWidget {
   const _LiveCaptureScaffold();
 
   @override
-  State<_LiveCaptureScaffold> createState() => _LiveCaptureScaffoldState();
+  Widget build(BuildContext context) {
+    // Rebuild the entire capture pipeline when Pro status changes
+    // so that CaptureBridge picks up the new minBpm.
+    return ListenableBuilder(
+      listenable: ProStatusService.instance,
+      builder: (context, _) {
+        final flags = FeatureFlags(isPro: ProStatusService.instance.isPro);
+        return _CapturePipeline(flags: flags);
+      },
+    );
+  }
 }
 
-class _LiveCaptureScaffoldState extends State<_LiveCaptureScaffold> {
-  final CaptureBridge _bridge = CaptureBridge();
-  final MicrophoneSource _mic = MicrophoneSource();
+/// The actual capture pipeline that owns CaptureBridge, MicrophoneSource,
+/// and SessionHistoryController. Disposed and respawned on tier change.
+class _CapturePipeline extends StatefulWidget {
+  const _CapturePipeline({required this.flags});
+  final FeatureFlags flags;
+
+  @override
+  State<_CapturePipeline> createState() => _CapturePipelineState();
+}
+
+class _CapturePipelineState extends State<_CapturePipeline> {
+  late final CaptureBridge _bridge;
+  late final MicrophoneSource _mic;
+  late final SessionHistoryController _history;
   Object? _startupError;
 
   @override
   void initState() {
     super.initState();
+    _bridge = CaptureBridge(minBpm: widget.flags.minBpm);
+    _mic = MicrophoneSource();
+    _history = SessionHistoryController(
+      flags: widget.flags,
+      resultsStream: _bridge.results,
+    );
     _startCapture();
   }
 
@@ -84,6 +144,7 @@ class _LiveCaptureScaffoldState extends State<_LiveCaptureScaffold> {
   void dispose() {
     _bridge.dispose();
     _mic.dispose();
+    _history.dispose();
     super.dispose();
   }
 
@@ -108,6 +169,22 @@ class _LiveCaptureScaffoldState extends State<_LiveCaptureScaffold> {
       results: _bridge.results,
       errors: _bridge.errors,
       rawPcm: _bridge.rawPcm,
+      isPro: widget.flags.isPro,
+      onHistoryTap: () {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => HistoryScreen(
+            controller: _history,
+            flags: widget.flags,
+            onExportCsv: () => exportCsv(_history.history.samples),
+            onExportJson: () => exportJson(_history.history.samples),
+          ),
+        ));
+      },
+      onPaywallTap: (feature) {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => PaywallScreen(feature: feature),
+        ));
+      },
       debugBuilder: (_) => DebugScreen(results: _bridge.results),
     );
   }

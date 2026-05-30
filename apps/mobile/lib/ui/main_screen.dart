@@ -39,6 +39,9 @@ class MainScreen extends StatefulWidget {
     required this.errors,
     required this.debugBuilder,
     this.rawPcm,
+    this.isPro = true,
+    this.onHistoryTap,
+    this.onPaywallTap,
   });
 
   final Stream<DspResult> results;
@@ -50,6 +53,15 @@ class MainScreen extends StatefulWidget {
   /// Raw PCM-16 LE mono bytes from CaptureBridge.rawPcm. Null in unit tests
   /// and before mic permission is granted — visualisers show a placeholder.
   final Stream<Uint8List>? rawPcm;
+
+  /// Whether the user is on Pro tier. Affects debug gate and AppBar.
+  final bool isPro;
+
+  /// Callback when History icon is tapped. Null = no history button shown.
+  final VoidCallback? onHistoryTap;
+
+  /// Callback when Upgrade/PRO badge or paywall trigger is tapped.
+  final void Function(String feature)? onPaywallTap;
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -90,11 +102,21 @@ class _MainScreenState extends State<MainScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(44),
         child: _TraktorStyleAppBar(
+          isPro: widget.isPro,
           onDebugTap: () {
+            // Gate: Free → paywall, Pro → debug screen.
+            if (!widget.isPro) {
+              widget.onPaywallTap?.call('debug_screen');
+              return;
+            }
             Navigator.of(context).push(MaterialPageRoute(
               builder: widget.debugBuilder,
             ));
           },
+          onHistoryTap: widget.onHistoryTap,
+          onUpgradeTap: widget.isPro
+              ? null
+              : () => widget.onPaywallTap?.call('upgrade'),
         ),
       ),
       body: SafeArea(
@@ -679,8 +701,16 @@ class _BadgePill extends StatelessWidget {
 // Left: app title in small caps. Right: debug icon button.
 
 class _TraktorStyleAppBar extends StatelessWidget {
-  const _TraktorStyleAppBar({required this.onDebugTap});
+  const _TraktorStyleAppBar({
+    required this.onDebugTap,
+    this.onHistoryTap,
+    this.onUpgradeTap,
+    this.isPro = true,
+  });
   final VoidCallback onDebugTap;
+  final VoidCallback? onHistoryTap;
+  final VoidCallback? onUpgradeTap;
+  final bool isPro;
 
   @override
   Widget build(BuildContext context) {
@@ -711,6 +741,43 @@ class _TraktorStyleAppBar extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              // History button.
+              if (onHistoryTap != null)
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    iconSize: 16,
+                    splashRadius: 18,
+                    icon: const Icon(
+                      Icons.history,
+                      color: AppTheme.textDim,
+                    ),
+                    onPressed: onHistoryTap,
+                  ),
+                ),
+              // Upgrade / PRO badge.
+              if (!isPro && onUpgradeTap != null)
+                GestureDetector(
+                  onTap: onUpgradeTap,
+                  child: Container(
+                    margin: const EdgeInsets.only(left: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentDim,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'PRO',
+                      style: AppTheme.mono(
+                        fontSize: 9,
+                        color: AppTheme.accent,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
               // Debug button — compact, no splash, icon only.
               SizedBox(
                 width: 32,

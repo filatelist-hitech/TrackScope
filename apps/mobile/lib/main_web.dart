@@ -8,12 +8,14 @@
 // Запуск: `./run_preview.sh` (flutter run -d web-server --target
 // lib/main_web.dart). НЕ импортируется из `lib/main.dart` (мобильный
 // продакшен-путь использует настоящий DspEngine через CaptureBridge).
+//
+// Freemium: constructs fixed FeatureFlags for preview; no
+// `revenuecat_gateway.dart` import — keeps web tree clean.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'capture/capture_error.dart';
-import 'dsp/dsp_result.dart';
 import 'mock/mock_dsp_stream.dart';
 import 'ui/debug_screen.dart';
 import 'ui/main_screen.dart';
@@ -23,21 +25,14 @@ void main() {
   runApp(const _PreviewApp());
 }
 
-class _PreviewApp extends StatefulWidget {
+class _PreviewApp extends StatelessWidget {
   const _PreviewApp();
 
   @override
-  State<_PreviewApp> createState() => _PreviewAppState();
-}
-
-class _PreviewAppState extends State<_PreviewApp> {
-  // Один broadcast-поток, чтобы и MainScreen, и DebugScreen могли слушать.
-  late final Stream<DspResult> _results =
-      MockDspStream.stable().asBroadcastStream();
-  final Stream<CaptureError> _errors = const Stream<CaptureError>.empty();
-
-  @override
   Widget build(BuildContext context) {
+    final results = MockDspStream.stable().asBroadcastStream();
+    const errors = Stream<CaptureError>.empty();
+
     return MaterialApp(
       title: 'Hitech BPM Radar — UI Preview',
       debugShowCheckedModeBanner: false,
@@ -56,10 +51,12 @@ class _PreviewAppState extends State<_PreviewApp> {
         location: BannerLocation.topStart,
         color: const Color(0xFFB00020),
         child: MainScreen(
-          results: _results,
-          errors: _errors,
+          results: results,
+          errors: errors,
           rawPcm: MockDspStream.rawPcm(),
-          debugBuilder: (_) => DebugScreen(results: _results),
+          isPro: false,
+          onPaywallTap: (_) {}, // no-op on web
+          debugBuilder: (_) => DebugScreen(results: results),
         ),
       ),
     );

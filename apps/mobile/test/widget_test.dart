@@ -136,13 +136,19 @@ DspResult _lockSnapshot(String lockState) => DspResult.fromJson({
 /// Helper: wraps [MainScreen] without a rawPcm stream (simulates pre-mic state).
 Widget _buildMainScreen(
   Stream<DspResult> results,
-  Stream<CaptureError> errors,
-) =>
+  Stream<CaptureError> errors, {
+  bool isPro = true,
+  VoidCallback? onHistoryTap,
+  void Function(String)? onPaywallTap,
+}) =>
     MaterialApp(
       home: MainScreen(
         results: results,
         errors: errors,
         rawPcm: null, // no mic in tests → spectrogram shows placeholder
+        isPro: isPro,
+        onHistoryTap: onHistoryTap,
+        onPaywallTap: onPaywallTap,
         debugBuilder: (_) => const Scaffold(body: Text('stub-debug')),
       ),
     );
@@ -445,5 +451,67 @@ void main() {
     await tester.tap(find.text('Выдать доступ к микрофону'));
     await tester.pump();
     expect(retryCalled, isTrue);
+  });
+
+  // ── Freemium gating ─────────────────────────────────────────────────────────
+
+  testWidgets('Free tier: debug button triggers onPaywallTap instead of debug',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    String? paywallFeature;
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(
+      ctrl.stream,
+      errs.stream,
+      isPro: false,
+      onPaywallTap: (f) => paywallFeature = f,
+    ));
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.bug_report_outlined));
+    await tester.pump();
+
+    expect(paywallFeature, 'debug_screen');
+  });
+
+  testWidgets('Free tier: PRO badge visible in app bar', (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(
+      ctrl.stream,
+      errs.stream,
+      isPro: false,
+    ));
+    await tester.pump();
+
+    expect(find.text('PRO'), findsOneWidget);
+  });
+
+  testWidgets('Pro tier: no PRO badge in app bar', (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(
+      ctrl.stream,
+      errs.stream,
+      isPro: true,
+    ));
+    await tester.pump();
+
+    expect(find.text('PRO'), findsNothing);
   });
 }
