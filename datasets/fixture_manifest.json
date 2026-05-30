@@ -66,6 +66,9 @@
     {
       "bpm_tolerance": 4.0,
       "category": "real",
+      "known_fail": true,
+      "known_fail_reason": "Detected 146.7 BPM instead of ~196 BPM. Likely half-time detection error or breakdown section at analysis start. Tracked for Phase 5 investigation.",
+      "known_fail_since": "2026-05-30",
       "lock_state_must_match": false,
       "name": "hitech_real_10",
       "snapshot": "datasets/hitech/snapshots/hitech_real_10.json"

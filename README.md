@@ -32,6 +32,31 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 .agents/skills/    Переиспользуемые навыки проекта для локальных воркфлоу с агентами.
 ```
 
+## Current Status — v1.0.0
+
+### Completed Phases
+- **Phase 0** — Repository infrastructure
+- **Phase 1** — Offline Python DSP lab
+- **Phase 2** — Streaming Rust DSP core (first-lock <6s, stable-lock <12s)
+- **Phase 3** — Flutter mobile shell (iOS + Android, mic capture, FFI bridge)
+- **Phase 4** — Club hardening:
+  - BPM stability: parabolic interpolation (±0.5 BPM accuracy)
+  - Fast re-lock after tempo change (≤3s)
+  - Real fixture snapshot testing (21 hitech tracks)
+  - UI: Traktor-style waveform, spectrogram with metric axes, live spectrum
+  - UI: EMA display smoothing, lock-state badges
+  - Dart-side smoothing layer (median filter, confidence EMA, hysteresis)
+
+### Key Features
+- Realtime BPM detection: 170–230 BPM (hitech/psytrance)
+- Parabolic interpolation for sub-sample lag accuracy
+- Adaptive analysis window per lock state
+- 7 lock states: SEARCHING → LOCKING → STABLE / UNSTABLE / BREAKDOWN / CLIPPED_MIC / NOISE_ONLY
+- Half-time and double-time candidate visibility
+- Anti-fake: no hardcoded BPM, no timer-based pulse
+- SNR estimation and signal quality gating
+- 50+ Rust tests, 21 real fixture snapshots, synthetic coverage
+
 ## Текущая фаза
 
 **Phase 3 завершена** (подтверждено на iPhone 11, 2026-05-26). Flutter-приложение захватывает звук с микрофона через `package:record 6.x`, отправляет PCM в отдельный изолят DSP-воркера, который владеет Rust-FFI-хэндлом (статическая `.a` на iOS), и рендерит скользящие снэпшоты `DspResult` через `StreamBuilder` на живом BPM-экране + отладочном экране.

@@ -400,7 +400,7 @@ impl DspEngine {
 
             let shift_detected = match (self.last_stable_bpm, current_top_bpm) {
                 (Some(last), Some(cur)) => {
-                    let was_or_is_not_stable = !matches!(self.prev_lock_state, None);
+                    let was_or_is_not_stable = self.prev_lock_state.is_some();
                     // Нормализуем cur относительно last: cur, cur*2, cur/2.
                     // Это предотвращает ложный детект от half/double гармоники.
                     let diff_direct = (cur - last).abs();
@@ -1129,9 +1129,7 @@ fn measure_signal(samples: &[f32], sample_rate: u32) -> SignalQuality {
     };
     let noise_level = if silence {
         NoiseLevel::Low
-    } else if crest_db.is_some_and(|value| value < 8.0) && rms > 0.03 {
-        NoiseLevel::NoiseOnly
-    } else if rms > 0.14 && peak < 0.6 {
+    } else if (crest_db.is_some_and(|value| value < 8.0) && rms > 0.03) || (rms > 0.14 && peak < 0.6) {
         NoiseLevel::NoiseOnly
     } else if crest_db.is_some_and(|value| value < 10.0) {
         NoiseLevel::High
@@ -1401,7 +1399,7 @@ fn estimate_snr_db(samples: &[f32], sample_rate: u32) -> Option<f32> {
     let rms_frames: Vec<f32> = samples
         .chunks(frame_len)
         .filter(|frame| frame.len() >= frame_len / 2)
-        .map(|frame| frame_rms(frame))
+        .map(frame_rms)
         .collect();
     if rms_frames.len() < 6 {
         return None;

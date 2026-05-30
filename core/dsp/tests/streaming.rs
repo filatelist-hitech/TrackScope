@@ -991,3 +991,111 @@ fn relock_adaptive_window_still_fast_after_stable() {
          адаптивное окно перестало работать после фикса has_ever_been_stable"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.0.0 pre-release — coverage expansion
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Тайминг первого захвата для 170 BPM (нижняя граница hitech-диапазона).
+/// Аналог streaming_first_lock_under_six_seconds_for_200_bpm.
+#[test]
+fn streaming_first_lock_170_bpm() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+    let samples = pulse_track(170.0, config.lock_min_seconds, 0.9);
+
+    let mut engine = DspEngine::new(config);
+    let mut first_non_searching_at: Option<f32> = None;
+    let mut fed = 0usize;
+
+    for chunk in samples.chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_sec = fed as f32 / SAMPLE_RATE as f32;
+        let result = engine.analyze();
+        if !matches!(result.lock_state, LockState::Searching) && first_non_searching_at.is_none() {
+            first_non_searching_at = Some(elapsed_sec);
+        }
+    }
+
+    let lock_time = first_non_searching_at
+        .expect("engine must leave SEARCHING on a clean 170 BPM pulse");
+    assert!(
+        lock_time <= config.lock_min_seconds,
+        "first lock at {lock_time:.2}s exceeded lock_min_seconds={}s for 170 BPM",
+        config.lock_min_seconds
+    );
+}
+
+/// Тайминг первого захвата для 220 BPM (верхняя граница hitech-диапазона).
+/// Аналог streaming_first_lock_under_six_seconds_for_200_bpm.
+#[test]
+fn streaming_first_lock_220_bpm() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+    let samples = pulse_track(220.0, config.lock_min_seconds, 0.9);
+
+    let mut engine = DspEngine::new(config);
+    let mut first_non_searching_at: Option<f32> = None;
+    let mut fed = 0usize;
+
+    for chunk in samples.chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+        let elapsed_sec = fed as f32 / SAMPLE_RATE as f32;
+        let result = engine.analyze();
+        if !matches!(result.lock_state, LockState::Searching) && first_non_searching_at.is_none() {
+            first_non_searching_at = Some(elapsed_sec);
+        }
+    }
+
+    let lock_time = first_non_searching_at
+        .expect("engine must leave SEARCHING on a clean 220 BPM pulse");
+    assert!(
+        lock_time <= config.lock_min_seconds,
+        "first lock at {lock_time:.2}s exceeded lock_min_seconds={}s for 220 BPM",
+        config.lock_min_seconds
+    );
+}
+
+/// Breakdown должен выводить из STABLE — подать 8 с чистого 200 BPM (достичь STABLE),
+/// затем 4 с тишины. Убедиться что lock_state переходит в BREAKDOWN или UNSTABLE,
+/// а не остаётся STABLE с придуманным BPM.
+#[test]
+fn streaming_breakdown_exits_stable() {
+    let config = DspConfig::default();
+    let chunk_size = (SAMPLE_RATE as f32 * 0.1) as usize;
+
+    // Фаза 1: 8 с чистого 200 BPM → достичь STABLE
+    let stable_samples = pulse_track(200.0, 8.0, 0.9);
+    let mut engine = DspEngine::new(config);
+    let mut fed = 0usize;
+
+    for chunk in stable_samples.chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        fed += chunk.len();
+    }
+    let pre_breakdown = engine.analyze();
+    assert!(
+        matches!(pre_breakdown.lock_state, LockState::Stable),
+        "engine must reach STABLE before breakdown test"
+    );
+
+    // Фаза 2: 4 с тишины (breakdown)
+    let silence_samples = vec![0.0_f32; (SAMPLE_RATE as f32 * 4.0) as usize];
+    let mut exited_stable = false;
+
+    for chunk in silence_samples.chunks(chunk_size) {
+        engine.push_samples(chunk, SAMPLE_RATE);
+        let result = engine.analyze();
+        if matches!(result.lock_state, LockState::Breakdown | LockState::Unstable | LockState::Searching) {
+            exited_stable = true;
+            break;
+        }
+    }
+
+    assert!(
+        exited_stable,
+        "engine must exit STABLE on breakdown (silence after stable pulse), not stay STABLE with fake BPM"
+    );
+}

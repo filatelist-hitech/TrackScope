@@ -4,6 +4,36 @@
 
 Формат основан на [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), а проект придерживается семантического версионирования после старта релизов.
 
+## [1.0.0] — 2026-05-30
+
+### Added
+
+- **v1.0.0 pre-release preparation:**
+  - 3 new streaming timing tests: `streaming_first_lock_170_bpm`, `streaming_first_lock_220_bpm`, `streaming_breakdown_exits_stable`
+  - 1 new streak stability test: `streak_stability_170_bpm`
+  - 3 new FFI tests: `ffi_half_time_candidate_visible`, `ffi_double_time_candidate_visible`, `ffi_clipped_returns_clipped_mic_state`
+  - Known-fail tracking in `fixture_manifest.json` and `parity.py` — `hitech_real_10` marked as known anomaly (146.7 BPM detected instead of ~196 BPM)
+  - Android release signing config with `key.properties.template` and fallback to debug signing when keystore missing
+  - Safety documentation for all FFI unsafe functions
+
+### Changed
+
+- **Version bump:** `apps/mobile/pubspec.yaml` → `1.0.0+1`
+- **Android app label:** now uses `@string/app_name` ("Hitech BPM Radar") from `strings.xml`
+- **iOS CFBundleDisplayName:** corrected capitalization to "Hitech BPM Radar"
+- **README.md:** added "Current Status — v1.0.0" section with completed phases and key features
+
+### Fixed
+
+- **Clippy warnings:** 3 errors in `core/dsp/src/lib.rs` (redundant pattern matching, identical if-blocks, redundant closure)
+- **FFI clippy warnings:** 5 missing Safety documentation sections in `core/ffi/src/lib.rs`
+
+### Testing
+
+- **50 Rust tests pass** (was 42): 20 streaming, 8 stability, 16 offline_contract, 6 FFI
+- **21 real fixture snapshots:** all PASS except hitech_real_10 (known fail)
+- **parity.py:** exits 0 with known_fail fixtures, displays KNOWN FAILS section separately
+
 ## [Unreleased]
 
 ### Fixed

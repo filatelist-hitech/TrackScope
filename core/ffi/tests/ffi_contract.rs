@@ -147,3 +147,121 @@ fn ffi_null_handle_returns_null() {
         hitech_bpm_string_free(std::ptr::null_mut());
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.0.0 pre-release — FFI coverage expansion
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Half-time кандидат (~100 BPM) должен быть виден через FFI при подаче 200 BPM.
+#[test]
+fn ffi_half_time_candidate_visible() {
+    unsafe {
+        let engine = hitech_bpm_engine_new();
+        let pcm = pulse_200_bpm(13.0);
+        let chunk_len = (SAMPLE_RATE as f32 * 0.1) as usize;
+
+        for chunk in pcm.chunks(chunk_len) {
+            hitech_bpm_engine_push_samples(engine, chunk.as_ptr(), chunk.len(), SAMPLE_RATE);
+        }
+
+        let ptr = hitech_bpm_engine_analyze_json(engine);
+        let json = CStr::from_ptr(ptr).to_str().unwrap().to_owned();
+        hitech_bpm_string_free(ptr);
+        hitech_bpm_engine_free(engine);
+
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let candidates = parsed["candidates"].as_array().expect("candidates array");
+
+        let has_half_time = candidates.iter().any(|c| {
+            let bpm = c.get("bpm").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let relation = c.get("relation").and_then(|v| v.as_str()).unwrap_or("");
+            (bpm - 100.0).abs() < 5.0 && (relation == "raw" || relation.contains("half"))
+        });
+
+        assert!(
+            has_half_time,
+            "half-time candidate (~100 BPM) must be visible through FFI for 200 BPM input"
+        );
+    }
+}
+
+/// Double-time кандидат (~400 BPM) должен быть виден через FFI при подаче 200 BPM.
+#[test]
+fn ffi_double_time_candidate_visible() {
+    unsafe {
+        let engine = hitech_bpm_engine_new();
+        let pcm = pulse_200_bpm(13.0);
+        let chunk_len = (SAMPLE_RATE as f32 * 0.1) as usize;
+
+        for chunk in pcm.chunks(chunk_len) {
+            hitech_bpm_engine_push_samples(engine, chunk.as_ptr(), chunk.len(), SAMPLE_RATE);
+        }
+
+        let ptr = hitech_bpm_engine_analyze_json(engine);
+        let json = CStr::from_ptr(ptr).to_str().unwrap().to_owned();
+        hitech_bpm_string_free(ptr);
+        hitech_bpm_engine_free(engine);
+
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let candidates = parsed["candidates"].as_array().expect("candidates array");
+
+        let has_double_time = candidates.iter().any(|c| {
+            let bpm = c.get("bpm").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let relation = c.get("relation").and_then(|v| v.as_str()).unwrap_or("");
+            (bpm - 400.0).abs() < 10.0 && (relation == "raw" || relation.contains("double"))
+        });
+
+        assert!(
+            has_double_time,
+            "double-time candidate (~400 BPM) must be visible through FFI for 200 BPM input"
+        );
+    }
+}
+
+/// Severely clipped input должен возвращать lock_state == CLIPPED_MIC через FFI.
+#[test]
+fn ffi_clipped_returns_clipped_mic_state() {
+    unsafe {
+        let engine = hitech_bpm_engine_new();
+
+        // Создать сильно клиппированный сигнал (все сэмплы на пределе ±1.0)
+        let duration_sec = 14.0;
+        let total = (duration_sec * SAMPLE_RATE as f32) as usize;
+        let mut pcm = vec![0.0_f32; total];
+        let beat_period = 60.0 / 200.0;
+        let mut beat = 0.0;
+
+        while beat < duration_sec {
+            let start = (beat * SAMPLE_RATE as f32) as usize;
+            let kick_len = (SAMPLE_RATE as f32 * 0.05) as usize;
+            for i in 0..kick_len.min(total - start) {
+                // Жёсткий клиппинг — все сэмплы на максимуме
+                pcm[start + i] = if i % 2 == 0 { 1.0 } else { -1.0 };
+            }
+            beat += beat_period;
+        }
+
+        let chunk_len = (SAMPLE_RATE as f32 * 0.1) as usize;
+        for chunk in pcm.chunks(chunk_len) {
+            hitech_bpm_engine_push_samples(engine, chunk.as_ptr(), chunk.len(), SAMPLE_RATE);
+        }
+
+        let ptr = hitech_bpm_engine_analyze_json(engine);
+        let json = CStr::from_ptr(ptr).to_str().unwrap().to_owned();
+        hitech_bpm_string_free(ptr);
+        hitech_bpm_engine_free(engine);
+
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let lock_state = parsed["lock_state"].as_str().expect("lock_state");
+        let clipping = parsed["signal_quality"]["clipping"].as_bool().expect("clipping flag");
+
+        assert!(
+            clipping,
+            "severely clipped input must set clipping flag to true"
+        );
+        assert_eq!(
+            lock_state, "CLIPPED_MIC",
+            "severely clipped input must return CLIPPED_MIC state through FFI"
+        );
+    }
+}

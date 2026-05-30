@@ -26,6 +26,9 @@ pub extern "C" fn hitech_bpm_engine_new() -> *mut HitechBpmEngine {
     }))
 }
 
+/// # Safety
+/// `engine` must be a valid pointer returned by `hitech_bpm_engine_new`, or null.
+/// After calling this function, `engine` is invalid and must not be used.
 #[no_mangle]
 pub unsafe extern "C" fn hitech_bpm_engine_free(engine: *mut HitechBpmEngine) {
     if !engine.is_null() {
@@ -33,6 +36,8 @@ pub unsafe extern "C" fn hitech_bpm_engine_free(engine: *mut HitechBpmEngine) {
     }
 }
 
+/// # Safety
+/// `engine` must be a valid pointer returned by `hitech_bpm_engine_new`, or null.
 #[no_mangle]
 pub unsafe extern "C" fn hitech_bpm_engine_reset(engine: *mut HitechBpmEngine) {
     if let Some(engine) = engine.as_mut() {
@@ -40,6 +45,10 @@ pub unsafe extern "C" fn hitech_bpm_engine_reset(engine: *mut HitechBpmEngine) {
     }
 }
 
+/// # Safety
+/// - `engine` must be a valid pointer returned by `hitech_bpm_engine_new`, or null.
+/// - `samples` must point to a valid array of at least `len` f32 elements.
+/// - The memory pointed to by `samples` must remain valid for the duration of this call.
 #[no_mangle]
 pub unsafe extern "C" fn hitech_bpm_engine_push_samples(
     engine: *mut HitechBpmEngine,
@@ -60,6 +69,9 @@ pub unsafe extern "C" fn hitech_bpm_engine_push_samples(
 /// строку. Право собственности переходит к вызывающей стороне; освободить через
 /// `hitech_bpm_string_free`. Возвращает null при невалидном хэндле или ошибке
 /// сериализации (последнее должно быть недостижимо при типизированном контракте).
+///
+/// # Safety
+/// `engine` must be a valid pointer returned by `hitech_bpm_engine_new`, or null.
 #[no_mangle]
 pub unsafe extern "C" fn hitech_bpm_engine_analyze_json(
     engine: *mut HitechBpmEngine,
@@ -82,6 +94,10 @@ pub unsafe extern "C" fn hitech_bpm_engine_analyze_json(
 /// Освободить буфер, ранее возвращённый `hitech_bpm_engine_analyze_json`.
 /// Передача null-указателя — no-op. Передача любого другого указателя —
 /// неопределённое поведение.
+///
+/// # Safety
+/// `ptr` must be either null or a pointer returned by `hitech_bpm_engine_analyze_json`.
+/// After calling this function, `ptr` is invalid and must not be used.
 #[no_mangle]
 pub unsafe extern "C" fn hitech_bpm_string_free(ptr: *mut c_char) {
     if ptr.is_null() {

@@ -2,7 +2,7 @@
     <!-- Phase 3 step 2: microphone capture for BPM detection. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
-        android:label="hitech_bpm_radar"
+        android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
