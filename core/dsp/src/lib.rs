@@ -193,7 +193,7 @@ pub struct DspEngine {
     /// сбрасывается в `false` (в отличие от `last_stable_bpm`).
     /// Используется для гейтирования адаптивного окна: при первом захвате
     /// (флаг `false`) всегда берётся полная onset-история — 8–12 сек
-    /// (~25–50 ударов) дают надёжный пик автокорреляции и уверенность ≥ 0.72.
+    /// (~25–50 ударов) дают надёжный пик автокорреляции и уверенность ≥ 0.70.
     /// После первого STABLE флаг становится `true`, и адаптивное окно
     /// начинает работать штатно для ускорения повторного захвата.
     has_ever_been_stable: bool,
@@ -237,7 +237,7 @@ const RELOCK_CONFIRM_FRAMES: u32 = 1;
 
 /// Размер хвостового среза в LOCKING: 6 секунд.
 /// Совпадает с lock_min_seconds (default 6.0). 6 с = ~20 ударов при 200 BPM →
-/// достаточно для уверенности ≥ 0.72 и перехода в STABLE. Было 4.0 с в Phase 4.5 —
+/// достаточно для уверенности ≥ 0.70 и перехода в STABLE. Было 4.0 с в Phase 4.5 —
 /// регрессия: только ~13 ударов → confidence ~0.68, застревание в LOCKING.
 const ADAPTIVE_WINDOW_LOCKING_SECS: f32 = 6.0;
 
@@ -472,9 +472,9 @@ impl DspEngine {
             let effective_secs: Option<f32> = if !self.has_ever_been_stable {
                 // Первый захват: ни разу не достигали STABLE.
                 // Используем полную историю — 8–12 с даёт ~25–50 ударов для
-                // надёжного пика автокорреляции и уверенности ≥ 0.72.
+                // надёжного пика автокорреляции и уверенности ≥ 0.70.
                 // Адаптивное усечение в 2 с при SEARCHING сломало бы первый
-                // захват: только 5–8 ударов → слабый пик → confidence < 0.72.
+                // захват: только 5–8 ударов → слабый пик → confidence < 0.70.
                 None
             } else {
                 // Повторный захват после смены трека: адаптивное окно
@@ -800,7 +800,7 @@ fn analyze_from_envelope(
         lock_state = LockState::NoiseOnly;
         confidence = confidence.min(0.28);
         primary_bpm = None;
-    } else if confidence >= 0.72 && duration_sec >= config.lock_min_seconds {
+    } else if confidence >= 0.70 && duration_sec >= config.lock_min_seconds {
         lock_state = LockState::Stable;
         timing.first_lock_time_sec = Some(config.lock_min_seconds.min(round_3(duration_sec)));
     } else if confidence < 0.45 {
@@ -847,7 +847,7 @@ pub fn analyze_candidates(
 
     let primary = candidates.first().cloned();
     let confidence = primary.as_ref().map(|item| item.score).unwrap_or(0.0).clamp(0.0, 1.0);
-    let lock_state = if confidence >= 0.72 && analysis_time_sec >= config.stable_min_seconds {
+    let lock_state = if confidence >= 0.70 && analysis_time_sec >= config.stable_min_seconds {
         LockState::Stable
     } else if confidence >= 0.45 && analysis_time_sec >= config.lock_min_seconds {
         LockState::Locking
