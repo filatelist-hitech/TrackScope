@@ -26,6 +26,13 @@ import 'ui/debug_screen.dart';
 import 'ui/main_screen.dart';
 import 'ui/permission_denied_screen.dart';
 
+/// Local / QA-only tier override. Built with `--dart-define=FORCE_PRO=true`,
+/// the app behaves as Pro (155–230 BPM, debug screen, 24 h history, export)
+/// WITHOUT a real purchase. Defaults to `false`, so a normal App Store build —
+/// which never passes this flag — stays Free. This flips only the entitlement
+/// tier; it does NOT touch the DSP / BPM math (no fake BPM, no fake lock).
+const bool _forceProTier = bool.fromEnvironment('FORCE_PRO', defaultValue: false);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -91,7 +98,9 @@ class _LiveCaptureScaffold extends StatelessWidget {
     return ListenableBuilder(
       listenable: ProStatusService.instance,
       builder: (context, _) {
-        final flags = FeatureFlags(isPro: ProStatusService.instance.isPro);
+        final flags = FeatureFlags(
+          isPro: _forceProTier || ProStatusService.instance.isPro,
+        );
         return _CapturePipeline(flags: flags);
       },
     );

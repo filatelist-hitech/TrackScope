@@ -238,3 +238,17 @@ flutter run --dart-define=REVENUECAT_IOS_KEY=your_ios_key --dart-define=REVENUEC
 ```
 
 Если оба ключа пусты, приложение работает полностью в Free tier (offline / keyless).
+
+#### Полная версия для локального теста (без покупки)
+
+Чтобы прогнать все Pro-фичи (диапазон 155–230, debug-экран, история 24 ч, экспорт)
+на своём устройстве без настройки App Store / RevenueCat sandbox, соберите с флагом
+`FORCE_PRO`:
+
+```sh
+flutter run --release --dart-define=FORCE_PRO=true
+```
+
+Флаг переключает только тир подписки — он **не** трогает DSP/BPM-математику. По
+умолчанию `false`, поэтому обычная стор-сборка (без флага) остаётся Free. Не
+передавайте `FORCE_PRO=true` в сборку для публикации.
