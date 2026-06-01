@@ -16,8 +16,12 @@
 #        rustup target add armv7-linux-androideabi
 #        rustup target add x86_64-linux-android
 #   4. Переменная ANDROID_NDK_HOME указывает на директорию NDK, например:
-#        export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.2.12479018"
+#        export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/28.2.13676358"
+#      ВАЖНО: путь должен указывать на директорию с source.properties,
+#      НЕ на вложенную android-ndk-r28c/ папку внутри неё.
 #      Если переменная не задана, скрипт ищет последнюю версию NDK автоматически.
+#   5. JAVA_HOME должен указывать на JDK 17+, например Android Studio bundled JDK:
+#        export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 set -euo pipefail
 
