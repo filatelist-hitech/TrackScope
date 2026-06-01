@@ -52,6 +52,14 @@ void main() {
           hopTimeSec: 0.0025,
           firstLockTimeSec: 4.8,
         ),
+        debug: DspDebug(
+          onsetRateHz: 3.25,
+          onsetStrength: 0.0312,
+          tempoPeakProminence: 0.4820,
+          harmonicAmbiguity: 0.08,
+          stabilityScore: 0.85,
+          warnings: [],
+        ),
       );
 
   group('SignalAnalyzerScreen', () {
@@ -95,7 +103,7 @@ void main() {
       expect(find.textContaining('Качество сигнала'), findsOneWidget);
     });
 
-    testWidgets('algorithm metrics shows В разработке placeholder', (tester) async {
+    testWidgets('algorithm metrics shows real DspDebug values', (tester) async {
       final ctrl = StreamController<DspResult>.broadcast();
       addTearDown(ctrl.close);
 
@@ -105,7 +113,12 @@ void main() {
       ctrl.add(makeResult());
       await tester.pump();
 
-      expect(find.textContaining('В разработке'), findsOneWidget);
+      // Section header
+      expect(find.text('Метрики алгоритма'), findsOneWidget);
+      // Real values from DspDebug (not placeholder text)
+      expect(find.text('Onset rate'), findsOneWidget);
+      expect(find.text('Peak prominence'), findsOneWidget);
+      expect(find.textContaining('В разработке'), findsNothing);
     });
 
     testWidgets('back button is available (AppBar has back icon)', (tester) async {

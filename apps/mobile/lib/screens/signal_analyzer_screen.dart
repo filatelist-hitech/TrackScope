@@ -52,9 +52,9 @@ class SignalAnalyzerScreen extends StatelessWidget {
             children: [
               _CandidatesSection(candidates: r.candidates),
               const SizedBox(height: 14),
-              _SignalQualitySection(quality: r.signalQuality),
+              _AlgorithmMetricsSection(debug: r.debug, quality: r.signalQuality),
               const SizedBox(height: 14),
-              _AlgorithmMetricsPlaceholder(quality: r.signalQuality),
+              _SignalQualitySection(quality: r.signalQuality),
               const SizedBox(height: 14),
               _TimingSection(timing: r.timing),
               const SizedBox(height: 24),
@@ -166,12 +166,15 @@ class _SignalQualitySection extends StatelessWidget {
   }
 }
 
-// ── Algorithm Metrics — placeholder ──────────────────────────────────────────
-// DspDebug is not yet exposed through the Dart FFI contract.
-// Showing available SNR/input level from SignalQuality as a substitute.
+// ── Algorithm Metrics — реальные данные из DspDebug ──────────────────────────
 
-class _AlgorithmMetricsPlaceholder extends StatelessWidget {
-  const _AlgorithmMetricsPlaceholder({required this.quality});
+class _AlgorithmMetricsSection extends StatelessWidget {
+  const _AlgorithmMetricsSection({
+    required this.debug,
+    required this.quality,
+  });
+
+  final DspDebug debug;
   final SignalQuality quality;
 
   @override
@@ -179,27 +182,53 @@ class _AlgorithmMetricsPlaceholder extends StatelessWidget {
     return _Card(
       title: 'Метрики алгоритма',
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (quality.snrEstimateDb != null)
-            _MetricRow('SNR estimate',
-                '${quality.snrEstimateDb!.toStringAsFixed(1)} dB'),
-          if (quality.inputLevelDbfs != null)
-            _MetricRow('Input Level',
-                '${quality.inputLevelDbfs!.toStringAsFixed(1)} dBFS'),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(Icons.construction_outlined,
-                  color: AppColors.textMuted, size: 12),
-              const SizedBox(width: 6),
-              Text(
-                'Onset / autocorrelation metrics · В разработке',
-                style: AppTextStyles.mono(
-                    10, FontWeight.w400, AppColors.textMuted),
-              ),
-            ],
+          _MetricRow(
+            'Onset rate',
+            '${debug.onsetRateHz.toStringAsFixed(2)} Hz',
           ),
+          _MetricRow(
+            'Onset strength',
+            debug.onsetStrength.toStringAsFixed(4),
+          ),
+          _MetricRow(
+            'Peak prominence',
+            debug.tempoPeakProminence.toStringAsFixed(4),
+          ),
+          _MetricRow(
+            'Harmonic ambiguity',
+            debug.harmonicAmbiguity.toStringAsFixed(4),
+          ),
+          _MetricRow(
+            'Stability score',
+            debug.stabilityScore.toStringAsFixed(4),
+          ),
+          if (quality.snrEstimateDb != null)
+            _MetricRow(
+              'SNR',
+              '${quality.snrEstimateDb!.toStringAsFixed(1)} dB',
+            ),
+          if (debug.warnings.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            for (final w in debug.warnings)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_outlined,
+                        color: AppColors.yellow, size: 12),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        w,
+                        style: AppTextStyles.mono(
+                            10, FontWeight.w400, AppColors.amberText),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ],
       ),
     );

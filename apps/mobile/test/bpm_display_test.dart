@@ -36,6 +36,14 @@ DspResult _result({
       hopTimeSec: 0.0025,
       firstLockTimeSec: null,
     ),
+    debug: const DspDebug(
+      onsetRateHz: 0.0,
+      onsetStrength: 0.0,
+      tempoPeakProminence: 0.0,
+      harmonicAmbiguity: 0.0,
+      stabilityScore: 0.0,
+      warnings: [],
+    ),
   );
 }
 
