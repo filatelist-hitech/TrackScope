@@ -26,6 +26,10 @@ dependencies:
   share_plus: ^10.0.0
   # Temp directory for export files before sharing.
   path_provider: ^2.1.0
+  # Persist settings and BpmSession history across launches.
+  shared_preferences: ^2.3.0
+  # Keep screen on while capturing (Settings toggle).
+  wakelock_plus: ^1.2.0
 
 dev_dependencies:
   flutter_test:

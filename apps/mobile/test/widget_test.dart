@@ -196,8 +196,8 @@ void main() {
     expect(find.text('200.0'), findsOneWidget);
     // Russian label for STABLE state.
     expect(find.text('стабильно'), findsOneWidget);
-    // Confidence row present.
-    expect(find.textContaining('87%'), findsOneWidget);
+    // Confidence shown in both ConfidenceBar and УВЕРЕННОСТЬ cell (Design v2).
+    expect(find.textContaining('87%'), findsAtLeast(1));
   });
 
   testWidgets(

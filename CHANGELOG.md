@@ -6,6 +6,42 @@
 
 ## [Unreleased]
 
+### Added — Design System v2 (Phase 11)
+
+- **Tab Bar навигация** (`lib/navigation/app_navigator.dart`): три вкладки
+  Радар / История / Настройки через `IndexedStack`. `CaptureBridge` не
+  пересоздаётся при смене вкладок — живёт в `_CapturePipeline`.
+- **BPM Hero Display** (`lib/widgets/bpm_hero_display.dart`): 72 px IBM Plex
+  Mono, три режима (idle/detecting/unstable). Null → «— — —» dim #1E3530.
+- **ConfidenceBar** (`lib/widgets/confidence_bar.dart`): 7 px, red < 30 %,
+  yellow 30–70 %, teal > 70 %. Анимация 400 мс.
+- **BreakButton** (`lib/widgets/break_button.dart`): иконка паузы + «Зафиксировать брейк».
+- **ListeningIndicator** (`lib/widgets/listening_indicator.dart`): анимированная
+  точка accent + «слушаю».
+- **AppTabBar** (`lib/widgets/app_tab_bar.dart`): кастомный таб-бар с
+  accent/textMuted цветами, подписи «РАДАР / ИСТОРИЯ / НАСТРОЙКИ».
+- **SignalAnalyzerScreen** (`lib/screens/signal_analyzer_screen.dart`): Pro-only,
+  показывает BPM-кандидатов со score bar + качество сигнала + тайминги.
+  DSP Algorithm Metrics — placeholder «В разработке» (DspDebug не в Dart-контракте).
+- **SettingsScreen** (`lib/screens/settings_screen.dart`): 5 секций, backed
+  by `AppSettings` (SharedPreferences). Keep Screen On → WakelockPlus.
+- **AppSettings** (`lib/settings/app_settings.dart`): ChangeNotifier singleton,
+  персист через SharedPreferences (showWaveform, showSpectrum, keepScreenOn, inputSensitivity).
+- **Design tokens v2** (`lib/theme/app_colors.dart`, `lib/theme/app_text_styles.dart`):
+  IBM Plex Mono, #050807 bg, #00DFB0 accent, confidence thresholds.
+- Зависимости: `shared_preferences ^2.3.0`, `wakelock_plus ^1.2.0`.
+
+### Changed — Design System v2 (Phase 11)
+
+- **Paywall** редизайн: value headline «Читай любой трек. Без ограничений.» +
+  column headers ФУНКЦИЯ/FREE/PRO + CTA-иерархия (filled+badge / outline) +
+  Roadmap card (Key+Camelot, Energy, Lock-screen Widget). «Debug Screen» → «Signal Analyzer».
+- **Waveform** высота: flex-proportional → fixed 120 px.
+- **BPM number**: 52 px JetBrains Mono → 72 px IBM Plex Mono hero (в `_AnimatedBpmDisplay`).
+- **Confidence bar**: 2 px одноцветный → 7 px с цветовыми порогами (Design v2 ConfidenceBar).
+- **main.dart**: `MainScreen` → `AppNavigator`; `AppSettings.instance.load()` при старте.
+- **ARCHITECTURE.md**: обновлена навигационная структура и слои приложения.
+
 ### Changed
 
 - **Расширен диапазон детекции BPM 170–230 → 155–230** (Phase 8.2). Ранний hitech

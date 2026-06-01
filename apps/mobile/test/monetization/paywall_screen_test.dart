@@ -13,12 +13,19 @@ void main() {
     ));
     await tester.pump();
 
-    // Comparison rows.
+    // Comparison rows (Design v2: "Debug Screen" renamed to "Signal Analyzer").
     expect(find.text('BPM Range'), findsOneWidget);
-    expect(find.text('Debug Screen'), findsOneWidget);
-    expect(find.text('History'), findsWidgets);
+    expect(find.text('Signal Analyzer'), findsOneWidget);
+    expect(find.text('История'), findsWidgets);
     expect(find.text('Export CSV/JSON'), findsOneWidget);
-    expect(find.text('Lock-screen Widget'), findsWidgets);
+
+    // Column headers added in Design v2.
+    expect(find.text('ФУНКЦИЯ'), findsOneWidget);
+    expect(find.text('FREE'), findsWidgets);
+    expect(find.text('PRO'), findsWidgets);
+
+    // Value headline.
+    expect(find.textContaining('Без ограничений'), findsOneWidget);
 
     // Purchase buttons.
     expect(find.textContaining('Lifetime'), findsOneWidget);
@@ -27,8 +34,8 @@ void main() {
     // Restore.
     expect(find.text('Restore purchases'), findsOneWidget);
 
-    // "Скоро" widget tile.
-    expect(find.textContaining('Скоро'), findsWidgets);
+    // Roadmap card (replaces widget tile).
+    expect(find.text('COMING TO PRO'), findsOneWidget);
   });
 
   testWidgets('PaywallScreen shows feature name in title', (tester) async {

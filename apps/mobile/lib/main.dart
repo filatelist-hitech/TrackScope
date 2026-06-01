@@ -14,16 +14,13 @@ import 'package:flutter/material.dart';
 
 import 'capture/capture_bridge.dart';
 import 'capture/microphone_source.dart';
-import 'export/bpm_exporter.dart';
-import 'history/history_screen.dart';
 import 'history/session_history_controller.dart';
 import 'monetization/feature_flags.dart';
-import 'monetization/paywall_screen.dart';
 import 'monetization/pro_status_service.dart';
 import 'monetization/revenuecat_gateway.dart';
+import 'navigation/app_navigator.dart';
 import 'permissions/permission_gate.dart';
-import 'ui/debug_screen.dart';
-import 'ui/main_screen.dart';
+import 'settings/app_settings.dart';
 import 'ui/permission_denied_screen.dart';
 
 /// Local / QA-only tier override. Built with `--dart-define=FORCE_PRO=true`,
@@ -35,6 +32,9 @@ const bool _forceProTier = bool.fromEnvironment('FORCE_PRO', defaultValue: false
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load persisted settings (wakelock, etc.) before first frame.
+  await AppSettings.instance.load();
 
   // Inject the real RevenueCat gateway before initializing.
   ProStatusService.instance.configureGateway(RevenueCatGateway());
@@ -174,27 +174,12 @@ class _CapturePipelineState extends State<_CapturePipeline> {
         ),
       );
     }
-    return MainScreen(
+    return AppNavigator(
       results: _bridge.results,
       errors: _bridge.errors,
       rawPcm: _bridge.rawPcm,
-      isPro: widget.flags.isPro,
-      onHistoryTap: () {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => HistoryScreen(
-            controller: _history,
-            flags: widget.flags,
-            onExportCsv: () => exportCsv(_history.history.samples),
-            onExportJson: () => exportJson(_history.history.samples),
-          ),
-        ));
-      },
-      onPaywallTap: (feature) {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => PaywallScreen(feature: feature),
-        ));
-      },
-      debugBuilder: (_) => DebugScreen(results: _bridge.results),
+      flags: widget.flags,
+      historyController: _history,
     );
   }
 }

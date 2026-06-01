@@ -49,12 +49,13 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 | Phase 8 | DSP fast re-lock v2: адаптивное окно по состоянию, детектор прыжка темпа, re-lock ≤3 с |
 | Phase 8.1 | Fix first-lock: `has_ever_been_stable` — полная история при первом захвате |
 | Phase 8.2 | Расширение диапазона 170→**155 BPM**, абсолютный гейт точности в `parity.py` |
+| Phase 9 | Android APK: `build_android_native.sh` готов, ожидает установки Android Studio + NDK |
+| Phase 10 | Freemium: RevenueCat IAP, Free/Pro tier, PaywallScreen, экспорт, история 24 ч |
+| Phase 11 | **Design System v2**: Tab Bar, BPM Hero 72 px, ConfidenceBar 7 px, Signal Analyzer, Settings |
 
 ### В процессе
 
-| Фаза | Содержание |
-|---|---|
-| Phase 9 | Android APK: `build_android_native.sh` готов, ожидает установки Android Studio + NDK |
+В процессе: финализация Android APK (Phase 9) и web preview визуализации.
 
 ### Ключевые характеристики
 
@@ -65,11 +66,22 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 - Half-time / double-time кандидаты всегда видны; никогда не скрываются
 - Anti-fake: нет хардкоженых BPM, нет фейкового пульса по таймеру
 - SNR-оценка и гейтинг качества сигнала
-- 43 Rust-теста + 21 Python-тест + 46 Flutter-тестов, 21 реальная hitech-фикстура (180–210 BPM)
+- 43 Rust-теста + 21 Python-тест + 126 Flutter-тестов, 21 реальная hitech-фикстура (180–210 BPM)
+
+## Design v2
+
+Design System v2 (Phase 11) обновляет весь Flutter UI:
+
+- **Tab Bar**: три вкладки Радар / История / Настройки через `IndexedStack` (CaptureBridge не пересоздаётся).
+- **BPM Hero**: 72 px IBM Plex Mono, три режима (idle → «— — —» dim, detecting → accent, unstable → amber).
+- **ConfidenceBar**: 7 px, цвет по порогу (red < 30 %, yellow 30–70 %, teal > 70 %).
+- **Signal Analyzer**: Pro-экран с BPM-кандидатами, качеством сигнала, таймингами.
+- **Settings**: 5 секций, SharedPreferences, Keep Screen On (WakelockPlus).
+- **Paywall v2**: value headline, column headers FREE/PRO, CTA-иерархия, Roadmap card.
 
 ## Текущая фаза
 
-**Phases 1–8 завершены.** Проект готовится к первому production-APK.
+**Phases 1–11 завершены.** Проект готовится к первому production-APK.
 
 Последний подтверждённый запуск на реальном устройстве — iPhone 11, iOS 26.3.1, 2026-05-26.
 Целевой диапазон расширен до **155–230 BPM** (Phase 8.2: поддержка раннего hitech от 155 BPM).
