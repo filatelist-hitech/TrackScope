@@ -130,11 +130,11 @@ class LiveSpectrumPainter extends CustomPainter {
     linePath.lineTo(xs.last, ys.last);
 
     // ── Gradient fill ─────────────────────────────────────────────────────────
-    // Extend the fill baseline to the full canvas width so no gap appears at
-    // the right edge when the last visible bin is just below 20 kHz.
+    // Close to (0, drawH) — not xs.first — so the fill covers the full canvas
+    // width including the low-frequency gap left of the first visible bin.
     final fillPath = Path()..addPath(linePath, Offset.zero);
     fillPath.lineTo(w, drawH);
-    fillPath.lineTo(xs.first, drawH);
+    fillPath.lineTo(0, drawH);
     fillPath.close();
 
     final fillPaint = Paint()

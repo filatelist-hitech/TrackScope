@@ -45,13 +45,13 @@ abstract final class AppTextStyles {
   static TextStyle get sectionLabel =>
       mono(7.5, FontWeight.w400, AppColors.textMuted, letterSpacing: 2.5);
 
-  /// 11 px — numeric data values in info card.
+  /// 13 px — numeric data values in info card.
   static TextStyle get statsValue =>
-      mono(11, FontWeight.w400, AppColors.textSecondary);
+      mono(13, FontWeight.w400, AppColors.textSecondary);
 
-  /// 6.5 px — metric labels under values.
+  /// 8 px — metric labels under values.
   static TextStyle get statsLabel =>
-      mono(6.5, FontWeight.w400, AppColors.textMuted, letterSpacing: 1.8);
+      mono(8, FontWeight.w400, AppColors.textMuted, letterSpacing: 1.2);
 
   /// 10 px semibold black — primary CTA (paywall buttons).
   static TextStyle get ctaButton => mono(10, FontWeight.w600, Colors.black);

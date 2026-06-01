@@ -221,26 +221,69 @@ class _ZoneLabelRow extends StatelessWidget {
 }
 
 // ── Waveform / oscilloscope view ──────────────────────────────────────────────
+// Uses a StatefulWidget so the widget tree is rebuilt only ONCE (on first data),
+// then repaints via `repaint: viz` without touching the widget tree on every
+// PCM chunk — reduces jank on real device.
 
-class _WaveformView extends StatelessWidget {
+class _WaveformView extends StatefulWidget {
   const _WaveformView({required this.viz});
   final VizController viz;
 
   @override
+  State<_WaveformView> createState() => _WaveformViewState();
+}
+
+class _WaveformViewState extends State<_WaveformView> {
+  bool _hasData = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.viz.addListener(_onViz);
+  }
+
+  @override
+  void dispose() {
+    widget.viz.removeListener(_onViz);
+    super.dispose();
+  }
+
+  void _onViz() {
+    // Only trigger a widget rebuild when transitioning from empty to non-empty.
+    // All subsequent repaints are handled by the `repaint: viz` mechanism.
+    if (!_hasData && widget.viz.waveColumns.isNotEmpty) {
+      setState(() => _hasData = true);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: viz,
-      builder: (_, __) {
-        if (viz.waveColumns.isEmpty) {
-          return const _Placeholder(label: 'Ожидание микрофона…');
-        }
-        return CustomPaint(
-          painter: WaveformColumnPainter(columns: viz.waveColumns),
-          child: const SizedBox.expand(),
-        );
-      },
+    if (!_hasData) {
+      return const _Placeholder(label: 'Ожидание микрофона…');
+    }
+    return CustomPaint(
+      painter: _VizWaveformPainter(widget.viz),
+      child: const SizedBox.expand(),
     );
   }
+}
+
+/// Reads waveColumns from VizController at paint-time and registers `repaint: viz`.
+/// Canvas repaints without triggering a Flutter widget build.
+class _VizWaveformPainter extends CustomPainter {
+  _VizWaveformPainter(this.viz) : super(repaint: viz);
+  final VizController viz;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cols = viz.waveColumns;
+    if (cols.isEmpty) return;
+    WaveformColumnPainter(columns: cols).paint(canvas, size);
+  }
+
+  @override
+  bool shouldRepaint(_VizWaveformPainter old) =>
+      !identical(viz.waveColumns, old.viz.waveColumns);
 }
 
 // ── Live spectrum view ────────────────────────────────────────────────────────
@@ -442,15 +485,11 @@ class _InfoTableContent extends StatelessWidget {
         ),
         const SizedBox(height: 14),
 
-        // ── Stats 2×2 grid ───────────────────────────────────────────────────
+        // ── Stats grid ───────────────────────────────────────────────────────
+        // Row 1: Уровень входа | Лучший кандидат
         Row(
           children: [
-            Expanded(
-              child: _StatCell(
-                label: 'Уровень входа',
-                value: inputLevel,
-              ),
-            ),
+            Expanded(child: _StatCell(label: 'Уровень входа', value: inputLevel)),
             const SizedBox(width: 18),
             Expanded(
               child: _StatCell(
@@ -463,6 +502,7 @@ class _InfoTableContent extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
+        // Row 2: Клиппинг | Шум
         Row(
           children: [
             Expanded(
@@ -473,26 +513,17 @@ class _InfoTableContent extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 18),
-            Expanded(
-              child: _StatCell(
-                label: '×½ / ×2',
-                value: halfDoubleText,
-              ),
-            ),
+            Expanded(child: _StatCell(label: 'Шум', value: noiseText)),
           ],
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _StatCell(
-                label: 'Шум',
-                value: noiseText,
-              ),
-            ),
-            const SizedBox(width: 18),
-            const Expanded(child: SizedBox.shrink()),
-          ],
+        // Row 3: ×½ / ×2 — full width centered (both half and double visible)
+        Center(
+          child: _StatCell(
+            label: '×½ / ×2',
+            value: halfDoubleText,
+            centered: true,
+          ),
         ),
         const SizedBox(height: 14),
 
@@ -526,6 +557,7 @@ class _StatCell extends StatelessWidget {
     required this.value,
     this.valueColor,
     this.isLink = false,
+    this.centered = false,
     this.onTap,
   });
 
@@ -533,6 +565,7 @@ class _StatCell extends StatelessWidget {
   final String value;
   final Color? valueColor;
   final bool isLink;
+  final bool centered;
   final VoidCallback? onTap;
 
   @override
@@ -541,7 +574,9 @@ class _StatCell extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: centered
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
         children: [
           Text(
             label,
