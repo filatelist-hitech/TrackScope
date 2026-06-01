@@ -265,6 +265,52 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 
 Известное ограничение: виртуальный микрофон AVD не позволяет проверить реальную точность детектора — для этого нужно физическое Android-устройство.
 
+## Phase 11.1: UI HTML-прототип аудит и фиксы — **ЗАВЕРШЕНО** (2026-06-01)
+
+Цель: привести все Flutter-экраны в соответствие с HTML дизайн-референсами
+(`BPM Radar Prototype.html`, `BPM Radar Redesign.html`, `CLAUDE_CODE_HANDOFF.md`).
+
+Артефакты:
+
+- **Zone labels + ListeningIndicator** (`main_screen.dart`): добавлены zone labels
+  "WAVEFORM"/"LIVE SPECTRUM" над viz-панелями; "● слушаю" (accent цвет) при isCapturing.
+- **Signal Analyzer редизайн** (`signal_analyzer_screen.dart`): uppercase title +
+  PRO badge; top-4 кандидаты без relation-текста; 4px BPM bars; метрики с bars;
+  добавлены Harmonic Ambiguity и Stability Score.
+- **History Screen редизайн** (`history_screen.dart`): summary header (18px teal цифры),
+  группировка по дням (СЕГОДНЯ/ВЧЕРА/РАНЕЕ), group-карточки `#0d1712` r=13,
+  строки: BPM 20px teal/amber + 3px confidence bar. Устранена зависимость от AppTheme.
+- **BpmSample.confidence** (`bpm_history.dart`): добавлено поле; контроллер передаёт
+  `result.confidence`.
+- **Settings sa-grp редизайн** (`settings_screen.dart`): group-карточки под прototip,
+  font-size 12→9px, BPM Smoothing picker (None/Light/Moderate/Heavy).
+- **BpmSmoothing enum** (`app_settings.dart`): SharedPreferences-backed.
+- **Radar ×½/×2 ячейка** (`main_screen.dart`): возвращена; half_time и double_time
+  кандидаты всегда видимы (anti-fake).
+- **Paywall legal text** (`paywall_screen.dart`): юридический текст о подписке.
+- **Tab labels** (`app_tab_bar.dart`): 8px → 7px.
+- **Painter zone labels удалены** (`waveform_painter.dart`, `live_spectrum_painter.dart`):
+  canvas-подписи заменены Flutter-виджетами.
+
+Тесты: 139/139 Flutter pass (dsp_engine_test — pre-existing, нет .dylib).
+
+Критерии выхода — выполнены:
+
+- `flutter test` → 139/139 ✓
+- `flutter analyze` → 0 errors ✓
+- Все 🔴 критичные расхождения с HTML-прototипом устранены ✓
+- half/double кандидаты никогда не скрыты ✓
+- Нет фейкового BPM ✓
+
+Известные ограничения (останутся до Phase 12):
+
+- FFT Spectrum в Signal Analyzer — требует rawPcm стрима (Phase 3 mobile audio).
+- Break button — UI-only, действие не реализовано.
+- `AppTheme` в `design_tokens.dart` — legacy Phase 7 токены, используются в
+  `main_screen.dart`; требует отдельного рефакторинга.
+
+---
+
 ## Phase 11: Design System v2 + DspDebug — **ЗАВЕРШЕНО** (2026-06-01)
 
 Цель: полный редизайн Flutter UI по дизайн-системе + экспозиция диагностики DspDebug в Signal Analyzer.
