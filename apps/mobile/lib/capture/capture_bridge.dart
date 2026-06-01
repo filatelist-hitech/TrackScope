@@ -125,6 +125,13 @@ class CaptureBridge {
     _workerInbox?.send(const ResetEngine());
   }
 
+  /// Сбрасывает скользящее состояние DSP-движка (онсеты, BPM-история),
+  /// не останавливая захват аудио. Используется кнопкой «Break».
+  void resetEngine() {
+    _smoother.reset();
+    _workerInbox?.send(const ResetEngine());
+  }
+
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;

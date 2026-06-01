@@ -2,25 +2,51 @@
 //
 // Layout matches HTML prototype (BPM Radar Prototype.html):
 //   1. AppBar: "SIGNAL ANALYZER" uppercase + PRO badge
-//   2. BPM КАНДИДАТЫ — top-4 candidates, 17px BPM, 4px colored bar
-//   3. МЕТРИКИ АЛГОРИТМА — onset/autocorr/flux as % bars; SNR/level as text
+//   2. FFT SPECTRUM — live spectrum from rawPcm (when available)
+//   3. BPM КАНДИДАТЫ — top-4 candidates, 17px BPM, 4px colored bar
+//   4. МЕТРИКИ АЛГОРИТМА — onset/autocorr/flux as % bars; SNR/level as text
 //
 // Section headers are standalone (sa-hdr style, outside cards).
 // Group cards use bg #0d1712, r=13, no border (sa-grp style).
 //
 // Anti-fake: all values come from DspResult stream; no hardcoded numbers.
-// FFT Spectrum panel is pending rawPcm integration (Phase 3+ mobile audio).
+
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import '../dsp/dsp_result.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../viz/live_spectrum_painter.dart';
+import '../viz/viz_controller.dart';
 
-class SignalAnalyzerScreen extends StatelessWidget {
-  const SignalAnalyzerScreen({super.key, required this.results});
+class SignalAnalyzerScreen extends StatefulWidget {
+  const SignalAnalyzerScreen({super.key, required this.results, this.rawPcm});
 
   final Stream<DspResult> results;
+  final Stream<Uint8List>? rawPcm;
+
+  @override
+  State<SignalAnalyzerScreen> createState() => _SignalAnalyzerScreenState();
+}
+
+class _SignalAnalyzerScreenState extends State<SignalAnalyzerScreen> {
+  late final VizController _viz;
+
+  @override
+  void initState() {
+    super.initState();
+    _viz = VizController();
+    final pcm = widget.rawPcm;
+    if (pcm != null) _viz.attachRawPcm(pcm);
+  }
+
+  @override
+  void dispose() {
+    _viz.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,41 +86,134 @@ class SignalAnalyzerScreen extends StatelessWidget {
           child: Container(height: 0.5, color: AppColors.border),
         ),
       ),
-      body: StreamBuilder<DspResult>(
-        stream: results,
-        builder: (context, snap) {
-          final r = snap.data;
-          if (r == null) {
-            return Center(
-              child: Text(
-                'Ожидание первого снапшота DspResult…',
-                style: AppTextStyles.mono(
-                    12, FontWeight.w400, AppColors.textMuted),
+      body: Column(
+        children: [
+          // ── FFT Spectrum (live, from rawPcm) ─────────────────────────────
+          if (widget.rawPcm != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('FFT SPECTRUM',
+                      style: AppTextStyles.sectionLabel),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 90,
+                    child: RepaintBoundary(
+                      child: _SpectrumView(viz: _viz),
+                    ),
+                  ),
+                ],
               ),
-            );
-          }
-          return ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              // ── BPM Кандидаты ─────────────────────────────────────────
-              const _SectionHeader('BPM КАНДИДАТЫ'),
-              _CandidatesGroup(candidates: r.candidates),
+            ),
 
-              // ── Метрики алгоритма ─────────────────────────────────────
-              const _SectionHeader('МЕТРИКИ АЛГОРИТМА'),
-              _MetricsGroup(debug: r.debug, quality: r.signalQuality),
+          // ── DSP results ───────────────────────────────────────────────────
+          Expanded(
+            child: StreamBuilder<DspResult>(
+              stream: widget.results,
+              builder: (context, snap) {
+                final r = snap.data;
+                if (r == null) {
+                  return Center(
+                    child: Text(
+                      'Ожидание первого снапшота DspResult…',
+                      style: AppTextStyles.mono(
+                          12, FontWeight.w400, AppColors.textMuted),
+                    ),
+                  );
+                }
+                return ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    // ── BPM Кандидаты ─────────────────────────────────
+                    const _SectionHeader('BPM КАНДИДАТЫ'),
+                    _CandidatesGroup(candidates: r.candidates),
 
-              // ── Качество сигнала (свёрнуто в одну группу) ─────────────
-              const _SectionHeader('КАЧЕСТВО СИГНАЛА'),
-              _QualityGroup(quality: r.signalQuality),
+                    // ── Метрики алгоритма ─────────────────────────────
+                    const _SectionHeader('МЕТРИКИ АЛГОРИТМА'),
+                    _MetricsGroup(debug: r.debug, quality: r.signalQuality),
 
-              const SizedBox(height: 32),
-            ],
-          );
-        },
+                    // ── Качество сигнала ──────────────────────────────
+                    const _SectionHeader('КАЧЕСТВО СИГНАЛА'),
+                    _QualityGroup(quality: r.signalQuality),
+
+                    const SizedBox(height: 32),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
+}
+
+// ── Spectrum view — forwards VizController to LiveSpectrumPainter ─────────────
+
+class _SpectrumView extends StatefulWidget {
+  const _SpectrumView({required this.viz});
+  final VizController viz;
+
+  @override
+  State<_SpectrumView> createState() => _SpectrumViewState();
+}
+
+class _SpectrumViewState extends State<_SpectrumView> {
+  bool _hasData = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.viz.addListener(_onViz);
+  }
+
+  @override
+  void dispose() {
+    widget.viz.removeListener(_onViz);
+    super.dispose();
+  }
+
+  void _onViz() {
+    if (!_hasData && widget.viz.latestNorms.isNotEmpty) {
+      setState(() => _hasData = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_hasData) {
+      return Container(
+        color: const Color(0xFF07070F),
+        alignment: Alignment.center,
+        child: Text('Ожидание аудио…',
+            style: AppTextStyles.caption),
+      );
+    }
+    return CustomPaint(
+      painter: _VizSpectrumPainter(widget.viz),
+      child: const SizedBox.expand(),
+    );
+  }
+}
+
+class _VizSpectrumPainter extends CustomPainter {
+  _VizSpectrumPainter(this.viz) : super(repaint: viz);
+  final VizController viz;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    LiveSpectrumPainter(
+      norms: viz.latestNorms,
+      peakHold: viz.peakHoldValues,
+      accentColor: AppColors.accent,
+    ).paint(canvas, size);
+  }
+
+  @override
+  bool shouldRepaint(_VizSpectrumPainter old) =>
+      !identical(viz.latestNorms, old.viz.latestNorms);
 }
 
 // ── Section header (sa-hdr) ───────────────────────────────────────────────────

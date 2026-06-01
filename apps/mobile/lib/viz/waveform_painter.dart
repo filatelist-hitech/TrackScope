@@ -42,10 +42,15 @@ class WaveformColumnPainter extends CustomPainter {
   const WaveformColumnPainter({
     required this.columns,
     this.hopMs = _kHopMs,
+    this.glowIntensity = 0.0,
   });
 
   final List<WaveformColumn> columns;
   final double hopMs;
+
+  /// Beat-reactive glow intensity in [0, 1]. 0 = no glow. Driven by
+  /// VizController.beatDecay — same source as the BPM-hero glow.
+  final double glowIntensity;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -75,6 +80,44 @@ class WaveformColumnPainter extends CustomPainter {
     final maxVisible = (w / _kColStep).floor().clamp(1, columns.length);
     final startIdx = columns.length - maxVisible;
 
+    // ── Glow pass ─────────────────────────────────────────────────────────────
+    // Two-layer glow: always-on ambient (like spectrum) + beat-reactive pulse.
+    // Both use a unified Path → one drawPath per layer (cheap).
+    final glowPath = Path();
+    for (var i = 0; i < maxVisible; i++) {
+      final col = columns[startIdx + i];
+      final x = i * _kColStep + _kColW / 2;
+      final barH = (col.amplitude * h).clamp(1.0, h);
+      glowPath.addRect(Rect.fromCenter(
+        center: Offset(x, centerY),
+        width: _kColW + 2,
+        height: barH,
+      ));
+    }
+
+    // Layer 1: ambient glow — always visible, low alpha + small blur.
+    canvas.drawPath(
+      glowPath,
+      Paint()
+        ..color = _kColAccent.withAlpha(38) // ~15 % — matches spectrum ambient
+        ..style = PaintingStyle.fill
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0),
+    );
+
+    // Layer 2: beat-reactive pulse — fades with beatDecay.
+    if (glowIntensity > 0.02) {
+      final glowAlpha = (glowIntensity * 110).round().clamp(0, 255);
+      final blurSigma = 4.0 + glowIntensity * 8.0;
+      canvas.drawPath(
+        glowPath,
+        Paint()
+          ..color = _kColAccent.withAlpha(glowAlpha)
+          ..style = PaintingStyle.fill
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma),
+      );
+    }
+
+    // ── Crisp bars ────────────────────────────────────────────────────────────
     final paint = Paint()..style = PaintingStyle.fill;
 
     for (var i = 0; i < maxVisible; i++) {
@@ -129,6 +172,8 @@ class WaveformColumnPainter extends CustomPainter {
   @override
   bool shouldRepaint(WaveformColumnPainter old) {
     if (columns.length != old.columns.length) return true;
-    return !identical(columns, old.columns);
+    if (!identical(columns, old.columns)) return true;
+    // Repaint when glow intensity changes noticeably (>1% delta).
+    return (glowIntensity - old.glowIntensity).abs() > 0.01;
   }
 }

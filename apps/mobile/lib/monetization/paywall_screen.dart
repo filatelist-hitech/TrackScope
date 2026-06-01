@@ -6,8 +6,6 @@
 
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
 import '../ui/design_tokens.dart';
 import 'pro_status_service.dart';
 import 'purchases_gateway.dart';

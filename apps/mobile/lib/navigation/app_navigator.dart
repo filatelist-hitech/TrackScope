@@ -41,6 +41,7 @@ class AppNavigator extends StatefulWidget {
     required this.flags,
     required this.historyController,
     this.rawPcm,
+    this.onBreak,
   });
 
   final Stream<DspResult> results;
@@ -48,6 +49,9 @@ class AppNavigator extends StatefulWidget {
   final FeatureFlags flags;
   final SessionHistoryController historyController;
   final Stream<Uint8List>? rawPcm;
+
+  /// Called when the user taps the Break button — resets DSP engine state.
+  final VoidCallback? onBreak;
 
   @override
   State<AppNavigator> createState() => _AppNavigatorState();
@@ -79,7 +83,10 @@ class _AppNavigatorState extends State<AppNavigator> {
       return;
     }
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => SignalAnalyzerScreen(results: widget.results),
+      builder: (_) => SignalAnalyzerScreen(
+        results: widget.results,
+        rawPcm: widget.rawPcm,
+      ),
     ));
   }
 
@@ -98,8 +105,11 @@ class _AppNavigatorState extends State<AppNavigator> {
             isPro: widget.flags.isPro,
             onHistoryTap: null, // History is now a tab, not a push
             onPaywallTap: _pushPaywall,
-            debugBuilder: (_) =>
-                SignalAnalyzerScreen(results: widget.results),
+            onBreak: widget.onBreak,
+            debugBuilder: (_) => SignalAnalyzerScreen(
+              results: widget.results,
+              rawPcm: widget.rawPcm,
+            ),
           ),
 
           // ── Tab 1: History ────────────────────────────────────────────────

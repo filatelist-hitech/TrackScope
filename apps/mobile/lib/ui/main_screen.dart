@@ -25,8 +25,6 @@ import 'package:flutter/material.dart' hide LockState;
 import '../capture/bpm_display.dart';
 import '../capture/capture_error.dart';
 import '../dsp/dsp_result.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
 import '../viz/live_spectrum_painter.dart';
 import '../viz/viz_controller.dart';
 import '../viz/waveform_painter.dart' show WaveformColumnPainter;
@@ -46,6 +44,7 @@ class MainScreen extends StatefulWidget {
     this.isPro = true,
     this.onHistoryTap,
     this.onPaywallTap,
+    this.onBreak,
   });
 
   final Stream<DspResult> results;
@@ -65,6 +64,9 @@ class MainScreen extends StatefulWidget {
 
   /// Callback when Upgrade/PRO badge or paywall trigger is tapped.
   final void Function(String feature)? onPaywallTap;
+
+  /// Called when the user taps Break — resets DSP engine state mid-session.
+  final VoidCallback? onBreak;
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -175,6 +177,7 @@ class _MainScreenState extends State<MainScreen> {
                       displayBpm: displayBpm,
                       isLockingDisplay: isLockingDisplay,
                       onBestCandidateTap: pushSignalAnalyzer,
+                      onBreak: widget.onBreak,
                     ),
                   ),
                 ),
@@ -205,10 +208,7 @@ class _ZoneLabelRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: AppTextStyles.mono(
-              7, FontWeight.w400, AppColors.textSecondary,
-              letterSpacing: 0.18 * 7,
-            ),
+            style: AppTextStyles.sectionLabel,
           ),
           if (trailing != null) ...[
             const Spacer(),
@@ -268,8 +268,10 @@ class _WaveformViewState extends State<_WaveformView> {
   }
 }
 
-/// Reads waveColumns from VizController at paint-time and registers `repaint: viz`.
-/// Canvas repaints without triggering a Flutter widget build.
+/// Reads waveColumns + beatDecay from VizController at paint-time.
+/// Registers `repaint: viz` so canvas repaints without Flutter widget rebuild.
+/// Forwards beatDecay as glowIntensity for the same beat-reactive glow as
+/// the BPM-hero text.
 class _VizWaveformPainter extends CustomPainter {
   _VizWaveformPainter(this.viz) : super(repaint: viz);
   final VizController viz;
@@ -278,12 +280,16 @@ class _VizWaveformPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final cols = viz.waveColumns;
     if (cols.isEmpty) return;
-    WaveformColumnPainter(columns: cols).paint(canvas, size);
+    WaveformColumnPainter(
+      columns: cols,
+      glowIntensity: viz.beatDecay,
+    ).paint(canvas, size);
   }
 
   @override
   bool shouldRepaint(_VizWaveformPainter old) =>
-      !identical(viz.waveColumns, old.viz.waveColumns);
+      !identical(viz.waveColumns, old.viz.waveColumns) ||
+      (viz.beatDecay - old.viz.beatDecay).abs() > 0.01;
 }
 
 // ── Live spectrum view ────────────────────────────────────────────────────────
@@ -350,6 +356,7 @@ class _GlassmorphismCard extends StatelessWidget {
     this.displayBpm,
     this.isLockingDisplay = false,
     this.onBestCandidateTap,
+    this.onBreak,
   });
 
   final DspResult? result;
@@ -357,6 +364,7 @@ class _GlassmorphismCard extends StatelessWidget {
   final double? displayBpm;
   final bool isLockingDisplay;
   final VoidCallback? onBestCandidateTap;
+  final VoidCallback? onBreak;
 
   @override
   Widget build(BuildContext context) {
@@ -387,6 +395,7 @@ class _GlassmorphismCard extends StatelessWidget {
                   displayBpm: displayBpm,
                   isLockingDisplay: isLockingDisplay,
                   onBestCandidateTap: onBestCandidateTap,
+                  onBreak: onBreak,
                 ),
               ),
             ),
@@ -406,6 +415,7 @@ class _InfoTableContent extends StatelessWidget {
     this.displayBpm,
     this.isLockingDisplay = false,
     this.onBestCandidateTap,
+    this.onBreak,
   });
 
   final DspResult? result;
@@ -413,6 +423,7 @@ class _InfoTableContent extends StatelessWidget {
   final double? displayBpm;
   final bool isLockingDisplay;
   final VoidCallback? onBestCandidateTap;
+  final VoidCallback? onBreak;
 
   @override
   Widget build(BuildContext context) {
@@ -481,7 +492,7 @@ class _InfoTableContent extends StatelessWidget {
 
         // ── Break button — centered ──────────────────────────────────────────
         Center(
-          child: _BreakButtonInline(onTap: () {}),
+          child: _BreakButtonInline(onTap: onBreak ?? () {}),
         ),
         const SizedBox(height: 14),
 
@@ -594,7 +605,7 @@ class _StatCell extends StatelessWidget {
                 const SizedBox(width: 3),
                 Text(
                   '›',
-                  style: AppTextStyles.mono(9, FontWeight.w400, color),
+                  style: AppTextStyles.mono(12, FontWeight.w400, color),
                 ),
               ],
             ],
@@ -632,7 +643,7 @@ class _BreakButtonInline extends StatelessWidget {
             Text(
               'Зафиксировать брейк',
               style: AppTextStyles.mono(
-                  8.5, FontWeight.w400, AppColors.textSecondary),
+                  11, FontWeight.w400, AppColors.textSecondary),
             ),
           ],
         ),
@@ -699,10 +710,10 @@ class _Chip extends StatelessWidget {
       child: Text(
         label,
         style: AppTextStyles.mono(
-          7.5,
+          10,
           FontWeight.w400,
           isOn ? AppColors.accent : AppColors.textMuted,
-          letterSpacing: 0.6,
+          letterSpacing: 0.8,
         ),
       ),
     );
@@ -803,7 +814,7 @@ class _AnimatedBpmDisplay extends StatelessWidget {
             Text(
               'BPM',
               style: AppTextStyles.mono(
-                  12, FontWeight.w400, AppColors.textSecondary,
+                  14, FontWeight.w400, AppColors.textSecondary,
                   letterSpacing: 4),
             ),
             if (isUnstable) ...[
@@ -814,7 +825,7 @@ class _AnimatedBpmDisplay extends StatelessWidget {
             Text(
               '155–230 · Hitech',
               style: AppTextStyles.mono(
-                  8, FontWeight.w400, AppColors.textMuted),
+                  10, FontWeight.w400, AppColors.textMuted),
             ),
           ],
         ),
@@ -846,7 +857,7 @@ class _UnstablePill extends StatelessWidget {
           const SizedBox(width: 4),
           Text('нестабильно',
               style: AppTextStyles.mono(
-                  8, FontWeight.w500, AppColors.amberText)),
+                  10, FontWeight.w500, AppColors.amberText)),
         ],
       ),
     );
@@ -896,11 +907,9 @@ class _TraktorStyleAppBar extends StatelessWidget {
                 child: Text(
                   'HITECH BPM RADAR',
                   textAlign: TextAlign.center,
-                  style: AppTheme.mono(
-                    fontSize: 9,
-                    color: AppTheme.textDim,
+                  style: AppTextStyles.mono(
+                    10, FontWeight.w600, AppColors.textMuted,
                     letterSpacing: 2.0,
-                    weight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -922,10 +931,8 @@ class _TraktorStyleAppBar extends StatelessWidget {
                         ),
                         child: Text(
                           'PRO',
-                          style: AppTheme.mono(
-                            fontSize: 9,
-                            color: AppTheme.accent,
-                            weight: FontWeight.w700,
+                          style: AppTextStyles.mono(
+                            10, FontWeight.w700, AppColors.accent,
                           ),
                         ),
                       ),
@@ -1008,7 +1015,7 @@ class _RecBadgeState extends State<_RecBadge>
           const SizedBox(width: 4),
           Text(
             'REC',
-            style: AppTextStyles.mono(8, FontWeight.w600, Colors.white),
+            style: AppTextStyles.mono(10, FontWeight.w600, Colors.white),
           ),
         ],
       ),

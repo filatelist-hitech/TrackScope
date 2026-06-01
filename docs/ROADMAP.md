@@ -366,3 +366,27 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - History: 30 сек (Free) / 24 ч (Pro) на выделенном экране.
 - Restore работает. Widget показывает «Скоро».
 - `config.dart` gitignored; Free работает keyless/offline.
+
+---
+
+## Phase 12: UI polish — **ЗАВЕРШЕНО** (2026-06-02)
+
+Цель: читаемость текста, waveform glow, унификация дизайн-системы, FFT в Signal Analyzer, Break button.
+
+Артефакты:
+
+- **Type scale v2.2** (`app_text_styles.dart`): micro 9→11, caption 10→12, title 11→13, body 12→14, subhead 13→15, value 15→18 — все роли без изменения hero/heroEmpty.
+- **Waveform ambient glow** (`waveform_painter.dart`): добавлен всегда-активный слой ambient glow (alpha=38, blur=4.0) поверх beat-reactive pulse — аналог spectrum.
+- **Design System v2 migration** (`design_tokens.dart`): AppTheme теперь thin-proxy → AppColors/AppTextStyles. Шрифт JetBrains Mono → IBM Plex Mono. Добавлены цвета в `app_colors.dart`: `surfaceHigh`, `dangerDim`, `warning`, `warningDim`, `success`, `successDim`, `noisePurple`, `noiseDim`.
+- **FFT Spectrum в Signal Analyzer** (`signal_analyzer_screen.dart`): StatelessWidget → StatefulWidget + VizController + `rawPcm` param + LiveSpectrumPainter panel сверху (90px). `app_navigator.dart` передаёт `rawPcm` в обоих местах создания SignalAnalyzerScreen.
+- **Break button** (`capture_bridge.dart`): `resetEngine()` — сбрасывает DSP-движок и smoother без остановки захвата. Wiring: main.dart → AppNavigator.onBreak → MainScreen.onBreak → _GlassmorphismCard → _InfoTableContent → _BreakButtonInline.
+
+Критерии выхода — выполнены:
+
+- `flutter analyze` → 0 errors ✓
+- `flutter test` → 148/149 pass (1 pre-existing dsp_engine_test — нет .dylib) ✓
+- Шрифты читаемы (+2px по всем ролям) ✓
+- Waveform glow всегда активен (ambient + beat-reactive) ✓
+- AppTheme → AppColors/AppTextStyles, no duplicate tokens ✓
+- FFT Spectrum в Signal Analyzer при наличии rawPcm ✓
+- Break button вызывает реальный reset DSP ✓
