@@ -6,6 +6,220 @@
 
 ## [Unreleased]
 
+### Added — Design System v2 (Phase 11)
+
+- **Tab Bar навигация** (`lib/navigation/app_navigator.dart`): три вкладки
+  Радар / История / Настройки через `IndexedStack`. `CaptureBridge` не
+  пересоздаётся при смене вкладок — живёт в `_CapturePipeline`.
+- **BPM Hero Display** (`lib/widgets/bpm_hero_display.dart`): 72 px IBM Plex
+  Mono, три режима (idle/detecting/unstable). Null → «— — —» dim #1E3530.
+- **ConfidenceBar** (`lib/widgets/confidence_bar.dart`): 7 px, red < 30 %,
+  yellow 30–70 %, teal > 70 %. Анимация 400 мс.
+- **BreakButton** (`lib/widgets/break_button.dart`): иконка паузы + «Зафиксировать брейк».
+- **ListeningIndicator** (`lib/widgets/listening_indicator.dart`): анимированная
+  точка accent + «слушаю».
+- **AppTabBar** (`lib/widgets/app_tab_bar.dart`): кастомный таб-бар с
+  accent/textMuted цветами, подписи «РАДАР / ИСТОРИЯ / НАСТРОЙКИ».
+- **SignalAnalyzerScreen** (`lib/screens/signal_analyzer_screen.dart`): Pro-only,
+  показывает BPM-кандидатов со score bar + качество сигнала + тайминги.
+  Секция «Метрики алгоритма» — реальные DspDebug-данные (onset rate, onset strength,
+  peak prominence, harmonic ambiguity, stability score, SNR, warnings).
+- **SettingsScreen** (`lib/screens/settings_screen.dart`): 5 секций, backed
+  by `AppSettings` (SharedPreferences). Keep Screen On → WakelockPlus.
+- **AppSettings** (`lib/settings/app_settings.dart`): ChangeNotifier singleton,
+  персист через SharedPreferences (showWaveform, showSpectrum, keepScreenOn, inputSensitivity).
+- **Design tokens v2** (`lib/theme/app_colors.dart`, `lib/theme/app_text_styles.dart`):
+  IBM Plex Mono, #050807 bg, #00DFB0 accent, confidence thresholds.
+- Зависимости: `shared_preferences ^2.3.0`, `wakelock_plus ^1.2.0`.
+
+### Added — DspDebug contract (Phase 11)
+
+- **DspDebug struct** в Rust `DspResult`: `onset_rate_hz`, `onset_strength`,
+  `tempo_peak_prominence`, `harmonic_ambiguity`, `stability_score`, `warnings[]`.
+  Populated в `analyze_from_envelope` без доп. CPU-стоимости — из уже вычисленных значений.
+  `empty_result()` и пути silence эмитят нулевой `DspDebug` (не `null`).
+- **DspDebug class** в Dart `dsp_result.dart`: `fromJson` с graceful defaults
+  (missing key → zero DspDebug). Backward-compatible с FFI без `debug`-ключа.
+- **Signal Analyzer** (`lib/screens/signal_analyzer_screen.dart`) показывает
+  реальные метрики алгоритма: onset rate, onset strength, peak prominence,
+  harmonic ambiguity, stability score, SNR, warnings. Placeholder «В разработке» удалён.
+- Тесты Rust: `debug_field_populated_on_stable_signal`,
+  `debug_serializes_to_json_with_debug_key`, `debug_empty_on_silence`
+  (в `core/dsp/tests/stability.rs`).
+- Тесты Dart: `test/dsp_debug_test.dart` (6 тестов: `fromJson`-парсинг, `DspResult.parse`).
+
+### Changed — Design System v2 (Phase 11)
+
+- **Paywall** редизайн: value headline «Читай любой трек. Без ограничений.» +
+  column headers ФУНКЦИЯ/FREE/PRO + CTA-иерархия (filled+badge / outline) +
+  Roadmap card (Key+Camelot, Energy, Lock-screen Widget). «Debug Screen» → «Signal Analyzer».
+- **Waveform** высота: flex-proportional → fixed 120 px.
+- **BPM number**: 52 px JetBrains Mono → 72 px IBM Plex Mono hero (в `_AnimatedBpmDisplay`).
+- **Confidence bar**: 2 px одноцветный → 7 px с цветовыми порогами (Design v2 ConfidenceBar).
+- **main.dart**: `MainScreen` → `AppNavigator`; `AppSettings.instance.load()` при старте.
+- **ARCHITECTURE.md**: обновлена навигационная структура и слои приложения.
+
+### Changed
+
+- **Расширен диапазон детекции BPM 170–230 → 155–230** (Phase 8.2). Ранний hitech
+  начинается от ~155 BPM. Изменены только дефолты предпочитаемого диапазона:
+  `DspConfig::target_bpm_min` (Rust) и `analyze_pcm(hitech_min_bpm=…)` (Python) с
+  `170.0` на `155.0`. Поиск (80–460) и нормализация (`<130 → ×2`, `>260 → ÷2`) не
+  менялись. Детекция ≥170 BPM байт-идентична; 155–169 получают более высокий
+  range_score. 155–169 не удваиваются (проверено: 155 → 154.8, 160 → 160.0).
+- **Допуск реальных фикстур: добавлен абсолютный гейт точности ±2 BPM.** Прежний
+  `parity.py` сравнивал только Python↔Rust (delta 0.00 везде), из-за чего
+  неверная-но-согласованная детекция проходила молча (так `hitech_real_10` 146.7
+  вместо ~196 жил до ручного `known_fail`). Теперь `parity.py` дополнительно
+  проверяет `|detected − expected_bpm| ≤ accuracy_tolerance` для фикстур с
+  известным ground truth.
+
+### Added
+
+- `core/dsp/tests/range_coverage.rs` — потоковая матрица 155 + 160…230 (шаг 5,
+  16 точек): first-lock ≤6 с, STABLE ≤12 с, последние 20 STABLE-кадров ±1 BPM;
+  плюс `bpm_155_is_detected_not_doubled`.
+- `test_extended_range_low_end_locks_in_band_without_doubling` (Python) — 155/160/165.
+- `datasets/fixture_manifest.json` — поля `expected_bpm` + `accuracy_tolerance` на
+  все 21 реальную фикстуру (8 размечены по имени файла, 13 — `TODO_user_provided`).
+- `apps/mobile/test/waveform_painter_test.dart` — smoke-тесты `WaveformColumnPainter`
+  (пустой буфер, полный mock-буфер, `WaveformColumn.empty`).
+- `widget_test.dart` — покрытие всех полей InfoCard (уровень входа, лучший
+  кандидат, ×½/×2-ячейка, клиппинг, шум) из STABLE-снапшота.
+
+### Audit
+
+- Аудит Rust/FFI-тестов: все используют value-ассерты (`assert_bpm`,
+  `(bpm-200).abs()<=2`); голых `is_some()`-без-проверки не найдено — ложных
+  срабатываний в Rust-тестах нет. Единственный структурный пробел —
+  отсутствие абсолютного гейта в `parity.py` — закрыт (см. Changed).
+
+## [1.0.0] — 2026-05-30
+
+### Added
+
+- **v1.0.0 pre-release preparation:**
+  - 3 new streaming timing tests: `streaming_first_lock_170_bpm`, `streaming_first_lock_220_bpm`, `streaming_breakdown_exits_stable`
+  - 1 new streak stability test: `streak_stability_170_bpm`
+  - 3 new FFI tests: `ffi_half_time_candidate_visible`, `ffi_double_time_candidate_visible`, `ffi_clipped_returns_clipped_mic_state`
+  - Known-fail tracking in `fixture_manifest.json` and `parity.py` — `hitech_real_10` marked as known anomaly (146.7 BPM detected instead of ~196 BPM)
+  - Android release signing config with `key.properties.template` and fallback to debug signing when keystore missing
+  - Safety documentation for all FFI unsafe functions
+
+### Changed
+
+- **Version bump:** `apps/mobile/pubspec.yaml` → `1.0.0+1`
+- **Android app label:** now uses `@string/app_name` ("Hitech BPM Radar") from `strings.xml`
+- **iOS CFBundleDisplayName:** corrected capitalization to "Hitech BPM Radar"
+- **README.md:** added "Current Status — v1.0.0" section with completed phases and key features
+
+### Fixed
+
+- **Clippy warnings:** 3 errors in `core/dsp/src/lib.rs` (redundant pattern matching, identical if-blocks, redundant closure)
+- **FFI clippy warnings:** 5 missing Safety documentation sections in `core/ffi/src/lib.rs`
+
+### Testing
+
+- **50 Rust tests pass** (was 42): 20 streaming, 8 stability, 16 offline_contract, 6 FFI
+- **21 real fixture snapshots:** all PASS except hitech_real_10 (known fail)
+- **parity.py:** exits 0 with known_fail fixtures, displays KNOWN FAILS section separately
+
+## [Unreleased]
+
+### Added
+
+- **Flutter Web UI preview (2026-05-30):** Быстрый цикл итерации по UI без устройства. Web-платформа добавлена (`apps/mobile/web/`), отдельный entrypoint `apps/mobile/lib/main_web.dart` рендерит реальный `MainScreen` поверх `MockDspStream` (симулированные `DspResult` — только UI, не детектор; Rust/FFI в браузере недоступны). На экране баннер «PREVIEW · MOCK». Запуск: `./apps/mobile/run_preview.sh` → `http://localhost:7654` с hot-reload.
+  - `MockDspStream` (`apps/mobile/lib/mock/mock_dsp_stream.dart`): SEARCHING → LOCKING → STABLE, `primaryBpm` = `null` до захвата, виден half-time-кандидат — соблюдает контракт и anti-fake-правила. Импортируется ТОЛЬКО из `main_web.dart`, никогда из `lib/main.dart`.
+  - Skill `ui-preview` (`.claude/skills/ui-preview/SKILL.md`) и slash-команда `/preview` (`.claude/commands/preview.md`) для показа превью после правок UI; `.claude/launch.json` → конфигурация `ui-preview`; `.mcp.json` с `mockup`-сервером.
+  - **Production-safe рефакторинг:** `CaptureError` вынесен из `capture/capture_bridge.dart` в лист-модуль `capture/capture_error.dart` (без ffi/io/isolate) и ре-экспортирован, чтобы `MainScreen` собирался под web, не втягивая `dart:ffi`. Мобильная сборка не затронута (`flutter analyze` чист).
+  - **Анимированные waveform и live-spectrum в превью (2026-05-30):** `MockDspStream.rawPcm()` генерирует синтетический поток PCM-16 LE mono 48 кГц (2400 сэмплов / 50 мс), форма сигнала — kick+bass+hat+rumble, синхронизированные с ~193 BPM (зеркало `.claude/mockup/index.html`). Подаётся как `rawPcm:` в `main_web.dart` → `VizController.attachRawPcm()`. Оба визуализатора (осциллограф + live-spectrum с kick-горбом на 50–200 Hz и peak-hold) теперь анимируются без «Ожидание микрофона…».
+
+### Fixed
+
+- **DSP first-lock regression (Phase 8.1, 2026-05-29):** Исправлено зависание в состоянии LOCKING (~30–50% уверенности) при первом захвате на стабильном треке. Корневая причина — гипотеза E (не из четырёх изначальных): адаптивное окно Phase 4.5 усекало `onset_history` до `ADAPTIVE_WINDOW_SEARCHING_SECS = 2.0 с` при состоянии SEARCHING — включая первый захват, когда prior STABLE ещё не было. К t=8s накоплено 8 секунд истории, но анализировались только последние 2 с (~5–8 ударов) → слабый пик автокорреляции → confidence < 0.72 → STABLE недостижим. Фикс: добавлено поле `has_ever_been_stable: bool` в `DspEngine`. При `false` (первый захват) — всегда полная история. При `true` (после первого STABLE) — адаптивное окно работает штатно для fast re-lock. Проверено 2 новыми тестами: `first_lock_uses_full_window_no_prior_stable` и `relock_adaptive_window_still_fast_after_stable`. (core/dsp/src/lib.rs)
+
+- **DSP regression (Phase 8, 2026-05-29):** `ADAPTIVE_WINDOW_LOCKING_SECS` исправлен с 4.0 → 6.0 с (совпадает с `lock_min_seconds`), что даёт ~20 ударов при 200 BPM и confidence ≥ 0.72. (core/dsp/src/lib.rs)
+
+### Changed
+
+- **Waveform visualization (Phase 8.1, 2026-05-29):** Осциллограф-стиль (`WaveformPainter`, smooth glow line) заменён на Traktor DJ–стиль (`WaveformColumnPainter`): острые вертикальные прямоугольники `drawRect`, цветовой градиент по bass-энергии (`0xFF003D35` → `0xFF00E5CC`). Пунктирная вертикальная линия «Now» удалена. Добавлен `WaveformColumn` data class с полями `amplitude`, `bassWeight`, `midWeight`, `highWeight`. `VizController` вычисляет band-split энергию из тех же FFT magnitudes без второго FFT. Границы бинов (48 kHz / 1024): bass 0–6 (0–328 Hz), mid 7–63 (329–2953 Hz), high 64–127 (2954–5953 Hz). (apps/mobile/lib/viz/)
+
+- **DSP fast re-lock v2**: re-lock after track change now ≤ 3 s (was 6–8 s)
+  - State-based adaptive analysis window: STABLE=full history, LOCKING=6 s (updated from 4 s), SEARCHING/UNSTABLE=2 s
+  - Tempo jump detector: threshold 15 BPM triggers `bpm_history` reset + force SEARCHING
+  - New `DspConfig` fields: `adaptive_window` (default `true`), `tempo_jump_threshold` (default `15.0`)
+  - 6 new streaming regression tests including `tempo_change_185_to_200`, `tempo_change_200_to_170`, `no_false_stable_during_transition`
+  - All 43 Rust tests pass; 15/15 QA fixtures PASS
+
+---
+
+### Phase 7.1 — Осциллограф вместо спектрограммы (2026-05-29)
+
+#### Changed
+
+- **`WaveformPainter`** переписан в стиль осциллографа: тёмный фон с сеткой (4×6 линий), glow-проход (`MaskFilter.blur 5px`) + чёткая линия, пунктирный курсор «Now» у правого края, метка «WAVEFORM» в левом верхнем углу. Цвет `accentColor` вместо хардкоданного `#00BFA5`; при клиппинге — `#FF4444`.
+- **Главный экран (`main_screen.dart`)**: панель `_SpectrogramView` (35 %) заменена на `_WaveformView` (35 %). Импорт `spectrogram_painter.dart` убран, добавлен `waveform_painter.dart`. `_WaveformView` получает `isClipping` из `DspResult` для мгновенного предупреждения о перегрузе.
+- Старая спектрограмма-тайлы полностью убрана из видимого UI. Файл `spectrogram_painter.dart` сохранён.
+
+---
+
+### Phase 7 — UI overhaul: метрическая спектрограмма, live-спектр, design system (2026-05-29)
+
+#### Added
+
+- **`SpectrogramPainter` с метрическими осями** (`apps/mobile/lib/viz/spectrogram_painter.dart`): Y-ось — Hz-метки ([63, 125, 250, 500, 1000, 2000, 4000] Hz) на лог-шкале с горизонтальными gridlines; X-ось — временны́е метки [−8s … 0] с вертикальными gridlines. Курсор «Now» изменён с `Color(0x66FFFFFF)` на `accentColor.withAlpha(153)`. Метка «SPECTROGRAM» в левом верхнем углу.
+
+- **`LiveSpectrumPainter`** (`apps/mobile/lib/viz/live_spectrum_painter.dart`, новый файл): smooth real-time FFT-кривая с gradient fill и peak hold тиками. Логарифмическая X-ось 20 Hz–20 kHz. Получает `latestNorms` и `peakHoldValues` из `VizController`, читает ровно один раз за hop. Метка «LIVE SPECTRUM» в левом верхнем углу.
+
+- **`AppTheme`** (`apps/mobile/lib/ui/design_tokens.dart`, новый файл): централизованные цветовые и типографические константы. Акцент `#00E5CC`, фон `#07070F`, JetBrains Mono через `google_fonts`.
+
+- **`VizController.latestNorms` + `peakHoldValues`** (`apps/mobile/lib/viz/viz_controller.dart`): третий FFT-потребитель в `_scheduleFFT()` — fixed-dBFS нормализация (ref `_kRefMag`, floor `_kFloorDb`). Peak hold: 30 колонок (~1.5 с), decay ×0.90 после истечения. FFT вычисляется ровно один раз за hop.
+
+- **Glassmorphism-карточка** (`apps/mobile/lib/ui/main_screen.dart`): `BackdropFilter(ImageFilter.blur(12, 12))` + `ClipRRect(r=16)` + border `Colors.white.withAlpha(18)`.
+
+- **`AnimatedSwitcher`-бейджи** с `ValueKey<LockState>` — плавный fade 200 мс при смене состояния захвата.
+
+- **JetBrains Mono** (`pubspec.yaml`: `google_fonts: ^6.2.1`) для BPM-числа и числовых метрик.
+
+- **4 новых widget-теста** (`apps/mobile/test/widget_test.dart`): UNSTABLE→'нестабильно', BREAKDOWN→'брейк', NOISE_ONLY→'только шум', LOCKING→'захват'.
+
+#### Changed
+
+- Раскладка главного экрана: `SpectrumBarsPainter (45%) + WaveformPainter (15%)` заменены на `Spectrogram (35%) + LiveSpectrum (22%)`. Info-блок увеличен до 43%.
+
+- Бейдж CLIPPED_MIC: метка изменена с `'перегруз микрофона'` на `'перегруз'` (короче, умещается в pill).
+
+- Все локальные цветовые константы (`_kBg`, `_kSurface`, `_kTeal`) заменены на `AppTheme.*`.
+
+- `RepaintBoundary` обёрнут вокруг `SpectrogramPainter`, `LiveSpectrumPainter` и glassmorphism-карточки.
+
+---
+
+### Phase 6 — стабилизация BPM-отображения (2026-05-29)
+
+#### Added
+
+- **Параболическая интерполяция пика автокорреляции** (`core/dsp/src/lib.rs`, `tempo_autocorrelation()`): дробный лаг `k_frac = k + (A[k+1] - A[k-1]) / (2·(2·A[k] - A[k-1] - A[k+1]))` снижает ошибку дискретизации с до ~2 BPM/лаг до < 0.2 BPM для любого BPM-значения. Fallback к целому лагу на плоских вершинах и выходах за диапазон.
+
+- **BPM candidate history в `DspEngine`** (`core/dsp/src/lib.rs`): скользящий буфер N=3 значений `primary_bpm` в STABLE, заменяет мгновенное значение медианой. Очищается при любом не-STABLE кадре.
+
+- **`BpmDisplay`** (`apps/mobile/lib/capture/bpm_display.dart`): display-layer EMA (α=0.2) для большого BPM-числа в `MainScreen`. Активен только в STABLE; снэп к первому значению без задержки. Добавлен параметр `displayBpm` в `_InfoTable`.
+
+- **`core/dsp/tests/stability.rs`** — 7 новых Rust-тестов: `parabolic_flat_peak_no_panic`, `parabolic_precision_200_bpm`, `streak_stability_{180,195,200,220}_bpm`, `bpm_history_clears_on_state_change`. Streak-допуск ±0.5 BPM (строже базового ±1.0 BPM).
+
+- **`apps/mobile/test/bpm_display_test.dart`** — 8 unit-тестов `BpmDisplay`: null на не-STABLE, snap, EMA, сброс, re-entry, anti-fake, reset(), сходимость.
+
+#### Changed
+
+- Большое BPM-число на главном экране теперь показывается только в STABLE (было: LOCKING + STABLE). Во время LOCKING отображается `—`.
+
+#### Diagnostic (Phase 6 pre-fix measurements)
+
+При `hop_sec = 0.0025 с`:
+- 195 BPM, lag=123 → 195.1 BPM; lag=124 → 193.5 BPM; с интерполяцией → 195.0 BPM
+- 180 BPM, lag=133 → 180.5 BPM; lag=134 → 179.1 BPM; с интерполяцией → 180.0 BPM
+- 220 BPM, lag=109 → 220.2 BPM; lag=110 → 218.2 BPM; с интерполяцией → 220.0 BPM
+
 ### Phase 5 UI — редизайн главного экрана (2026-05-27)
 
 #### Added
@@ -200,3 +414,21 @@ iPhone 11, iOS 26.3.1, 2026-05-26. Треки hitech-psytrance 192/200/207 BPM, 
 - Half-time- и double-time-кандидаты никогда не скрываются — они остаются в списке кандидатов с relation/source-метаданными.
 
 [Unreleased]: https://github.com/filatelist-hitech/hitech-bpm-radar/compare/main...HEAD
+
+### Added
+
+- **Freemium monetization (Free / Pro)** — двухуровневая модель с RevenueCat IAP.
+  - FFI: `hitech_bpm_engine_new_with_min_bpm(float)` — Free 170–230, Pro 155–230.
+  - `lib/monetization/`: `PurchasesGateway`, `RevenueCatGateway`, `ProStatusService`,
+    `FeatureFlags`, `PaywallScreen` (сравнение Free/Pro, Lifetime $4.99, Annual $3.99/yr,
+    Restore, «Скоро» виджет).
+  - `lib/history/`: `BpmHistory`, `SessionHistoryController` (~1 Hz даунсэмплер),
+    `HistoryScreen` (Free: 30 сек cap + upgrade баннер; Pro: 24 ч + экспорт).
+  - `lib/export/`: `buildCsv`/`buildJson` (чистые билдеры), `exportCsv`/`exportJson`
+    (share_plus + path_provider).
+  - `main.dart`: ProStatusService init через `--dart-define`, ListenableBuilder для
+    tier-reactive CaptureBridge (смена minBpm без перезапуска).
+  - `main_web.dart`: web-safe — без revenuecat-зависимостей, fixed `isPro: false`.
+  - `config.dart.template` + `.gitignore` для `config.dart`.
+  - Тесты: feature_flags, pro_status_service, paywall_screen, bpm_history,
+    bpm_exporter, widget_test (debug-gate, PRO badge).

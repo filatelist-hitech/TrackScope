@@ -1,8 +1,8 @@
 # hitech-bpm-radar
 
-DSP-first определение BPM для hitech / psytrance — автоматический темп с микрофона в диапазоне 170–230 BPM.
+DSP-first определение BPM для hitech / psytrance — автоматический темп с микрофона в диапазоне **155–230 BPM**. Без tap-tempo, без хардкоженых значений.
 
-Это не tap-tempo и не UI-демо. Первая продакшен-веха — детерминированное DSP-ядро с синтетическими тестами и офлайн-анализатором. Захват микрофона и UI на мобильном устройстве подключаются только после стабилизации DSP-контракта.
+Rust DSP-ядро → Flutter FFI-мост → живой экран BPM. Все вычисления темпа — в Rust; Flutter только рендерит DSP-контракт.
 
 ## Продуктовый контракт
 
@@ -14,7 +14,7 @@ DSP-first определение BPM для hitech / psytrance — автома�
 - BPM-кандидаты со score;
 - связи half-time и double-time;
 - предупреждения о качестве сигнала;
-- историю сессий — после интеграции с мобильным приложением.
+- историю сессий.
 
 Продакшен-логика никогда не хардкодит демо-значения BPM и не выдумывает темп для тишины, шума-без-сигнала, перегруженного микрофона или брейкдаунов.
 
@@ -32,15 +32,107 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 .agents/skills/    Переиспользуемые навыки проекта для локальных воркфлоу с агентами.
 ```
 
+## Статус проекта
+
+### Завершённые фазы
+
+| Фаза | Содержание |
+|---|---|
+| Phase 1 | Офлайн-DSP-лаборатория: Python-референс, синтетические фикстуры, CLI офлайн-анализатора |
+| Phase 2 | Потоковое Rust DSP-ядро: кольцевой буфер, история онсетов, first-lock <6 с, stable-lock <12 с |
+| Phase 3 | Flutter мобильный мост: iOS (static `.a`) + Android (`.so`), FFI-изолят, debug-экран, iPhone 11 ✓ |
+| Phase 4 | Закалка: SNR-оценка, BpmSmoother (медиана+EMA+гистерезис), 21 реальная hitech-фикстура |
+| Phase 5 | UI: VizController, SpectrogramPainter, WaveformPainter, live-spectrum, rawPcm-стрим |
+| Phase 6 | Точность BPM: параболическая интерполяция (±0.2 BPM), BPM candidate history N=3, BpmDisplay EMA |
+| Phase 7 | UI redesign: SpectrogramPainter с метрическими осями, LiveSpectrumPainter, AppTheme design tokens |
+| Phase 7.1 | Осциллограф вместо спектрограммы на главном экране |
+| Phase 8 | DSP fast re-lock v2: адаптивное окно по состоянию, детектор прыжка темпа, re-lock ≤3 с |
+| Phase 8.1 | Fix first-lock: `has_ever_been_stable` — полная история при первом захвате |
+| Phase 8.2 | Расширение диапазона 170→**155 BPM**, абсолютный гейт точности в `parity.py` |
+| Phase 9 | Android APK: `build_android_native.sh` готов, ожидает установки Android Studio + NDK |
+| Phase 10 | Freemium: RevenueCat IAP, Free/Pro tier, PaywallScreen, экспорт, история 24 ч |
+| Phase 11 | **Design System v2**: Tab Bar, BPM Hero 72 px, ConfidenceBar 7 px, Signal Analyzer, Settings |
+
+### В процессе
+
+В процессе: финализация Android APK (Phase 9) и web preview визуализации.
+
+### Ключевые характеристики
+
+- Детекция BPM: **155–230 BPM** (hitech / psytrance), поиск в диапазоне 80–460
+- Параболическая интерполяция пика автокорреляции — точность ±0.2 BPM на синтетике
+- Адаптивное окно онсетов по состоянию захвата; re-lock ≤ 3 с
+- 7 состояний: `SEARCHING` → `LOCKING` → `STABLE` / `UNSTABLE` / `BREAKDOWN` / `CLIPPED_MIC` / `NOISE_ONLY`
+- Half-time / double-time кандидаты всегда видны; никогда не скрываются
+- Anti-fake: нет хардкоженых BPM, нет фейкового пульса по таймеру
+- SNR-оценка и гейтинг качества сигнала
+- 75 Rust-тестов + 21 Python-тест + 132 Flutter-теста, 21 реальная hitech-фикстура (180–210 BPM)
+
+## Design v2
+
+Design System v2 (Phase 11) обновляет весь Flutter UI:
+
+- **Tab Bar**: три вкладки Радар / История / Настройки через `IndexedStack` (CaptureBridge не пересоздаётся).
+- **BPM Hero**: 72 px IBM Plex Mono, три режима (idle → «— — —» dim, detecting → accent, unstable → amber).
+- **ConfidenceBar**: 7 px, цвет по порогу (red < 30 %, yellow 30–70 %, teal > 70 %).
+- **Signal Analyzer**: Pro-экран с BPM-кандидатами, качеством сигнала, таймингами и реальными DspDebug-метриками (onset rate, peak prominence, harmonic ambiguity, stability score, warnings).
+- **Settings**: 5 секций, SharedPreferences, Keep Screen On (WakelockPlus).
+- **Paywall v2**: value headline, column headers FREE/PRO, CTA-иерархия, Roadmap card.
+- **DspDebug в Rust `DspResult`**: диагностические поля алгоритма (`onset_rate_hz`, `onset_strength`, `tempo_peak_prominence`, `harmonic_ambiguity`, `stability_score`, `warnings`); присутствует в каждом снапшоте, без дополнительной CPU-стоимости.
+
 ## Текущая фаза
 
-**Phase 3 завершена** (подтверждено на iPhone 11, 2026-05-26). Flutter-приложение захватывает звук с микрофона через `package:record 6.x`, отправляет PCM в отдельный изолят DSP-воркера, который владеет Rust-FFI-хэндлом (статическая `.a` на iOS), и рендерит скользящие снэпшоты `DspResult` через `StreamBuilder` на живом BPM-экране + отладочном экране.
+**Phases 1–11 завершены.** Проект готовится к первому production-APK.
 
-Следующая фаза — **Phase 4: закалка** (адаптивные пороги, сглаживание BPM, реальные тестовые записи, цель ±2–4 BPM через живой микрофон).
+Последний подтверждённый запуск на реальном устройстве — iPhone 11, iOS 26.3.1, 2026-05-26.
+Целевой диапазон расширен до **155–230 BPM** (Phase 8.2: поддержка раннего hitech от 155 BPM).
 
-Rust-крейт в `core/dsp/` — продакшен-источник истины: извлечение онсетов, оценка темпа автокорреляцией, hitech-нормализация кандидатов, скоринг уверенности и классификация состояния захвата на нативном Rust. `core/dsp/tempo.py` и `core/dsp/synthetic.py` остаются как читаемая алгоритмическая референс-реализация.
+Rust-крейт в `core/dsp/` — продакшен-источник истины: извлечение онсетов, оценка темпа
+автокорреляцией, hitech-нормализация кандидатов, скоринг уверенности и классификация
+состояния захвата на нативном Rust. `core/dsp/tempo.py` и `core/dsp/synthetic.py`
+остаются как читаемая алгоритмическая референс-реализация.
 
-### Запуск мобильного приложения (Android / macOS)
+### Android APK (macOS, без физического устройства)
+
+Требования: Android Studio с NDK 27.x, rustup.
+
+```sh
+# 1. Задать путь к Android SDK
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$(ls $ANDROID_HOME/ndk | sort -V | tail -1)"
+
+# 2. Добавить Rust Android таргеты (однократно)
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+
+# 3. Собрать нативную библиотеку для Android
+bash scripts/build_android_native.sh
+# → apps/mobile/android/app/src/main/jniLibs/<abi>/libhitech_bpm_ffi.so
+
+# 4. Debug APK (не требует подписи)
+cd apps/mobile && flutter build apk --debug
+# → build/app/outputs/flutter-apk/app-debug.apk
+
+# 5. Запустить в эмуляторе AVD
+flutter emulators --launch <emulator_id>
+flutter run
+```
+
+**Release APK** (нужен keystore):
+```sh
+# Сгенерировать keystore (однократно):
+keytool -genkey -v -keystore apps/mobile/android/android-release.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias hitech-bpm
+
+# Создать apps/mobile/android/key.properties из шаблона и заполнить пароли
+cp apps/mobile/android/key.properties.template apps/mobile/android/key.properties
+
+cd apps/mobile && flutter build apk --release
+# → build/app/outputs/flutter-apk/app-release.apk
+```
+
+Подробности: [docs/ANDROID_TEST_PLAN.md](docs/ANDROID_TEST_PLAN.md)
+
+### Запуск мобильного приложения (macOS Desktop / тесты)
 
 ```sh
 # 1. Собрать Rust FFI dylib
@@ -54,7 +146,7 @@ cd apps/mobile
 /opt/homebrew/bin/flutter analyze
 /opt/homebrew/bin/flutter test
 
-# 4. Запуск
+# 4. Запуск (macOS desktop)
 /opt/homebrew/bin/flutter run
 ```
 
@@ -93,7 +185,7 @@ flutter run --release
 
 ## Критерии приёмки
 
-- Чистые синтетические фикстуры: ±1 BPM на 170, 180, 190, 200 и 220 BPM.
+- Чистые синтетические фикстуры: ±1 BPM на 155, 170, 180, 190, 200 и 220 BPM.
 - Шумный микрофонный вход: ±2–4 BPM при адекватном качестве сигнала.
 - Первый рабочий захват: до 6 секунд.
 - Стабильный захват: до 12 секунд.
@@ -109,6 +201,7 @@ flutter run --release
 - [Заметки по мобильному аудио](docs/MOBILE_AUDIO.md)
 - [Ручной тест-чеклист (mobile)](docs/MANUAL_TEST_CHECKLIST.md)
 - [Релизный чеклист](docs/RELEASE_CHECKLIST.md)
+- [Android тест-план](docs/ANDROID_TEST_PLAN.md)
 - [Глоссарий терминов](docs/GLOSSARY.md)
 
 ## Работа с Claude Code
@@ -134,3 +227,41 @@ flutter run --release
 Субагенты и навыки сопоставляются по `description` и активируются автоматически по триггерам; их также можно вызвать явно через `@agent-name` или сослаться на навык по имени.
 
 > `.codex/` и `.agents/` сохранены как легаси-референс из исходного окружения OpenAI Codex. Не удаляйте и не модифицируйте их. Маппинг агентов Codex → субагентов Claude Code описан внизу `CLAUDE.md`.
+
+## Монетизация (Free / Pro)
+
+Приложение использует двухуровневую модель с RevenueCat IAP:
+
+| Фича | Free | Pro |
+|---|---|---|
+| BPM Range | 170–230 | 155–230 |
+| Debug Screen | ✕ (paywall) | ✓ |
+| History | 30 сек | 24 ч |
+| Export CSV/JSON | ✕ (paywall) | ✓ |
+| Lock-screen Widget | Скоро | Скоро |
+
+### Monetization Setup
+
+1. Скопируйте `apps/mobile/lib/monetization/config.dart.template` → `config.dart` (gitignored).
+2. Заполните RevenueCat API keys.
+3. Либо передайте ключи через `--dart-define`:
+
+```sh
+flutter run --dart-define=REVENUECAT_IOS_KEY=your_ios_key --dart-define=REVENUECAT_ANDROID_KEY=your_android_key
+```
+
+Если оба ключа пусты, приложение работает полностью в Free tier (offline / keyless).
+
+#### Полная версия для локального теста (без покупки)
+
+Чтобы прогнать все Pro-фичи (диапазон 155–230, debug-экран, история 24 ч, экспорт)
+на своём устройстве без настройки App Store / RevenueCat sandbox, соберите с флагом
+`FORCE_PRO`:
+
+```sh
+flutter run --release --dart-define=FORCE_PRO=true
+```
+
+Флаг переключает только тир подписки — он **не** трогает DSP/BPM-математику. По
+умолчанию `false`, поэтому обычная стор-сборка (без флага) остаётся Free. Не
+передавайте `FORCE_PRO=true` в сборку для публикации.

@@ -1,0 +1,22 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ui-preview",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": [
+        "run",
+        "-d",
+        "web-server",
+        "--web-port",
+        "7654",
+        "--web-hostname",
+        "localhost",
+        "--target",
+        "lib/main_web.dart"
+      ],
+      "cwd": "apps/mobile",
+      "port": 7654
+    }
+  ]
+}

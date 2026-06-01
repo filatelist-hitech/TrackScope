@@ -15,29 +15,25 @@ import 'dart:io' show Platform;
 
 import '../dsp/dsp_result.dart';
 import 'bpm_smoother.dart';
+import 'capture_error.dart';
 import 'capture_messages.dart';
 import 'dsp_worker.dart';
 
-/// Выносится в UI, когда путь захвата или DSP-воркер сталкивается с
-/// невосстановимой ошибкой. UI обязан её показать — никогда не глотать
-/// её молча и никогда не подменять синтетическим аудио.
-class CaptureError {
-  const CaptureError(this.message, [this.stackTrace]);
-  final String message;
-  final StackTrace? stackTrace;
-
-  @override
-  String toString() => 'CaptureError($message)';
-}
+// `CaptureError` вынесен в лист-модуль `capture_error.dart` (без ffi/io/
+// isolate), чтобы UI собирался под web. Ре-экспортируем его здесь, чтобы
+// существующие `import 'capture_bridge.dart'` продолжали видеть тип.
+export 'capture_error.dart';
 
 class CaptureBridge {
   CaptureBridge({
     this.libraryPath,
     this.pollInterval = const Duration(milliseconds: 50),
+    this.minBpm,
   });
 
   final String? libraryPath;
   final Duration pollInterval;
+  final double? minBpm;
 
   Isolate? _worker;
   SendPort? _workerInbox;
@@ -144,6 +140,7 @@ class CaptureBridge {
       libraryPath: libraryPath ?? _platformDefaultLibrary(),
       captureSampleRate: sampleRate,
       pollIntervalMs: pollInterval.inMilliseconds,
+      minBpm: minBpm,
     );
     _worker = await Isolate.spawn<WorkerInit>(
       dspWorkerEntry,

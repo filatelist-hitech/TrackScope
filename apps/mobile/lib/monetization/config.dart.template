@@ -1,0 +1,27 @@
+// Шаблон конфигурации RevenueCat API-ключей.
+//
+// Реальные ключи НЕ коммитятся. Вместо этого:
+//
+// 1. Скопируйте этот файл в `config.dart` (gitignored):
+//    cp config.dart.template config.dart
+//
+// 2. Заполните реальные ключи в `config.dart`.
+//
+// 3. Либо импортируйте `config.dart` в `main.dart` (локальная разработка),
+//    либо передайте ключи через `--dart-define` при сборке:
+//
+//    flutter build apk \
+//      --dart-define=REVENUECAT_IOS_KEY=your_ios_key \
+//      --dart-define=REVENUECAT_ANDROID_KEY=your_android_key
+//
+// 4. В `main.dart` читайте через `String.fromEnvironment`:
+//
+//    const iosKey = String.fromEnvironment('REVENUECAT_IOS_KEY', defaultValue: '');
+//    const androidKey = String.fromEnvironment('REVENUECAT_ANDROID_KEY', defaultValue: '');
+//
+// Если оба ключа пусты, приложение работает в Free tier без SDK-инициализации.
+
+class RevenueCatConfig {
+  static const String iosKey = '';
+  static const String androidKey = '';
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mockup": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "env": {
+        "PREVIEW_BASE_URL": "http://localhost:7654"
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 ## Область применения
 
-DSP-ядро автоматически определяет BPM по PCM-аудио. Основной жанровый таргет — hitech / psytrance в диапазоне 170–230 BPM. Tap-tempo не является основным механизмом.
+DSP-ядро автоматически определяет BPM по PCM-аудио. Основной жанровый таргет — hitech / psytrance в диапазоне 155–230 BPM (расширен с 170–230 в Phase 8.2: ранний hitech начинается от ~155 BPM). Tap-tempo не является основным механизмом.
 
 Первая имплементация — детерминированный DSP. Машинное обучение не входит в первоначальный план, потому что проекту нужны объяснимые кандидаты, синтетические регрессионные тесты и предсказуемое поведение CPU на мобильном.
 
@@ -33,7 +33,7 @@ interface DspResult {
   signal_quality: SignalQuality;
   candidates: TempoCandidate[];
   timing: DspTiming;
-  debug?: DspDebug;
+  debug: DspDebug;  // диагностика алгоритма; присутствует в каждом снапшоте
 }
 
 interface SignalQuality {
@@ -72,12 +72,12 @@ interface DspTiming {
 }
 
 interface DspDebug {
-  onset_rate_hz: number;
-  onset_strength: number;
-  tempo_peak_prominence: number;
-  harmonic_ambiguity: number;
-  stability_score: number;
-  warnings: string[];
+  onset_rate_hz: number;           // raw_peaks.len() / duration_sec
+  onset_strength: number;          // avg spectral flux over analysis window
+  tempo_peak_prominence: number;   // prominence of main autocorrelation peak
+  harmonic_ambiguity: number;      // competing candidates pressure [0..1+]
+  stability_score: number;         // primary candidate stability_score
+  warnings: string[];              // ["clipping", "breakdown_likely", "harmonic_ambiguity=X.XX"]
 }
 ```
 
@@ -86,9 +86,10 @@ interface DspDebug {
 - `primary_bpm` равен `null`, пока уверенность не превысит текущий порог захвата.
 - `confidence` всегда в диапазоне `0.0..1.0`.
 - `candidates` сохраняет raw- и нормализованные варианты с relation-метаданными.
-- Hitech-режим предпочитает 170–230 BPM, но не скрывает неоднозначность.
+- Hitech-режим предпочитает 155–230 BPM, но не скрывает неоднозначность.
 - raw-кандидат 100 BPM может породить нормализованного кандидата 200 BPM, но оба остаются видимыми.
 - raw-кандидат 400 BPM может породить нормализованного кандидата 200 BPM, но оба остаются видимыми.
+- `debug` всегда присутствует в снапшоте (не опциональный). Для `empty_result` (тишина, silence) все числовые поля нулевые, `warnings` — пустой список. `DspDebug` содержит только диагностику алгоритма; BPM-вычисления в нём не производятся. Populated в `analyze_from_envelope` без дополнительной CPU-стоимости — из уже вычисленных значений.
 
 ## Пайплайн
 
@@ -211,6 +212,85 @@ interface DspDebug {
 - Python-качество сигнала эмитит `snr_estimate_db: null` — SNR-оценка реализована только в Rust (`estimate_snr_db`); Python-шумовое гейтирование использует evidence уровня, клиппинга, crest и периодичности онсетов вместо фейкового SNR-значения.
 - Клиппинг градирован по отношению клиппированных кадров: мягкий клиппинг ограничивает уверенность ниже `STABLE`, оставляя кандидатов видимыми; сильный клиппинг (>= 5% кадров) форсит `CLIPPED_MIC` и подавляет `primary_bpm`.
 
+## Адаптивное окно онсетов и fast re-lock (Phase 4.5)
+
+### Проблема
+
+При смене трека `onset_history` содержит онсеты предыдущего темпа. Они продолжают конкурировать с новым темпом в автокорреляции всё время, пока старые записи не вытеснятся свежими. При полном окне ~12 сек движок мог тратить 6–8 сек на перезахват нового темпа, хотя кольцо заполнялось свежими онсетами уже за первые 2–4 сек.
+
+### Решение A: state-based адаптивный срез
+
+При каждом вызове `analyze()` движок берёт не полную `onset_history`, а срез, ограниченный эффективным окном. Размер зависит от двух факторов: (1) был ли движок хотя бы раз в `STABLE` (поле `has_ever_been_stable`), (2) предыдущего состояния захвата (`prev_lock_state`):
+
+| Условие | Эффективное окно автокорреляции |
+| --- | --- |
+| `has_ever_been_stable == false` (первый захват, никогда не достигали STABLE) | **полная история** — независимо от состояния |
+| `has_ever_been_stable == true` + `STABLE` или `None` | полная история (`analysis_window_seconds`) |
+| `has_ever_been_stable == true` + `LOCKING` | min(полная, `ADAPTIVE_WINDOW_LOCKING_SECS` = 6.0 с) |
+| `has_ever_been_stable == true` + `SEARCHING` / `UNSTABLE` / `BREAKDOWN` / `NOISE_ONLY` / `CLIPPED_MIC` | min(полная, `ADAPTIVE_WINDOW_SEARCHING_SECS` = 2.0 с) |
+
+Ключевой инвариант: **адаптивное усечение применяется только при повторном захвате** (после уже достигнутого STABLE). При первом захвате (флаг `false`) всегда используется полная история. Это обеспечивает ~25–50 ударов для надёжного пика автокорреляции и уверенности ≥ 0.72 на первом захвате.
+
+Буфер `onset_history` не усекается — только срез для автокорреляции. Это сохраняет полное состояние при возвращении в `STABLE`.
+
+Поведение управляется флагом `DspConfig.adaptive_window` (default: `true`). При `false` движок всегда использует полную историю (режим совместимости для тестов parity).
+
+**Phase 8.1 regression fix (2026-05-29):** До этого фикса adaptive_window усекал onset_history до `ADAPTIVE_WINDOW_SEARCHING_SECS = 2.0 с` при состоянии SEARCHING — включая первый захват, когда `has_ever_been_stable == false`. Это означало, что к t=8s накоплено 8 секунд истории, но анализируются только последние 2 с (~5–8 ударов) → слабый пик автокорреляции → confidence < 0.72 → STABLE недостижим. Фикс добавляет поле `has_ever_been_stable: bool` в `DspEngine`: выставляется в `true` при первом STABLE и никогда не сбрасывается в `false`. При `false` — полная история; при `true` — адаптивное окно работает штатно для fast re-lock.
+
+### Решение C: tempo jump detector
+
+Если топ-кандидат текущего кадра расходится с `last_stable_bpm` более чем на `DspConfig.tempo_jump_threshold` (default: `15.0` BPM) за один кадр, движок:
+
+1. Очищает `bpm_history` (буфер медианной стабилизации из Phase 6).
+2. Устанавливает флаг `force_next_searching = true`.
+
+При следующем вызове `analyze()` `force_next_searching` форсирует состояние `SEARCHING` вместо `UNSTABLE`, сбрасывая накопленный счётчик устойчивости. Это позволяет движку начать накопление нового темпа с чистого листа без ожидания истечения полного окна.
+
+Константы в `core/dsp/src/lib.rs`:
+
+```
+ADAPTIVE_WINDOW_LOCKING_SECS   = 6.0  // Phase 8: исправлено с 4.0 → 6.0
+ADAPTIVE_WINDOW_SEARCHING_SECS = 2.0
+RELOCK_WINDOW_SECS             = 2.0
+RELOCK_BPM_SHIFT_THRESHOLD     = 10.0
+RELOCK_CONFIRM_FRAMES          = 1
+```
+
+**Phase 8 regression fix (2026-05-29):** `ADAPTIVE_WINDOW_LOCKING_SECS` увеличено с 4.0 до 6.0 секунд. При 4.0 с движок получал только ~13 ударов при 200 BPM, что давало confidence ~0.68 — ниже порога 0.72 для перехода в STABLE. Это вызывало зависание в состоянии LOCKING с низкой уверенностью. 6.0 с совпадает с `lock_min_seconds` (default 6.0) и даёт ~20 ударов → confidence ≥ 0.72 → успешный переход в STABLE.
+
+### Конфигурация
+
+Два поля в `DspConfig` (введены в Phase 4.5):
+
+```rust
+pub adaptive_window: bool,       // default: true
+pub tempo_jump_threshold: f32,   // default: 15.0 BPM
+```
+
+Поле `has_ever_been_stable` в `DspEngine` (введено в Phase 8.1):
+
+```rust
+has_ever_been_stable: bool,  // default: false; выставляется в true при первом STABLE
+```
+
+Все поля имеют значения по умолчанию через `Default`; существующий код не требует изменений.
+
+### Результат
+
+Re-lock после смены трека (смена темпа > 10 BPM) сокращён с 6–8 сек (до Phase 4) до ≤ 3 сек. Первый захват достигает STABLE за ≤ 12 сек на чистом синтетическом входе. Регрессионное покрытие в `core/dsp/tests/streaming.rs` включает 8 новых тестов (6 для fast re-lock + 2 для first-lock фикса):
+
+- `tempo_change_185_to_200` — перезахват 200 BPM после 185 BPM в пределах 3 сек.
+- `tempo_change_200_to_170` — перезахват 170 BPM после 200 BPM в пределах 3 сек.
+- `no_false_stable_during_transition` — состояние захвата проходит через не-`STABLE` фазу при смене темпа.
+- Три дополнительных кейса на граничные значения порога прыжка.
+- `first_lock_uses_full_window_no_prior_stable` — первый захват достигает STABLE за ≤ 12 сек с `adaptive_window: true`.
+- `relock_adaptive_window_still_fast_after_stable` — ре-лок после смены трека по-прежнему ≤ 3 сек.
+
+### Известные ограничения
+
+- При плавном pitch shift (изменение темпа < 10 BPM) tempo jump detector не активируется — `force_next_searching` не выставляется. Перезахват в таких случаях происходит через штатный путь автокорреляции.
+- `adaptive_window: false` отключает адаптивный срез полностью — движок всегда использует полную историю онсетов. Тест `adaptive_window_disabled_falls_back_to_baseline` в `core/dsp/tests/streaming.rs` проверяет тайминговое поведение при этом флаге. Существующий parity-тест `streaming_engine_matches_batch_analysis` использует `DspEngine::default()` (то есть `adaptive_window: true`); при старте с нуля (без предшествующей STABLE-истории) adaptive_window не изменяет поведение, поэтому batch/streaming parity сохраняется.
+
 ## Dart-слой сглаживания (Phase 4)
 
 Rust DSP-ядро эмитит каждый снэпшот `DspResult` честно: без сглаживания, без гистерезиса. Сглаживание для UI-стабильности вынесено в Dart-класс `BpmSmoother` (`apps/mobile/lib/capture/bpm_smoother.dart`), чтобы Rust-ядро оставалось parity-тестируемым в чистом виде.
@@ -228,3 +308,92 @@ Rust DSP-ядро эмитит каждый снэпшот `DspResult` чест�
 `CaptureBridge` вызывает `_smoother.smooth(parsed)` перед отправкой в broadcast-стрим результатов; `_smoother.reset()` вызывается при `stop()`.
 
 Известное ограничение: MA-сглаживание огибающей онсетов в Rust не добавлялось — тест показал, что оно создаёт ложную периодичность на фикстуре `unstable_club_simulation`. Задача остаётся открытой для Phase 4.2.
+
+## Параболическая интерполяция пика автокорреляции (Phase 6)
+
+Автокорреляция вычисляется на дискретной сетке целых лагов. Пик `argmax` берётся по целому лагу `k`. Для темпов, истинный лаг которых не попадает ровно на целое число (почти все значения кроме 120/130/150 BPM и т.п.), смещение `argmax` на соседний лаг при шумовом флипе даёт ступенчатый прыжок BPM.
+
+**Величина прыжка** при hop\_sec = 0.0025 с и темпе T:
+```
+Δ ≈ T² · hop_sec / 60
+```
+При 180 BPM: Δ ≈ 1.35 BPM/лаг. При 220 BPM: Δ ≈ 2.02 BPM/лаг.
+
+**Параболическая коррекция** (функция `tempo_autocorrelation()` в `core/dsp/src/lib.rs`) уточняет позицию пика по формуле трёхточечной параболы через соседние значения:
+
+```
+k_frac = k + (A[k+1] - A[k-1]) / (2 · (2·A[k] - A[k-1] - A[k+1]))
+bpm    = 60 / (k_frac · hop_sec)
+```
+
+Где `A[k]` — значение нормализованной автокорреляции в лаге `k`.
+
+**Граничные случаи** (все обрабатываются с fallback к целому лагу):
+- `|2·A[k] - A[k-1] - A[k+1]| < 1e-6` — плоская вершина, делить нет смысла.
+- `k_frac ≤ 0` — дробный лаг стал нулевым или отрицательным.
+- `bpm(k_frac)` выходит за пределы `[broad_bpm_min, broad_bpm_max]`.
+
+**Достигнутая точность:** на чистых синтетических фикстурах ошибка после интерполяции < 0.2 BPM (было: до 2.0 BPM при флипе лага). Тест `parabolic_precision_200_bpm` в `core/dsp/tests/stability.rs` проверяет допуск ±0.2 BPM.
+
+## BPM candidate history в DspEngine (Phase 6)
+
+После параболической интерполяции остаточный джиттер (~±0.15 BPM) может накапливаться в кадрах STABLE. `DspEngine` хранит скользящий буфер последних `BPM_HISTORY_N = 3` значений `primary_bpm` в состоянии STABLE и заменяет мгновенное значение медианой буфера перед отправкой в `DspResult`.
+
+Медиана выбрана вместо среднего: устойчива к одиночным выбросам при флипе лага. При любом не-STABLE кадре буфер очищается, чтобы новый захват начинался с нуля.
+
+Буфер `bpm_history` живёт в `DspEngine` и **не** пересекает FFI-границу. Batch-путь (`analyze_pcm`) не использует `DspEngine`, поэтому история кандидатов не влияет на `parity.py`.
+
+## Pipeline после Phase 6
+
+```
+Rust DSP (interpolated peak + N=3 median history)
+  ↓ DspResult.primary_bpm (точнее ~±0.15 BPM)
+BpmSmoother (Dart: median N=5 + EMA confidence + hysteresis)
+  ↓ smoothed DspResult
+BpmDisplay (Dart: EMA α=0.2, snap on STABLE entry)
+  ↓ displayBpm: double?
+MainScreen — большое BPM-число
+```
+
+`BpmDisplay` (`apps/mobile/lib/capture/bpm_display.dart`) — чистый Dart-класс (не виджет), активен только в STABLE. При первом STABLE-кадре снэпает к значению без EMA-задержки, чтобы пользователь видел правильное BPM немедленно при захвате.
+
+**Поведение в non-STABLE:** большое BPM-число показывает `—`. Это изменение по сравнению с Phase 3–5, где число отображалось и в LOCKING.
+
+## Расширение диапазона детекции 155–230 BPM (Phase 8.2)
+
+### Изменение
+
+Предпочитаемый (hitech) диапазон снижен с 170–230 до **155–230 BPM** — ранний
+hitech / dark-psy начинается от ~155 BPM, и старый минимум 170 недо-ранжировал
+субжанр 155–169. Изменены только дефолты:
+
+- `DspConfig::target_bpm_min` (Rust, `core/dsp/src/lib.rs`): `170.0 → 155.0`.
+- `analyze_pcm(..., hitech_min_bpm=...)` (Python-референс, `core/dsp/tempo.py`):
+  `170.0 → 155.0`.
+
+**НЕ менялись:** широкий поисковый диапазон (`broad_bpm` 80–460), границы
+нормализации (`<130 → ×2`, `>260 → ÷2`), `target_bpm_max` (230).
+
+### Почему изменение безопасно
+
+`range_score()` уже параметризован на `target_bpm_min`, а автокорреляция всегда
+искала в широком диапазоне 80–460. Поэтому:
+
+- Детекция **≥170 BPM байт-идентична** до и после (range_score в [170,230]
+  остаётся 1.0); существующие тесты 170–230 не затронуты.
+- Для 155–169 BPM `range_score` поднимается с рампы 0.45–1.0 до 1.0 → выше
+  уверенность. Детектор **уже** находил 155–169 (поиск в 80–460), просто
+  ранжировал ниже; теперь они предпочитаются.
+- **155–169 не удваиваются**: правило `<130 → ×2` не трогает значения ≥130.
+  Проверено: 155 → 154.8 (не ~310), 160 → 160.0.
+
+### Регрессионное покрытие
+
+- `core/dsp/tests/range_coverage.rs` — потоковая матрица 155, 160…230 (шаг 5,
+  16 точек): первый захват ≤6 с, STABLE ≤12 с, последние 20 STABLE-кадров ±1 BPM.
+- `bpm_155_is_detected_not_doubled` — 155 BPM финализируется в [153,157], не ~310.
+- `test_extended_range_low_end_locks_in_band_without_doubling` (Python,
+  `core/tests/test_offline_dsp_contract.py`) — 155/160/165 лочатся ±1.5 BPM.
+
+Double-time-нормализация (>260 → ÷2) не затронута расширением (граница 260 не
+менялась) и покрыта существующим `double_time_trap_400 → 200`.

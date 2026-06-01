@@ -17,6 +17,7 @@ class WorkerInit {
     required this.libraryPath,
     required this.captureSampleRate,
     required this.pollIntervalMs,
+    this.minBpm,
   });
 
   /// Куда воркер должен слать снапшоты `DspResultMessage` и события
@@ -25,6 +26,9 @@ class WorkerInit {
   final String? libraryPath;
   final int captureSampleRate;
   final int pollIntervalMs;
+  /// Минимальный BPM для hitech-диапазона (Free: 170, Pro: 155).
+  /// Если null, используется дефолт Rust (155).
+  final double? minBpm;
 }
 
 /// Main → worker: принять сырой кусок PCM-байтов. Формат сэмплов

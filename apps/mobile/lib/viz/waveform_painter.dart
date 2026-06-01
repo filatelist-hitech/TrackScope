@@ -1,69 +1,93 @@
-// WaveformPainter — amplitude vs time, synchronised with spectrogram time axis.
+// WaveformColumnPainter — Traktor DJ–style bar waveform.
 //
-// Receives the 300-point downsampled PCM slice from VizController.waveCache
-// and draws a centred waveform path. Colour is teal (#00BFA5) normally,
-// red (#F44336) when signal_quality.clipping == true.
+// Each column is a sharp rectangle whose height encodes amplitude and whose
+// colour encodes bass energy (dark teal → bright accent).  No smoothing,
+// no rounded corners, no dashed cursor line.
 //
-// RepaintBoundary in the parent ensures repaints are triggered only by new
-// data, not by table/badge rebuilds.
+// Receives VizController.waveColumns — a ring of WaveformColumn snapshots
+// updated every FFT hop (~50 ms).
+//
+// Performance:
+//   • One drawRect per visible column — no Path, no MaskFilter.
+//   • shouldRepaint uses List identity — skips repaint when data unchanged.
+//   • RepaintBoundary is set by the parent _WaveformView widget.
 
 import 'package:flutter/material.dart';
 
-class WaveformPainter extends CustomPainter {
-  const WaveformPainter({
-    required this.samples,
-    required this.isClipping,
-  });
+import 'waveform_column.dart';
 
-  final List<double> samples;
-  final bool isClipping;
+const double _kColW = 3.0;
+const double _kColGap = 0.5;
+const double _kColStep = _kColW + _kColGap;
 
-  static const _kAccent = Color(0xFF00BFA5);
-  static const _kClip = Color(0xFFF44336);
-  static const _kZeroLine = Color(0x22FFFFFF);
-  static const _kBg = Color(0xFF0A0A0F);
+// Dark teal for quiet / high-frequency columns.
+const Color _kColDark = Color(0xFF003D35);
+
+// Accent cyan for kick / bass-heavy columns.
+const Color _kColAccent = Color(0xFF00E5CC);
+
+// Corner label colour — same semi-transparent white as the old oscilloscope.
+const Color _kCornerLabel = Color(0x44FFFFFF);
+
+class WaveformColumnPainter extends CustomPainter {
+  const WaveformColumnPainter({required this.columns});
+
+  final List<WaveformColumn> columns;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final centerY = h / 2;
+
+    // Background.
     canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = _kBg,
+      Rect.fromLTWH(0, 0, w, h),
+      Paint()..color = const Color(0xFF07070F),
     );
 
-    // Zero-line
-    final midY = size.height / 2;
-    canvas.drawLine(
-      Offset(0, midY),
-      Offset(size.width, midY),
-      Paint()
-        ..color = _kZeroLine
-        ..strokeWidth = 0.5,
-    );
+    if (columns.isEmpty) return;
 
-    if (samples.isEmpty) return;
+    // How many columns fit across the panel.
+    final maxVisible = (w / _kColStep).floor().clamp(1, columns.length);
+    final startIdx = columns.length - maxVisible;
 
-    final waveColor = isClipping ? _kClip : _kAccent;
-    final paint = Paint()
-      ..color = waveColor
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+    final paint = Paint()..style = PaintingStyle.fill;
 
-    final stepX = size.width / (samples.length - 1).clamp(1, 9999);
-    final path = Path();
-    for (var i = 0; i < samples.length; i++) {
-      final x = i * stepX;
-      final y = midY - samples[i].clamp(-1.0, 1.0) * (midY * 0.9);
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
+    for (var i = 0; i < maxVisible; i++) {
+      final col = columns[startIdx + i];
+      final x = i * _kColStep + _kColW / 2;
+
+      // Colour: lerp dark→accent by bass × amplitude.
+      final brightness = (col.bassWeight * col.amplitude).clamp(0.0, 1.0);
+      paint.color = Color.lerp(_kColDark, _kColAccent, brightness)!;
+
+      final barH = (col.amplitude * h).clamp(1.0, h);
+      canvas.drawRect(
+        Rect.fromCenter(center: Offset(x, centerY), width: _kColW, height: barH),
+        paint,
+      );
     }
-    canvas.drawPath(path, paint);
+
+    // "WAVEFORM" corner label.
+    final tp = TextPainter(
+      text: const TextSpan(
+        text: 'WAVEFORM',
+        style: TextStyle(
+          fontSize: 8,
+          fontFamily: 'monospace',
+          color: _kCornerLabel,
+          letterSpacing: 1.5,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, const Offset(4, 4));
   }
 
   @override
-  bool shouldRepaint(WaveformPainter old) =>
-      !identical(samples, old.samples) || isClipping != old.isClipping;
+  bool shouldRepaint(WaveformColumnPainter old) {
+    if (columns.length != old.columns.length) return true;
+    return !identical(columns, old.columns);
+  }
 }

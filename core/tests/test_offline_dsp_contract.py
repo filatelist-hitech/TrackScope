@@ -27,6 +27,32 @@ class OfflineDspContractTests(unittest.TestCase):
                 self.assertGreaterEqual(result["confidence"], 0.75)
                 self._assert_required_candidates(result, fixture)
 
+    def test_extended_range_low_end_locks_in_band_without_doubling(self) -> None:
+        # Phase 8.2: hitech_min_bpm снижен 170 → 155. Чистые импульсы 155–169 BPM
+        # обязаны лочиться в полосе ±1.5 BPM и НЕ удваиваться в 310–338 BPM.
+        from core.dsp import analyze_pcm
+        from core.dsp.synthetic import DEFAULT_SAMPLE_RATE, generate_pulse_track
+
+        for target in (155.0, 160.0, 165.0):
+            with self.subTest(bpm=target):
+                samples = generate_pulse_track(bpm=target, duration_sec=14.0)
+                result = analyze_pcm(samples, DEFAULT_SAMPLE_RATE)
+                self.assertIsNotNone(
+                    result.primary_bpm, f"{target} BPM clean pulse must lock"
+                )
+                self.assertEqual(
+                    result.lock_state, "STABLE", f"{target} BPM must reach STABLE"
+                )
+                self.assertLessEqual(
+                    abs(float(result.primary_bpm) - target),
+                    1.5,
+                    f"{target} BPM detected at {result.primary_bpm} (expected ±1.5)",
+                )
+                self.assertFalse(
+                    308.0 <= float(result.primary_bpm) <= 338.0,
+                    f"{target} BPM must not double into 310–338 range",
+                )
+
     def test_half_time_trap_preserves_100_and_200_candidates_and_prefers_200(self) -> None:
         fixture, result = self._analyze_fixture("half_time_trap_100")
         self._assert_contract_shape(result)
