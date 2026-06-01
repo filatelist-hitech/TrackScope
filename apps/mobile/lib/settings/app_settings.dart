@@ -17,6 +17,17 @@ extension BpmSmoothingLabel on BpmSmoothing {
       case BpmSmoothing.heavy:    return 'Сильное';
     }
   }
+
+  /// Median-window size passed to BpmSmoother.
+  /// none=1 (pass-through), light=3, moderate=5, heavy=9.
+  int get windowSize {
+    switch (this) {
+      case BpmSmoothing.none:     return 1;
+      case BpmSmoothing.light:    return 3;
+      case BpmSmoothing.moderate: return 5;
+      case BpmSmoothing.heavy:    return 9;
+    }
+  }
 }
 
 class AppSettings extends ChangeNotifier {

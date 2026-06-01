@@ -11,9 +11,12 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show VoidCallback;
+
 import 'dart:io' show Platform;
 
 import '../dsp/dsp_result.dart';
+import '../settings/app_settings.dart';
 import 'bpm_smoother.dart';
 import 'capture_error.dart';
 import 'capture_messages.dart';
@@ -54,7 +57,11 @@ class CaptureBridge {
   // Сглаживающий слой: медианный фильтр BPM + EMA уверенности +
   // гистерезис выхода из STABLE. Находится здесь, а не в воркере,
   // чтобы сохранялась parity-тестируемость Rust DSP без UI-биасов.
-  final BpmSmoother _smoother = BpmSmoother();
+  // windowSize синхронизируется с AppSettings.bpmSmoothing через listener.
+  final BpmSmoother _smoother = BpmSmoother(
+    bpmWindowSize: AppSettings.instance.bpmSmoothing.windowSize,
+  );
+  VoidCallback? _settingsListener;
 
   /// Broadcast-поток скользящих снапшотов `DspResult`. UI подписывается
   /// сюда; никаких других источников состояния не допускается.
@@ -84,6 +91,12 @@ class CaptureBridge {
     if (_worker == null) {
       await _spawnWorker(sampleRate: sampleRate);
     }
+
+    // Синхронизируем BpmSmoother с AppSettings при старте и при изменениях.
+    _syncSmootherFromSettings();
+    _settingsListener ??= () => _syncSmootherFromSettings();
+    AppSettings.instance.addListener(_settingsListener!);
+
     // Сбрасываем предыдущий источник, если был.
     await _pcmSub?.cancel();
     _pcmSub = pcmStream.listen(
@@ -115,6 +128,10 @@ class CaptureBridge {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    if (_settingsListener != null) {
+      AppSettings.instance.removeListener(_settingsListener!);
+      _settingsListener = null;
+    }
     await _pcmSub?.cancel();
     _pcmSub = null;
     _workerInbox?.send(const StopWorker());
@@ -129,6 +146,13 @@ class CaptureBridge {
     await _resultsCtrl.close();
     await _errorsCtrl.close();
     await _rawPcmCtrl.close();
+  }
+
+  /// Reads AppSettings.bpmSmoothing and applies the corresponding window size
+  /// to the BpmSmoother. Safe to call from the main isolate at any time.
+  void _syncSmootherFromSettings() {
+    _smoother.windowSize =
+        AppSettings.instance.bpmSmoothing.windowSize;
   }
 
   Future<void> _spawnWorker({required int sampleRate}) async {
