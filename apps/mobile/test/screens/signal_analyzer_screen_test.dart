@@ -1,7 +1,8 @@
-// Tests for SignalAnalyzerScreen — Design System v2.
+// Tests for SignalAnalyzerScreen — Design System v2 (redesign).
 //
-// Verifies: smoke render with mock data, no errors.
-// Note: Pro-gate test is in widget_test.dart (via MainScreen flow).
+// Verifies: new layout matching HTML prototype —
+//   uppercase title, PRO badge, top-4 candidates, metric bars, sa-grp cards.
+// Pro-gate test is in widget_test.dart (via MainScreen flow).
 
 import 'dart:async';
 
@@ -54,16 +55,16 @@ void main() {
         ),
         debug: DspDebug(
           onsetRateHz: 3.25,
-          onsetStrength: 0.0312,
-          tempoPeakProminence: 0.4820,
+          onsetStrength: 0.72,
+          tempoPeakProminence: 0.68,
           harmonicAmbiguity: 0.08,
           stabilityScore: 0.85,
-          warnings: [],
+          warnings: ['harmonic_ambiguity=0.08'],
         ),
       );
 
   group('SignalAnalyzerScreen', () {
-    testWidgets('smoke renders without exceptions with mock data', (tester) async {
+    testWidgets('waiting placeholder shown before first snapshot', (tester) async {
       final ctrl = StreamController<DspResult>.broadcast();
       addTearDown(ctrl.close);
 
@@ -72,11 +73,25 @@ void main() {
       ));
       await tester.pump();
 
-      // Waiting placeholder
       expect(find.text('Ожидание первого снапшота DspResult…'), findsOneWidget);
     });
 
-    testWidgets('shows candidates section after result emitted', (tester) async {
+    testWidgets('AppBar title is SIGNAL ANALYZER uppercase with PRO badge', (tester) async {
+      final ctrl = StreamController<DspResult>.broadcast();
+      addTearDown(ctrl.close);
+
+      await tester.pumpWidget(MaterialApp(
+        home: SignalAnalyzerScreen(results: ctrl.stream),
+      ));
+      await tester.pump();
+
+      expect(find.text('SIGNAL ANALYZER'), findsOneWidget);
+      expect(find.text('PRO'), findsOneWidget);
+      // Old title must NOT appear.
+      expect(find.text('Signal Analyzer'), findsNothing);
+    });
+
+    testWidgets('shows BPM КАНДИДАТЫ section header after result', (tester) async {
       final ctrl = StreamController<DspResult>.broadcast();
       addTearDown(ctrl.close);
 
@@ -86,11 +101,28 @@ void main() {
       ctrl.add(makeResult());
       await tester.pump();
 
-      expect(find.textContaining('BPM-кандидаты'), findsOneWidget);
+      expect(find.text('BPM КАНДИДАТЫ'), findsOneWidget);
+    });
+
+    testWidgets('candidate BPM shown, relation label NOT shown', (tester) async {
+      final ctrl = StreamController<DspResult>.broadcast();
+      addTearDown(ctrl.close);
+
+      await tester.pumpWidget(MaterialApp(
+        home: SignalAnalyzerScreen(results: ctrl.stream),
+      ));
+      ctrl.add(makeResult());
+      await tester.pump();
+
+      // BPM values visible.
       expect(find.textContaining('195.0'), findsAtLeast(1));
+      expect(find.textContaining('97.5'), findsOneWidget);
+      // Relation labels must NOT appear (removed from redesign).
+      expect(find.text('main'), findsNothing);
+      expect(find.text('half_time'), findsNothing);
     });
 
-    testWidgets('shows signal quality section', (tester) async {
+    testWidgets('algorithm metrics shows section header and bar labels', (tester) async {
       final ctrl = StreamController<DspResult>.broadcast();
       addTearDown(ctrl.close);
 
@@ -100,10 +132,16 @@ void main() {
       ctrl.add(makeResult());
       await tester.pump();
 
-      expect(find.textContaining('Качество сигнала'), findsOneWidget);
+      expect(find.text('МЕТРИКИ АЛГОРИТМА'), findsOneWidget);
+      expect(find.text('Onset Detection'), findsOneWidget);
+      expect(find.text('Autocorrelation'), findsOneWidget);
+      expect(find.text('Spectral Flux'), findsOneWidget);
+      // Old raw metric labels must not appear.
+      expect(find.text('Onset rate'), findsNothing);
+      expect(find.text('Peak prominence'), findsNothing);
     });
 
-    testWidgets('algorithm metrics shows real DspDebug values', (tester) async {
+    testWidgets('SNR and input level shown as text values', (tester) async {
       final ctrl = StreamController<DspResult>.broadcast();
       addTearDown(ctrl.close);
 
@@ -113,36 +151,47 @@ void main() {
       ctrl.add(makeResult());
       await tester.pump();
 
-      // Section header
-      expect(find.text('Метрики алгоритма'), findsOneWidget);
-      // Real values from DspDebug (not placeholder text)
-      expect(find.text('Onset rate'), findsOneWidget);
-      expect(find.text('Peak prominence'), findsOneWidget);
-      expect(find.textContaining('В разработке'), findsNothing);
+      expect(find.text('SNR'), findsOneWidget);
+      expect(find.text('22.0 dB'), findsOneWidget);
+      expect(find.text('Уровень входа'), findsOneWidget);
+      expect(find.text('-12.0 dBFS'), findsOneWidget);
     });
 
-    testWidgets('back button is available (AppBar has back icon)', (tester) async {
+    testWidgets('warnings are rendered with amber text', (tester) async {
       final ctrl = StreamController<DspResult>.broadcast();
       addTearDown(ctrl.close);
 
       await tester.pumpWidget(MaterialApp(
-        home: Navigator(
-          onGenerateRoute: (_) => MaterialPageRoute(
-            builder: (_) => Scaffold(
-              body: ElevatedButton(
-                onPressed: () {},
-                child: const Text('open'),
-              ),
-            ),
-          ),
-        ),
+        home: SignalAnalyzerScreen(results: ctrl.stream),
       ));
-      // Screen has appBar with back — just check it renders without crash
+      ctrl.add(makeResult());
+      await tester.pump();
+
+      expect(find.textContaining('harmonic_ambiguity'), findsOneWidget);
+    });
+
+    testWidgets('signal quality section is present', (tester) async {
+      final ctrl = StreamController<DspResult>.broadcast();
+      addTearDown(ctrl.close);
+
+      await tester.pumpWidget(MaterialApp(
+        home: SignalAnalyzerScreen(results: ctrl.stream),
+      ));
+      ctrl.add(makeResult());
+      await tester.pump();
+
+      expect(find.text('КАЧЕСТВО СИГНАЛА'), findsOneWidget);
+      expect(find.text('нет'), findsAtLeast(1)); // clipping == false
+    });
+
+    testWidgets('AppBar back button renders', (tester) async {
+      final ctrl = StreamController<DspResult>.broadcast();
+      addTearDown(ctrl.close);
+
       await tester.pumpWidget(MaterialApp(
         home: SignalAnalyzerScreen(results: ctrl.stream),
       ));
       expect(find.byType(AppBar), findsOneWidget);
-      expect(find.text('Signal Analyzer'), findsOneWidget);
     });
   });
 }
