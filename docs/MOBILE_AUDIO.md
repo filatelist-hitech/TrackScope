@@ -304,3 +304,70 @@ norm = (db − floorDb) / (−floorDb)           ∈ [0, 1]
 Оба `CustomPainter` подписаны на `VizController` через `ListenableBuilder`. `shouldRepaint` выполняет проверку идентичности списка (`!identical(norms, old.norms)`) — повторная отрисовка пропускается, если указатель не изменился.
 
 `RepaintBoundary` обёрнут вокруг каждого `CustomPaint`-виджета и вокруг glassmorphism-карточки, чтобы update одного не вызывал layout/paint другого.
+
+---
+
+## iOS Simulator — поддержка (Phase 9)
+
+### Проблема (до fix)
+
+`flutter build ios --simulator` падал с ошибкой:
+```
+Error: Building for 'iOS-simulator', but linking in object file built for 'iOS'
+```
+
+**Причина:** `libhitech_bpm_ffi.a` компилировалась только под `aarch64-apple-ios` (device). Симулятор требует `aarch64-apple-ios-sim` (другой Mach-O platform tag при одинаковой архитектуре arm64).
+
+### Решение: платформенные библиотеки + `$(PLATFORM_NAME)`
+
+`scripts/build_ios_native.sh` теперь собирает оба таргета:
+
+| Таргет Rust | Файл | Используется при |
+|---|---|---|
+| `aarch64-apple-ios` | `Frameworks/iphoneos/libhitech_bpm_ffi.a` | `flutter build ios`, `flutter run` на устройстве |
+| `aarch64-apple-ios-sim` | `Frameworks/iphonesimulator/libhitech_bpm_ffi.a` | `flutter build ios --simulator` |
+
+`project.pbxproj` использует Xcode-переменную `$(PLATFORM_NAME)` (автоматически `iphoneos` или `iphonesimulator`):
+```
+OTHER_LDFLAGS = "-force_load $(PROJECT_DIR)/Frameworks/$(PLATFORM_NAME)/libhitech_bpm_ffi.a"
+LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/Frameworks/$(PLATFORM_NAME)"
+```
+
+**ВАЖНО для сборки:** используй `rustup`-managed rustc, НЕ Homebrew Rust. Homebrew Rust не имеет sysroot для `aarch64-apple-ios-sim`. `build_ios_native.sh` автоматически находит rustup через `rustup which --toolchain stable rustc`.
+
+### Команды
+
+```sh
+# 1. Собрать обе библиотеки
+bash scripts/build_ios_native.sh
+
+# 2. Симулятор (без подписи, только разработка)
+cd apps/mobile
+flutter build ios --simulator --no-codesign
+
+# 3. Симулятор PRO (local override, без RevenueeCat ключей)
+flutter build ios --simulator --no-codesign --dart-define=FORCE_PRO=true
+
+# 4. Запустить на iPhone 13 Pro симуляторе
+xcrun simctl boot C3616C95-3F7B-42BD-83B0-207C7B5CCCE2
+flutter run -d C3616C95-3F7B-42BD-83B0-207C7B5CCCE2
+
+# 5. Реальное устройство (нужна подпись)
+bash scripts/build_ios_native.sh
+flutter run --release
+```
+
+### PRO build (`--dart-define=FORCE_PRO=true`)
+
+Для локального тестирования PRO-функций без RevenueCat IAP. Активирует:
+- Диапазон детекции 155–230 BPM (вместо 170–230 BPM в Free)
+- Signal Analyzer Screen
+- History (24 часа вместо 30 секунд)
+- Export CSV/JSON
+
+Для production с реальным IAP:
+```sh
+flutter build ios --release \
+  --dart-define=REVENUECAT_IOS_KEY=your_ios_key \
+  --dart-define=REVENUECAT_ANDROID_KEY=your_android_key
+```
