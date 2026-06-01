@@ -176,7 +176,7 @@ void main() {
   });
 
   testWidgets(
-      'MainScreen renders primary_bpm and стабильно badge from STABLE snapshot',
+      'MainScreen renders primary_bpm and ACTIVE chip from STABLE snapshot',
       (tester) async {
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
@@ -194,9 +194,9 @@ void main() {
 
     // BPM displayed.
     expect(find.text('200.0'), findsOneWidget);
-    // Russian label for STABLE state.
-    expect(find.text('стабильно'), findsOneWidget);
-    // Confidence shown in both ConfidenceBar and УВЕРЕННОСТЬ cell (Design v2).
+    // Design v2: STABLE shows ACTIVE chip (not "стабильно" badge).
+    expect(find.text('ACTIVE'), findsOneWidget);
+    // Confidence bar shows percentage.
     expect(find.textContaining('87%'), findsAtLeast(1));
   });
 
