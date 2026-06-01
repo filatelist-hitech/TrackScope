@@ -16,10 +16,20 @@
 #        rustup target add armv7-linux-androideabi
 #        rustup target add x86_64-linux-android
 #   4. Переменная ANDROID_NDK_HOME указывает на директорию NDK, например:
-#        export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.2.12479018"
+#        export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/28.2.13676358"
+#      ВАЖНО: путь должен указывать на директорию с source.properties,
+#      НЕ на вложенную android-ndk-r28c/ папку внутри неё.
 #      Если переменная не задана, скрипт ищет последнюю версию NDK автоматически.
+#   5. JAVA_HOME должен указывать на JDK 17+, например Android Studio bundled JDK:
+#        export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 set -euo pipefail
+
+if [[ "$(id -u)" == "0" ]]; then
+  echo "ОШИБКА: не запускай этот скрипт через sudo/root."
+  echo "       Иначе Cargo создаст root-owned артефакты в target, и обычная сборка потом получит Permission denied."
+  exit 1
+fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILE="${1:-release}"
@@ -82,6 +92,29 @@ if [[ -z "$RUSTUP" ]]; then
 fi
 echo "==> rustup: $RUSTUP"
 
+RUST_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
+CARGO_BIN="$("$RUSTUP" which --toolchain "$RUST_TOOLCHAIN" cargo)"
+RUSTC_BIN="$("$RUSTUP" which --toolchain "$RUST_TOOLCHAIN" rustc)"
+CARGO_CMD=("$CARGO_BIN")
+RUSTC_CMD=("$RUSTC_BIN")
+echo "==> Rust toolchain: $RUST_TOOLCHAIN"
+echo "==> cargo: $("${CARGO_CMD[@]}" --version)"
+echo "==> rustc: $RUSTC_BIN"
+
+# Скрипт ниже копирует .so из repo-local target, поэтому не даём глобальному
+# ~/.cargo/config.toml перенаправить build.target-dir за пределы репозитория.
+export CARGO_TARGET_DIR="$REPO_ROOT/target/android-native"
+export RUSTC="$RUSTC_BIN"
+echo "==> Cargo target dir: $CARGO_TARGET_DIR"
+
+if [[ -e "$CARGO_TARGET_DIR" && ! -w "$CARGO_TARGET_DIR" ]]; then
+  echo "ОШИБКА: Cargo target dir существует, но недоступен для записи: $CARGO_TARGET_DIR"
+  echo "       Обычно это значит, что предыдущая сборка запускалась через sudo."
+  echo "       Починка: sudo rm -rf \"$CARGO_TARGET_DIR\""
+  exit 1
+fi
+mkdir -p "$CARGO_TARGET_DIR"
+
 # ─── Проверить и установить таргеты ─────────────────────────────────────────
 TARGETS=(
   "aarch64-linux-android"
@@ -90,9 +123,15 @@ TARGETS=(
 )
 
 for target in "${TARGETS[@]}"; do
-  if ! "$RUSTUP" target list --installed 2>/dev/null | grep -q "^${target}$"; then
+  if ! "$RUSTUP" target list --toolchain "$RUST_TOOLCHAIN" --installed 2>/dev/null | grep -q "^${target}$"; then
     echo "==> Добавляю Rust таргет $target..."
-    "$RUSTUP" target add "$target"
+    "$RUSTUP" target add --toolchain "$RUST_TOOLCHAIN" "$target"
+  fi
+
+  if ! "${RUSTC_CMD[@]}" --print target-libdir --target "$target" >/dev/null 2>&1; then
+    echo "ОШИБКА: rustc из toolchain '$RUST_TOOLCHAIN' не видит стандартную библиотеку для $target."
+    echo "       Проверь установку: $RUSTUP target add --toolchain $RUST_TOOLCHAIN $target"
+    exit 1
   fi
 done
 
@@ -130,12 +169,12 @@ for entry in "${ABI_TABLE[@]}"; do
 
   if [[ "$PROFILE" == "release" ]]; then
     env "$LINKER_VAR=$LINKER" \
-      cargo build --release --target "$rust_target" -p hitech-bpm-ffi
-    SO_SRC="$REPO_ROOT/target/$rust_target/release/libhitech_bpm_ffi.so"
+      "${CARGO_CMD[@]}" build --release --target "$rust_target" -p hitech-bpm-ffi
+    SO_SRC="$CARGO_TARGET_DIR/$rust_target/release/libhitech_bpm_ffi.so"
   else
     env "$LINKER_VAR=$LINKER" \
-      cargo build --target "$rust_target" -p hitech-bpm-ffi
-    SO_SRC="$REPO_ROOT/target/$rust_target/debug/libhitech_bpm_ffi.so"
+      "${CARGO_CMD[@]}" build --target "$rust_target" -p hitech-bpm-ffi
+    SO_SRC="$CARGO_TARGET_DIR/$rust_target/debug/libhitech_bpm_ffi.so"
   fi
 
   if [[ ! -f "$SO_SRC" ]]; then
