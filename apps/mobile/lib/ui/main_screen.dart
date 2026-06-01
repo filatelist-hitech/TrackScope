@@ -31,6 +31,7 @@ import '../viz/live_spectrum_painter.dart';
 import '../viz/viz_controller.dart';
 import '../viz/waveform_painter.dart' show WaveformColumnPainter;
 import '../widgets/confidence_bar.dart';
+import '../widgets/listening_indicator.dart';
 import 'design_tokens.dart';
 
 // ── MainScreen ────────────────────────────────────────────────────────────────
@@ -132,10 +133,18 @@ class _MainScreenState extends State<MainScreen> {
             final displayBpm = result != null ? _bpmDisplay.update(result) : null;
             final isLockingDisplay = _bpmDisplay.isLockingDisplay;
 
+            final isCapturing = _lastResult != null;
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (_lastError != null) _ErrorBanner(error: _lastError!),
+
+                // ── Zone label: WAVEFORM + слушаю indicator ───────────────
+                _ZoneLabelRow(
+                  label: 'WAVEFORM',
+                  trailing: isCapturing ? const ListeningIndicator() : null,
+                ),
 
                 // ── Waveform — fixed 120 px ───────────────────────────────
                 SizedBox(
@@ -144,6 +153,9 @@ class _MainScreenState extends State<MainScreen> {
                     child: _WaveformView(viz: _viz),
                   ),
                 ),
+
+                // ── Zone label: LIVE SPECTRUM ─────────────────────────────
+                const _ZoneLabelRow(label: 'LIVE SPECTRUM'),
 
                 // ── Live spectrum ─────────────────────────────────────────
                 Expanded(
@@ -171,6 +183,38 @@ class _MainScreenState extends State<MainScreen> {
           },
         ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Zone label row (WAVEFORM / LIVE SPECTRUM) ─────────────────────────────────
+// Matches prototype .zlbl — dim label left, optional trailing widget right.
+// Bright contrast (#3a6858) to meet CR ≥ 3:1 target from the redesign audit.
+
+class _ZoneLabelRow extends StatelessWidget {
+  const _ZoneLabelRow({required this.label, this.trailing});
+  final String label;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 6, 2, 2),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: AppTextStyles.mono(
+              7, FontWeight.w400, AppColors.textSecondary,
+              letterSpacing: 0.18 * 7,
+            ),
+          ),
+          if (trailing != null) ...[
+            const Spacer(),
+            trailing!,
+          ],
+        ],
       ),
     );
   }

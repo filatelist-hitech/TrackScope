@@ -71,7 +71,7 @@ class LiveSpectrumPainter extends CustomPainter {
     fontFamily: 'monospace',
     color: Color(0x55FFFFFF),
   );
-  static const _kCornerLabel = Color(0x44FFFFFF);
+
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -208,20 +208,8 @@ class LiveSpectrumPainter extends CustomPainter {
       tp.paint(canvas, Offset(lx, drawH + 2));
     }
 
-    // ── "LIVE SPECTRUM" label (top-left) ──────────────────────────────────────
-    final cornerTp = TextPainter(
-      text: const TextSpan(
-        text: 'LIVE SPECTRUM',
-        style: TextStyle(
-          fontSize: 8,
-          fontFamily: 'monospace',
-          color: _kCornerLabel,
-          letterSpacing: 1.5,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    cornerTp.paint(canvas, const Offset(4, 4));
+    // Zone label is now rendered as a Flutter widget (_ZoneLabelRow) above
+    // this panel in main_screen.dart — do not duplicate it on the canvas.
   }
 
   @override

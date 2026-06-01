@@ -26,8 +26,7 @@ const Color _kColDark = Color(0xFF003D35);
 // Accent cyan for kick / bass-heavy columns.
 const Color _kColAccent = Color(0xFF00E5CC);
 
-// Corner label colour — same semi-transparent white as the old oscilloscope.
-const Color _kCornerLabel = Color(0x44FFFFFF);
+
 
 class WaveformColumnPainter extends CustomPainter {
   const WaveformColumnPainter({required this.columns});
@@ -69,20 +68,8 @@ class WaveformColumnPainter extends CustomPainter {
       );
     }
 
-    // "WAVEFORM" corner label.
-    final tp = TextPainter(
-      text: const TextSpan(
-        text: 'WAVEFORM',
-        style: TextStyle(
-          fontSize: 8,
-          fontFamily: 'monospace',
-          color: _kCornerLabel,
-          letterSpacing: 1.5,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, const Offset(4, 4));
+    // Zone label is now rendered as a Flutter widget (_ZoneLabelRow) above
+    // this panel in main_screen.dart — do not duplicate it on the canvas.
   }
 
   @override
