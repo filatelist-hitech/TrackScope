@@ -22,6 +22,12 @@
 
 set -euo pipefail
 
+if [[ "$(id -u)" == "0" ]]; then
+  echo "ОШИБКА: не запускай этот скрипт через sudo/root."
+  echo "       Иначе Cargo создаст root-owned артефакты в target, и обычная сборка потом получит Permission denied."
+  exit 1
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILE="${1:-release}"
 TARGET="aarch64-apple-ios"
@@ -52,37 +58,51 @@ if [[ -z "$RUSTUP" ]]; then
 fi
 echo "==> rustup: $RUSTUP"
 
-# --- Добавить iOS таргет если не установлен ---
-if ! "$RUSTUP" target list --installed 2>/dev/null | grep -q "$TARGET"; then
-  echo "==> Добавляю Rust таргет $TARGET..."
-  "$RUSTUP" target add "$TARGET"
-fi
+RUST_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
+CARGO_BIN="$("$RUSTUP" which --toolchain "$RUST_TOOLCHAIN" cargo)"
+RUSTC_BIN="$("$RUSTUP" which --toolchain "$RUST_TOOLCHAIN" rustc)"
+CARGO_CMD=("$CARGO_BIN")
+RUSTC_CMD=("$RUSTC_BIN")
+echo "==> Rust toolchain: $RUST_TOOLCHAIN"
+echo "==> cargo: $("${CARGO_CMD[@]}" --version)"
+echo "==> rustc: $RUSTC_BIN"
 
-# --- Определить путь к тулчейну rustup ---
-# На Mac с Homebrew-Rust в PATH нужно явно ставить тулчейн-bin первым,
-# иначе cargo возьмёт Homebrew-rustc, у которого нет iOS-таргета.
-TOOLCHAIN_BIN="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin"
-if [[ ! -d "$TOOLCHAIN_BIN" ]]; then
-  echo "ОШИБКА: тулчейн stable-aarch64-apple-darwin не найден в ~/.rustup."
-  echo "Запусти: $RUSTUP toolchain install stable"
+# Держим cargo-артефакты внутри репозитория, чтобы глобальный
+# ~/.cargo/config.toml не уводил build.target-dir в домашний каталог.
+export CARGO_TARGET_DIR="$REPO_ROOT/target/ios-native"
+export RUSTC="$RUSTC_BIN"
+echo "==> Cargo target dir: $CARGO_TARGET_DIR"
+
+if [[ -e "$CARGO_TARGET_DIR" && ! -w "$CARGO_TARGET_DIR" ]]; then
+  echo "ОШИБКА: Cargo target dir существует, но недоступен для записи: $CARGO_TARGET_DIR"
+  echo "       Обычно это значит, что предыдущая сборка запускалась через sudo."
+  echo "       Починка: sudo rm -rf \"$CARGO_TARGET_DIR\""
   exit 1
 fi
-echo "==> toolchain bin: $TOOLCHAIN_BIN"
+mkdir -p "$CARGO_TARGET_DIR"
+
+# --- Добавить iOS таргет если не установлен ---
+if ! "$RUSTUP" target list --toolchain "$RUST_TOOLCHAIN" --installed 2>/dev/null | grep -q "^${TARGET}$"; then
+  echo "==> Добавляю Rust таргет $TARGET..."
+  "$RUSTUP" target add --toolchain "$RUST_TOOLCHAIN" "$TARGET"
+fi
+
+if ! "${RUSTC_CMD[@]}" --print target-libdir --target "$TARGET" >/dev/null 2>&1; then
+  echo "ОШИБКА: rustc из toolchain '$RUST_TOOLCHAIN' не видит стандартную библиотеку для $TARGET."
+  echo "       Проверь установку: $RUSTUP target add --toolchain $RUST_TOOLCHAIN $TARGET"
+  exit 1
+fi
 
 # --- Собрать ---
 echo "==> Компилирую core/ffi для $TARGET ($PROFILE)..."
 cd "$REPO_ROOT"
 
-BUILD_ENV="PATH=$TOOLCHAIN_BIN:$PATH RUSTUP_TOOLCHAIN=stable"
-
 if [[ "$PROFILE" == "release" ]]; then
-  env PATH="$TOOLCHAIN_BIN:$PATH" RUSTUP_TOOLCHAIN=stable \
-    "$RUSTUP" run stable cargo build --release --target "$TARGET" -p hitech-bpm-ffi
-  SRC="$REPO_ROOT/target/$TARGET/release/$LIB_NAME"
+  "${CARGO_CMD[@]}" build --release --target "$TARGET" -p hitech-bpm-ffi
+  SRC="$CARGO_TARGET_DIR/$TARGET/release/$LIB_NAME"
 else
-  env PATH="$TOOLCHAIN_BIN:$PATH" RUSTUP_TOOLCHAIN=stable \
-    "$RUSTUP" run stable cargo build --target "$TARGET" -p hitech-bpm-ffi
-  SRC="$REPO_ROOT/target/$TARGET/debug/$LIB_NAME"
+  "${CARGO_CMD[@]}" build --target "$TARGET" -p hitech-bpm-ffi
+  SRC="$CARGO_TARGET_DIR/$TARGET/debug/$LIB_NAME"
 fi
 
 # --- Скопировать в iOS-проект ---

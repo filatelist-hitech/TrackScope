@@ -97,9 +97,12 @@ Rust-крейт в `core/dsp/` — продакшен-источник исти�
 Требования: Android Studio с NDK 27.x, rustup.
 
 ```sh
-# 1. Задать путь к Android SDK
+# 1. Задать переменные окружения (добавить в ~/.zshrc)
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 export ANDROID_HOME="$HOME/Library/Android/sdk"
-export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$(ls $ANDROID_HOME/ndk | sort -V | tail -1)"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$(ls "$ANDROID_HOME/ndk" | sort -V | tail -1)"
+# Важно: ANDROID_NDK_HOME должен указывать на папку с source.properties,
+# не на вложенную android-ndk-r28c/
 
 # 2. Добавить Rust Android таргеты (однократно)
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
