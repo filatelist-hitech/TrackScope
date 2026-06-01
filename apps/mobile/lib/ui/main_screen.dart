@@ -397,6 +397,22 @@ class _InfoTableContent extends StatelessWidget {
         : bpm != null
             ? '${bpm.toStringAsFixed(1)} BPM'
             : '—';
+
+    // ×½ / ×2 candidates — half-time and double-time, never hidden.
+    final halfCand = r?.candidates
+        .where((c) => c.relation == 'half_time')
+        .firstOrNull;
+    final doubleCand = r?.candidates
+        .where((c) => c.relation == 'double_time')
+        .firstOrNull;
+    final halfText = halfCand != null
+        ? halfCand.bpm.toStringAsFixed(1)
+        : '—';
+    final doubleText = doubleCand != null
+        ? doubleCand.bpm.toStringAsFixed(1)
+        : '—';
+    final halfDoubleText = '$halfText / $doubleText';
+
     final clippingText = sq?.clipping == true ? '⚠ перегруз' : 'нет';
     final clippingColor = sq?.clipping == true ? AppTheme.danger : null;
     final noiseText = _noiseLabel(sq?.noiseLevel);
@@ -459,10 +475,23 @@ class _InfoTableContent extends StatelessWidget {
             const SizedBox(width: 18),
             Expanded(
               child: _StatCell(
+                label: '×½ / ×2',
+                value: halfDoubleText,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _StatCell(
                 label: 'Шум',
                 value: noiseText,
               ),
             ),
+            const SizedBox(width: 18),
+            const Expanded(child: SizedBox.shrink()),
           ],
         ),
         const SizedBox(height: 14),

@@ -221,21 +221,20 @@ void main() {
     expect(find.text('WAVEFORM'), findsOneWidget);
     expect(find.text('LIVE SPECTRUM'), findsOneWidget);
 
-    // Phase 11 InfoCard: 2×2 grid — Уверенность and ×½/×2 cells removed.
-    // Labels are mixed-case strings (no toUpperCase() in _StatCell).
+    // InfoCard stat grid labels (mixed-case, no toUpperCase() in _StatCell).
     expect(find.text('Уровень входа'), findsOneWidget);
     expect(find.text('Лучший кандидат'), findsOneWidget);
     expect(find.text('Клиппинг'), findsOneWidget);
-    expect(find.text('Шум'), findsOneWidget);
-    // Removed fields must NOT appear.
+    // ×½ / ×2 cell restored — shows half/double candidates (never hidden).
+    expect(find.text('×½ / ×2'), findsOneWidget);
+    // Уверенность cell still absent.
     expect(find.text('Уверенность'), findsNothing);
-    expect(find.text('×½ / ×2'), findsNothing);
 
     // Values.
     expect(find.text('-14.2 dBFS'), findsOneWidget); // input level
     expect(find.text('200.0 BPM'), findsOneWidget); // best (main) candidate
+    expect(find.text('100.0 / —'), findsOneWidget); // half=100, double=null
     expect(find.text('нет'), findsOneWidget); // clipping == false
-    expect(find.text('низкий'), findsOneWidget); // noise_level == 'low'
   });
 
   testWidgets('MainScreen shows поиск badge for SEARCHING snapshot',

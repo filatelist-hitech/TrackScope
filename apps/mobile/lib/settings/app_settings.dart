@@ -6,65 +6,85 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum BpmSmoothing { none, light, moderate, heavy }
+
+extension BpmSmoothingLabel on BpmSmoothing {
+  String get label {
+    switch (this) {
+      case BpmSmoothing.none:     return 'Нет';
+      case BpmSmoothing.light:    return 'Лёгкое';
+      case BpmSmoothing.moderate: return 'Умеренное';
+      case BpmSmoothing.heavy:    return 'Сильное';
+    }
+  }
+}
+
 class AppSettings extends ChangeNotifier {
   AppSettings._();
 
   static final instance = AppSettings._();
 
-  static const _kShowWaveform = 'showWaveform';
-  static const _kShowSpectrum = 'showSpectrum';
-  static const _kKeepScreenOn = 'keepScreenOn';
+  static const _kShowWaveform     = 'showWaveform';
+  static const _kShowSpectrum     = 'showSpectrum';
+  static const _kKeepScreenOn     = 'keepScreenOn';
   static const _kInputSensitivity = 'inputSensitivity';
+  static const _kBpmSmoothing     = 'bpmSmoothing';
 
-  bool showWaveform = true;
-  bool showSpectrum = true;
-  bool keepScreenOn = true;
-  double inputSensitivity = 0.0; // dB, range –6..+6
+  bool showWaveform    = true;
+  bool showSpectrum    = true;
+  bool keepScreenOn    = true;
+  double inputSensitivity = 0.0;          // dB, range –6..+6
+  BpmSmoothing bpmSmoothing = BpmSmoothing.moderate;
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    showWaveform = prefs.getBool(_kShowWaveform) ?? true;
-    showSpectrum = prefs.getBool(_kShowSpectrum) ?? true;
-    keepScreenOn = prefs.getBool(_kKeepScreenOn) ?? true;
-    inputSensitivity = prefs.getDouble(_kInputSensitivity) ?? 0.0;
+    showWaveform       = prefs.getBool(_kShowWaveform) ?? true;
+    showSpectrum       = prefs.getBool(_kShowSpectrum) ?? true;
+    keepScreenOn       = prefs.getBool(_kKeepScreenOn) ?? true;
+    inputSensitivity   = prefs.getDouble(_kInputSensitivity) ?? 0.0;
+    final si           = prefs.getInt(_kBpmSmoothing) ?? 2;
+    bpmSmoothing       = BpmSmoothing.values[si.clamp(0, BpmSmoothing.values.length - 1)];
     notifyListeners();
   }
 
   Future<void> setShowWaveform(bool v) async {
-    showWaveform = v;
-    notifyListeners();
+    showWaveform = v; notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kShowWaveform, v);
   }
 
   Future<void> setShowSpectrum(bool v) async {
-    showSpectrum = v;
-    notifyListeners();
+    showSpectrum = v; notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kShowSpectrum, v);
   }
 
   Future<void> setKeepScreenOn(bool v) async {
-    keepScreenOn = v;
-    notifyListeners();
+    keepScreenOn = v; notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kKeepScreenOn, v);
   }
 
   Future<void> setInputSensitivity(double v) async {
-    inputSensitivity = v;
-    notifyListeners();
+    inputSensitivity = v; notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_kInputSensitivity, v);
+  }
+
+  Future<void> setBpmSmoothing(BpmSmoothing v) async {
+    bpmSmoothing = v; notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kBpmSmoothing, v.index);
   }
 
   Future<void> resetAll() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-    showWaveform = true;
-    showSpectrum = true;
-    keepScreenOn = true;
+    showWaveform     = true;
+    showSpectrum     = true;
+    keepScreenOn     = true;
     inputSensitivity = 0.0;
+    bpmSmoothing     = BpmSmoothing.moderate;
     notifyListeners();
   }
 }

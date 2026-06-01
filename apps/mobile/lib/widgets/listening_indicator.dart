@@ -56,7 +56,7 @@ class _ListeningIndicatorState extends State<ListeningIndicator>
         const SizedBox(width: 6),
         Text(
           'слушаю',
-          style: AppTextStyles.mono(8, FontWeight.w400, AppColors.textSecondary),
+          style: AppTextStyles.mono(8, FontWeight.w400, AppColors.accent),
         ),
       ],
     );

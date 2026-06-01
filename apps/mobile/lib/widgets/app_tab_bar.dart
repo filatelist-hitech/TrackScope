@@ -96,8 +96,8 @@ class _TabItem extends StatelessWidget {
             Text(
               _label,
               style: AppTextStyles.mono(
-                8, FontWeight.w400, color,
-                letterSpacing: 1.5,
+                7, FontWeight.w400, color,
+                letterSpacing: 1.0,
               ),
             ),
           ],

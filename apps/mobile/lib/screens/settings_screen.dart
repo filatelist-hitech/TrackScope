@@ -1,4 +1,7 @@
-// Settings Screen — Design System v2.
+// Settings Screen — Design System v2, matching BPM Radar Prototype.html.
+//
+// Layout: section headers (s-hdr: 7px uppercase dim) + group cards
+// (s-grp: #0d1712, r=13) + rows with dividers (s-row: 9px labels).
 //
 // 5 sections: АУДИО / ВИЗУАЛИЗАЦИЯ / PRO FEATURES / АККАУНТ / ПРОЧЕЕ.
 // Backed by AppSettings (SharedPreferences). Keep Screen On via WakelockPlus.
@@ -34,15 +37,15 @@ class SettingsScreen extends StatelessWidget {
         title: Text(
           'НАСТРОЙКИ',
           style: AppTextStyles.mono(
-            11, FontWeight.w400, AppColors.textSecondary,
-            letterSpacing: 3,
+            10, FontWeight.w400, AppColors.textSecondary,
+            letterSpacing: 0.18 * 10,
           ),
         ),
         centerTitle: true,
         automaticallyImplyLeading: false,
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: AppColors.borderFaint),
+          preferredSize: const Size.fromHeight(0.5),
+          child: Container(height: 0.5, color: AppColors.border),
         ),
       ),
       body: ListenableBuilder(
@@ -50,82 +53,115 @@ class SettingsScreen extends StatelessWidget {
         builder: (context, _) {
           final s = AppSettings.instance;
           return ListView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.only(bottom: 32),
             children: [
-              // ── 1. АУДИО ─────────────────────────────────────────────────
+              // ── 1. АУДИО ──────────────────────────────────────────────
               const _SectionHeader('АУДИО'),
-              _InfoRow(
-                label: 'BPM Range',
-                value: flags.isPro ? '155–230' : '170–230',
-                badge: flags.isPro ? null : 'PRO',
-              ),
-              _SliderRow(
-                label: 'Input Sensitivity',
-                value: s.inputSensitivity,
-                min: -6,
-                max: 6,
-                displayText: '${s.inputSensitivity >= 0 ? '+' : ''}'
-                    '${s.inputSensitivity.toStringAsFixed(0)} dB',
-                onChanged: (v) => s.setInputSensitivity(v),
+              _SettingsGroup(
+                children: [
+                  _InfoRow(
+                    label: 'BPM Range',
+                    value: flags.isPro ? '155–230' : '170–230',
+                    badge: flags.isPro ? null : 'PRO',
+                    showDivider: true,
+                  ),
+                  _SliderRow(
+                    label: 'Чувствительность',
+                    displayText: '${s.inputSensitivity >= 0 ? '+' : ''}'
+                        '${s.inputSensitivity.toStringAsFixed(0)} dB',
+                    value: s.inputSensitivity,
+                    min: -6,
+                    max: 6,
+                    onChanged: (v) => s.setInputSensitivity(v),
+                    showDivider: true,
+                  ),
+                  _SmoothingRow(
+                    value: s.bpmSmoothing,
+                    onChanged: (v) => s.setBpmSmoothing(v),
+                    showDivider: false,
+                  ),
+                ],
               ),
 
-              // ── 2. ВИЗУАЛИЗАЦИЯ ───────────────────────────────────────────
+              // ── 2. ВИЗУАЛИЗАЦИЯ ───────────────────────────────────────
               const _SectionHeader('ВИЗУАЛИЗАЦИЯ'),
-              _ToggleRow(
-                label: 'Волноформа',
-                value: s.showWaveform,
-                onChanged: (v) => s.setShowWaveform(v),
-              ),
-              _ToggleRow(
-                label: 'Спектр',
-                value: s.showSpectrum,
-                onChanged: (v) => s.setShowSpectrum(v),
-              ),
-              _ToggleRow(
-                label: 'Не гасить экран',
-                value: s.keepScreenOn,
-                onChanged: (v) async {
-                  await s.setKeepScreenOn(v);
-                  await WakelockPlus.toggle(enable: v);
-                },
+              _SettingsGroup(
+                children: [
+                  _ToggleRow(
+                    label: 'Волноформа',
+                    value: s.showWaveform,
+                    onChanged: (v) => s.setShowWaveform(v),
+                    showDivider: true,
+                  ),
+                  _ToggleRow(
+                    label: 'Спектр',
+                    value: s.showSpectrum,
+                    onChanged: (v) => s.setShowSpectrum(v),
+                    showDivider: true,
+                  ),
+                  _ToggleRow(
+                    label: 'Не гасить экран',
+                    value: s.keepScreenOn,
+                    onChanged: (v) async {
+                      await s.setKeepScreenOn(v);
+                      await WakelockPlus.toggle(enable: v);
+                    },
+                    showDivider: false,
+                  ),
+                ],
               ),
 
-              // ── 3. PRO FEATURES ───────────────────────────────────────────
+              // ── 3. PRO FEATURES ───────────────────────────────────────
               const _SectionHeader('PRO FEATURES'),
-              _NavRow(
-                label: 'Signal Analyzer',
-                isPro: !flags.canAccessDebugScreen,
-                onTap: onSignalAnalyzerTap,
-              ),
-              _NavRow(
-                label: 'История сессий',
-                isPro: !flags.isPro,
-                onTap: onHistoryTap,
+              _SettingsGroup(
+                children: [
+                  _NavRow(
+                    label: 'Signal Analyzer',
+                    isPro: !flags.canAccessDebugScreen,
+                    onTap: onSignalAnalyzerTap,
+                    showDivider: true,
+                  ),
+                  _NavRow(
+                    label: 'История сессий',
+                    isPro: !flags.isPro,
+                    onTap: onHistoryTap,
+                    showDivider: false,
+                  ),
+                ],
               ),
 
-              // ── 4. АККАУНТ ────────────────────────────────────────────────
+              // ── 4. АККАУНТ ────────────────────────────────────────────
               const _SectionHeader('АККАУНТ'),
-              if (!flags.isPro)
-                _NavRow(
-                  label: 'Upgrade to Pro',
-                  labelColor: AppColors.accent,
-                  onTap: onUpgradeTap,
-                ),
-              _NavRow(
-                label: 'Restore purchases',
-                labelColor: AppColors.textMuted,
-                onTap: () {},
+              _SettingsGroup(
+                children: [
+                  if (!flags.isPro)
+                    _NavRow(
+                      label: 'Upgrade to Pro',
+                      labelColor: AppColors.accent,
+                      onTap: onUpgradeTap,
+                      showDivider: true,
+                    ),
+                  _NavRow(
+                    label: 'Restore purchases',
+                    labelColor: AppColors.textMuted,
+                    onTap: () {},
+                    showDivider: false,
+                  ),
+                ],
               ),
 
-              // ── 5. ПРОЧЕЕ ─────────────────────────────────────────────────
+              // ── 5. ПРОЧЕЕ ─────────────────────────────────────────────
               const _SectionHeader('ПРОЧЕЕ'),
-              _NavRow(
-                label: 'Сбросить данные',
-                labelColor: AppColors.danger,
-                onTap: () => _confirmReset(context),
+              _SettingsGroup(
+                children: [
+                  _NavRow(
+                    label: 'Сбросить данные',
+                    labelColor: AppColors.danger,
+                    onTap: () => _confirmReset(context),
+                    showDivider: false,
+                  ),
+                ],
               ),
-
-              const SizedBox(height: 32),
             ],
           );
         },
@@ -144,25 +180,24 @@ class SettingsScreen extends StatelessWidget {
         ),
         content: Text(
           'Все настройки и история будут удалены.',
-          style: AppTextStyles.mono(12, FontWeight.w400, AppColors.textSecondary),
+          style: AppTextStyles.mono(
+              12, FontWeight.w400, AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'Отмена',
-              style: AppTextStyles.mono(12, FontWeight.w400, AppColors.textSecondary),
-            ),
+            child: Text('Отмена',
+                style: AppTextStyles.mono(
+                    12, FontWeight.w400, AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               AppSettings.instance.resetAll();
             },
-            child: Text(
-              'Сбросить',
-              style: AppTextStyles.mono(12, FontWeight.w500, AppColors.danger),
-            ),
+            child: Text('Сбросить',
+                style: AppTextStyles.mono(
+                    12, FontWeight.w500, AppColors.danger)),
           ),
         ],
       ),
@@ -170,7 +205,8 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-// ── Section header ────────────────────────────────────────────────────────────
+// ── Section header (s-hdr) ────────────────────────────────────────────────────
+// 7px uppercase dim, 10px top / 20px side / 4px bottom — outside cards.
 
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader(this.title);
@@ -179,8 +215,34 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
-      child: Text(title, style: AppTextStyles.sectionLabel),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+      child: Text(
+        title,
+        style: AppTextStyles.mono(
+            7, FontWeight.w400, AppColors.textMuted,
+            letterSpacing: 0.14 * 7),
+      ),
+    );
+  }
+}
+
+// ── Settings group card (s-grp) ───────────────────────────────────────────────
+// bg #0d1712, r=13, margin 0 14px 4px, no outer border.
+
+class _SettingsGroup extends StatelessWidget {
+  const _SettingsGroup({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1712),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: children),
     );
   }
 }
@@ -192,32 +254,48 @@ class _ToggleRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    this.showDivider = false,
   });
 
   final String label;
   final bool value;
   final ValueChanged<bool> onChanged;
+  final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppTextStyles.mono(12, FontWeight.w400, AppColors.textPrimary),
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => onChanged(!value),
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: AppTextStyles.mono(
+                        9, FontWeight.w400, AppColors.textSecondary),
+                  ),
+                ),
+                Switch(
+                  value: value,
+                  onChanged: onChanged,
+                  activeColor: AppColors.accent,
+                  activeTrackColor: AppColors.accentDim,
+                  inactiveTrackColor: const Color(0xFF1E3530),
+                  inactiveThumbColor: AppColors.textMuted,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ],
             ),
           ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: AppColors.accent,
-            inactiveTrackColor: AppColors.surface2,
-          ),
-        ],
-      ),
+        ),
+        if (showDivider)
+          const Divider(height: 1, thickness: 1, color: Color(0xFF080C09)),
+      ],
     );
   }
 }
@@ -232,6 +310,7 @@ class _SliderRow extends StatelessWidget {
     required this.max,
     required this.displayText,
     required this.onChanged,
+    this.showDivider = false,
   });
 
   final String label;
@@ -240,33 +319,38 @@ class _SliderRow extends StatelessWidget {
   final double max;
   final String displayText;
   final ValueChanged<double> onChanged;
+  final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 11, 14, 4),
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(label,
                   style: AppTextStyles.mono(
-                      12, FontWeight.w400, AppColors.textPrimary)),
+                      9, FontWeight.w400, AppColors.textSecondary)),
               Text(displayText,
                   style: AppTextStyles.mono(
-                      11, FontWeight.w400, AppColors.textSecondary)),
+                      9, FontWeight.w400, AppColors.accent)),
             ],
           ),
-          SliderTheme(
-            data: const SliderThemeData(
-              activeTrackColor: AppColors.accent,
-              inactiveTrackColor: AppColors.surface2,
-              thumbColor: AppColors.accent,
-              overlayColor: AppColors.accentDim,
-              trackHeight: 2,
-            ),
+        ),
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: AppColors.accent,
+            inactiveTrackColor: const Color(0xFF111916),
+            thumbColor: AppColors.accent,
+            overlayColor: AppColors.accentDim,
+            trackHeight: 4,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6.5),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+          ),
+          child: SizedBox(
+            height: 36,
             child: Slider(
               value: value,
               min: min,
@@ -275,8 +359,81 @@ class _SliderRow extends StatelessWidget {
               onChanged: onChanged,
             ),
           ),
-        ],
-      ),
+        ),
+        if (showDivider)
+          const Divider(height: 1, thickness: 1, color: Color(0xFF080C09)),
+      ],
+    );
+  }
+}
+
+// ── BPM Smoothing row ─────────────────────────────────────────────────────────
+
+class _SmoothingRow extends StatelessWidget {
+  const _SmoothingRow({
+    required this.value,
+    required this.onChanged,
+    this.showDivider = false,
+  });
+
+  final BpmSmoothing value;
+  final ValueChanged<BpmSmoothing> onChanged;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Сглаживание BPM',
+                  style: AppTextStyles.mono(
+                      9, FontWeight.w400, AppColors.textSecondary),
+                ),
+              ),
+              // Compact segment selector
+              Row(
+                children: BpmSmoothing.values.map((opt) {
+                  final isOn = opt == value;
+                  return GestureDetector(
+                    onTap: () => onChanged(opt),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      margin: const EdgeInsets.only(left: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: isOn
+                            ? AppColors.accentDim
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: isOn
+                              ? AppColors.accent
+                              : const Color(0xFF1E3530),
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        opt.label,
+                        style: AppTextStyles.mono(
+                          7.5, FontWeight.w400,
+                          isOn ? AppColors.accent : AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+        if (showDivider)
+          const Divider(height: 1, thickness: 1, color: Color(0xFF080C09)),
+      ],
     );
   }
 }
@@ -284,44 +441,54 @@ class _SliderRow extends StatelessWidget {
 // ── Info row (read-only) ──────────────────────────────────────────────────────
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value, this.badge});
+  const _InfoRow({
+    required this.label,
+    required this.value,
+    this.badge,
+    this.showDivider = false,
+  });
 
   final String label;
   final String value;
   final String? badge;
+  final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppTextStyles.mono(12, FontWeight.w400, AppColors.textPrimary),
-            ),
-          ),
-          Text(
-            value,
-            style: AppTextStyles.mono(11, FontWeight.w400, AppColors.textSecondary),
-          ),
-          if (badge != null) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.accentDim,
-                borderRadius: BorderRadius.circular(4),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(label,
+                    style: AppTextStyles.mono(
+                        9, FontWeight.w400, AppColors.textSecondary)),
               ),
-              child: Text(
-                badge!,
-                style: AppTextStyles.mono(8, FontWeight.w600, AppColors.accent),
-              ),
-            ),
-          ],
-        ],
-      ),
+              Text(value,
+                  style: AppTextStyles.mono(
+                      8.5, FontWeight.w400, AppColors.textMuted)),
+              if (badge != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentDim,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(badge!,
+                      style: AppTextStyles.mono(
+                          8, FontWeight.w600, AppColors.accent)),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (showDivider)
+          const Divider(height: 1, thickness: 1, color: Color(0xFF080C09)),
+      ],
     );
   }
 }
@@ -334,47 +501,60 @@ class _NavRow extends StatelessWidget {
     required this.onTap,
     this.labelColor,
     this.isPro = false,
+    this.showDivider = false,
   });
 
   final String label;
   final VoidCallback onTap;
   final Color? labelColor;
   final bool isPro;
+  final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: AppTextStyles.mono(
-                  12, FontWeight.w400,
-                  labelColor ?? AppColors.textPrimary,
+    return Column(
+      children: [
+        InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: AppTextStyles.mono(
+                      9, FontWeight.w400,
+                      labelColor ?? AppColors.textSecondary,
+                    ),
+                  ),
                 ),
-              ),
+                if (isPro) ...[
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentDim,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text('PRO',
+                        style: AppTextStyles.mono(
+                            8, FontWeight.w600, AppColors.accent)),
+                  ),
+                ],
+                Icon(
+                  Icons.chevron_right,
+                  color: AppColors.textMuted,
+                  size: 13,
+                ),
+              ],
             ),
-            if (isPro)
-              Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.accentDim,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'PRO',
-                  style: AppTextStyles.mono(8, FontWeight.w600, AppColors.accent),
-                ),
-              ),
-            const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 16),
-          ],
+          ),
         ),
-      ),
+        if (showDivider)
+          const Divider(height: 1, thickness: 1, color: Color(0xFF080C09)),
+      ],
     );
   }
 }
