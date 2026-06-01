@@ -33,7 +33,7 @@ interface DspResult {
   signal_quality: SignalQuality;
   candidates: TempoCandidate[];
   timing: DspTiming;
-  debug?: DspDebug;
+  debug: DspDebug;  // диагностика алгоритма; присутствует в каждом снапшоте
 }
 
 interface SignalQuality {
@@ -72,12 +72,12 @@ interface DspTiming {
 }
 
 interface DspDebug {
-  onset_rate_hz: number;
-  onset_strength: number;
-  tempo_peak_prominence: number;
-  harmonic_ambiguity: number;
-  stability_score: number;
-  warnings: string[];
+  onset_rate_hz: number;           // raw_peaks.len() / duration_sec
+  onset_strength: number;          // avg spectral flux over analysis window
+  tempo_peak_prominence: number;   // prominence of main autocorrelation peak
+  harmonic_ambiguity: number;      // competing candidates pressure [0..1+]
+  stability_score: number;         // primary candidate stability_score
+  warnings: string[];              // ["clipping", "breakdown_likely", "harmonic_ambiguity=X.XX"]
 }
 ```
 
@@ -89,6 +89,7 @@ interface DspDebug {
 - Hitech-режим предпочитает 155–230 BPM, но не скрывает неоднозначность.
 - raw-кандидат 100 BPM может породить нормализованного кандидата 200 BPM, но оба остаются видимыми.
 - raw-кандидат 400 BPM может породить нормализованного кандидата 200 BPM, но оба остаются видимыми.
+- `debug` всегда присутствует в снапшоте (не опциональный). Для `empty_result` (тишина, silence) все числовые поля нулевые, `warnings` — пустой список. `DspDebug` содержит только диагностику алгоритма; BPM-вычисления в нём не производятся. Populated в `analyze_from_envelope` без дополнительной CPU-стоимости — из уже вычисленных значений.
 
 ## Пайплайн
 

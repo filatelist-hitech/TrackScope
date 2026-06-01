@@ -25,9 +25,14 @@ import 'package:flutter/material.dart' hide LockState;
 import '../capture/bpm_display.dart';
 import '../capture/capture_error.dart';
 import '../dsp/dsp_result.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../viz/live_spectrum_painter.dart';
 import '../viz/viz_controller.dart';
 import '../viz/waveform_painter.dart' show WaveformColumnPainter;
+import '../widgets/break_button.dart';
+import '../widgets/confidence_bar.dart';
+import '../widgets/listening_indicator.dart';
 import 'design_tokens.dart';
 
 // ── MainScreen ────────────────────────────────────────────────────────────────
@@ -39,6 +44,9 @@ class MainScreen extends StatefulWidget {
     required this.errors,
     required this.debugBuilder,
     this.rawPcm,
+    this.isPro = true,
+    this.onHistoryTap,
+    this.onPaywallTap,
   });
 
   final Stream<DspResult> results;
@@ -50,6 +58,15 @@ class MainScreen extends StatefulWidget {
   /// Raw PCM-16 LE mono bytes from CaptureBridge.rawPcm. Null in unit tests
   /// and before mic permission is granted — visualisers show a placeholder.
   final Stream<Uint8List>? rawPcm;
+
+  /// Whether the user is on Pro tier. Affects debug gate and AppBar.
+  final bool isPro;
+
+  /// Callback when History icon is tapped. Null = no history button shown.
+  final VoidCallback? onHistoryTap;
+
+  /// Callback when Upgrade/PRO badge or paywall trigger is tapped.
+  final void Function(String feature)? onPaywallTap;
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -90,11 +107,21 @@ class _MainScreenState extends State<MainScreen> {
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(44),
         child: _TraktorStyleAppBar(
+          isPro: widget.isPro,
           onDebugTap: () {
+            // Gate: Free → paywall, Pro → debug screen.
+            if (!widget.isPro) {
+              widget.onPaywallTap?.call('debug_screen');
+              return;
+            }
             Navigator.of(context).push(MaterialPageRoute(
               builder: widget.debugBuilder,
             ));
           },
+          onHistoryTap: widget.onHistoryTap,
+          onUpgradeTap: widget.isPro
+              ? null
+              : () => widget.onPaywallTap?.call('upgrade'),
         ),
       ),
       body: SafeArea(
@@ -114,15 +141,15 @@ class _MainScreenState extends State<MainScreen> {
               children: [
                 if (_lastError != null) _ErrorBanner(error: _lastError!),
 
-                // ── Waveform / oscilloscope (35 %) ─────────────────────────
-                Expanded(
-                  flex: 35,
+                // ── Waveform / oscilloscope — fixed 120 px (Design v2) ───
+                SizedBox(
+                  height: 120,
                   child: RepaintBoundary(
                     child: _WaveformView(viz: _viz),
                   ),
                 ),
 
-                // ── Live spectrum (22 %) ────────────────────────────────────
+                // ── Live spectrum ────────────────────────────────────────
                 Expanded(
                   flex: 22,
                   child: RepaintBoundary(
@@ -268,11 +295,14 @@ class _GlassmorphismCard extends StatelessWidget {
             child: Container(
               color: Colors.white.withAlpha(8),
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-              child: _InfoTableContent(
-                result: result,
-                viz: viz,
-                displayBpm: displayBpm,
-                isLockingDisplay: isLockingDisplay,
+              child: SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: _InfoTableContent(
+                  result: result,
+                  viz: viz,
+                  displayBpm: displayBpm,
+                  isLockingDisplay: isLockingDisplay,
+                ),
               ),
             ),
           ),
@@ -330,26 +360,16 @@ class _InfoTableContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Row 1: BPM display + lock badge ──────────────────────────────────
+        // ── Row 1: BPM hero + lock badge ─────────────────────────────────────
         Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _AnimatedBpmDisplay(
               bpm: bpm,
               confidence: conf,
               viz: viz,
               isLockingDisplay: isLockingDisplay,
-            ),
-            const Padding(
-              padding: EdgeInsets.only(left: 6),
-              child: Text(
-                'BPM',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
-                  letterSpacing: 1.5,
-                ),
-              ),
+              isUnstable: lock == LockState.unstable,
             ),
             const Spacer(),
             _LockBadge(state: lock),
@@ -417,6 +437,16 @@ class _InfoTableContent extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 10),
+
+        // ── Row 5: listening indicator + break button ─────────────────────────
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const ListeningIndicator(),
+            BreakButton(onTap: () {}),
+          ],
+        ),
       ],
     );
   }
@@ -439,14 +469,14 @@ class _InfoTableContent extends StatelessWidget {
 
 // ── Animated BPM display ──────────────────────────────────────────────────────
 //
-// Beat glow: ListenableBuilder on VizController.beatDecay (PCM chunk RMS).
+// Hero BPM text (72 px, Design v2) with beat-reactive glow from VizController.
 // Fast attack (immediate), ~200 ms decay — driven by real audio transients.
-// No timer, no fake pulse. (Phase 6 unchanged.)
+// No timer, no fake pulse.
 //
-// Confidence bar: TweenAnimationBuilder<double> targeting DspResult.confidence.
-// Animates over 500 ms so the bar glides smoothly to new values.
+// Empty state: "— — —" in dim #1E3530.
+// UNSTABLE: amber text.  STABLE/LOCKING: accent teal.
 //
-// isLockingDisplay dims the BPM text to 54 % opacity during LOCKING.
+// Confidence bar uses the new 7 px ConfidenceBar widget with colour thresholds.
 
 class _AnimatedBpmDisplay extends StatelessWidget {
   const _AnimatedBpmDisplay({
@@ -454,26 +484,38 @@ class _AnimatedBpmDisplay extends StatelessWidget {
     required this.confidence,
     required this.viz,
     this.isLockingDisplay = false,
+    this.isUnstable = false,
   });
 
   final double? bpm;
   final double confidence;
   final VizController viz;
   final bool isLockingDisplay;
+  final bool isUnstable;
 
   @override
   Widget build(BuildContext context) {
-    final bpmText = bpm == null ? '—' : bpm!.toStringAsFixed(1);
-    final baseColor =
-        isLockingDisplay ? AppTheme.textPrimary.withAlpha(138) : AppTheme.textPrimary;
+    final hasValue = bpm != null;
+    final bpmText = hasValue ? bpm!.toStringAsFixed(1) : '— — —';
+
+    // Colour: null→dim, unstable→amber, otherwise accent teal.
+    final textColor = AppColors.bpmText(
+      hasValue: hasValue,
+      isUnstable: isUnstable,
+    );
+    // Dim slightly during LOCKING to signal not-yet-stable.
+    final effectiveColor =
+        isLockingDisplay ? textColor.withAlpha(180) : textColor;
+
+    // Font size: 72 when value present, 58 for "— — —" placeholder.
+    final fontSize = hasValue ? 72.0 : 58.0;
+    final letterSpacing = hasValue ? -2.5 : -1.5;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // BPM number with beat-reactive accent glow.
-        // AnimatedSwitcher crossfades when the text changes (e.g. "195.9" ↔ "—")
-        // so state transitions don't appear as instant flashes.
+        // Hero BPM number with beat-reactive accent glow.
         RepaintBoundary(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 220),
@@ -486,20 +528,21 @@ class _AnimatedBpmDisplay extends StatelessWidget {
               listenable: viz,
               builder: (_, __) {
                 final g = viz.beatDecay;
-                final style = AppTheme.mono(
-                  fontSize: 52,
-                  color: baseColor,
-                  weight: FontWeight.w800,
-                  height: 1.0,
+                final style = AppTextStyles.mono(
+                  fontSize,
+                  FontWeight.w600,
+                  effectiveColor,
+                  letterSpacing: letterSpacing,
                 );
                 return Text(
                   bpmText,
-                  style: g > 0.04
+                  style: (g > 0.04 && hasValue)
                       ? style.copyWith(
                           shadows: [
                             Shadow(
-                              color: AppTheme.accent.withAlpha(
-                                  (g * 0.9 * 255).round().clamp(0, 255)),
+                              color: AppColors.accent.withAlpha(
+                                (g * 0.9 * 255).round().clamp(0, 255),
+                              ),
                               blurRadius: 6.0 + g * 26.0,
                             ),
                           ],
@@ -510,56 +553,15 @@ class _AnimatedBpmDisplay extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 3),
-        // Confidence progress bar — grey → accent, smoothly animated.
-        TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.0, end: confidence),
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeOut,
-          builder: (_, c, __) => SizedBox(
-            width: 128,
-            height: 2,
-            child: CustomPaint(painter: _ConfidenceBarPainter(c)),
-          ),
+        const SizedBox(height: 6),
+        // 7 px confidence bar with red/yellow/teal thresholds (Design v2).
+        SizedBox(
+          width: 160,
+          child: ConfidenceBar(confidence: confidence),
         ),
       ],
     );
   }
-}
-
-// ── Confidence bar ────────────────────────────────────────────────────────────
-
-class _ConfidenceBarPainter extends CustomPainter {
-  const _ConfidenceBarPainter(this.level);
-  final double level;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rr = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      const Radius.circular(1),
-    );
-    canvas.drawRRect(rr, Paint()..color = const Color(0x22FFFFFF));
-
-    if (level > 0) {
-      final filled = RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, size.width * level, size.height),
-        const Radius.circular(1),
-      );
-      canvas.drawRRect(
-        filled,
-        Paint()
-          ..color = Color.lerp(
-            AppTheme.textSecondary,
-            AppTheme.accent,
-            level,
-          )!,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ConfidenceBarPainter old) => level != old.level;
 }
 
 // ── Metric cell ───────────────────────────────────────────────────────────────
@@ -679,8 +681,16 @@ class _BadgePill extends StatelessWidget {
 // Left: app title in small caps. Right: debug icon button.
 
 class _TraktorStyleAppBar extends StatelessWidget {
-  const _TraktorStyleAppBar({required this.onDebugTap});
+  const _TraktorStyleAppBar({
+    required this.onDebugTap,
+    this.onHistoryTap,
+    this.onUpgradeTap,
+    this.isPro = true,
+  });
   final VoidCallback onDebugTap;
+  final VoidCallback? onHistoryTap;
+  final VoidCallback? onUpgradeTap;
+  final bool isPro;
 
   @override
   Widget build(BuildContext context) {
@@ -711,6 +721,43 @@ class _TraktorStyleAppBar extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              // History button.
+              if (onHistoryTap != null)
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    iconSize: 16,
+                    splashRadius: 18,
+                    icon: const Icon(
+                      Icons.history,
+                      color: AppTheme.textDim,
+                    ),
+                    onPressed: onHistoryTap,
+                  ),
+                ),
+              // Upgrade / PRO badge.
+              if (!isPro && onUpgradeTap != null)
+                GestureDetector(
+                  onTap: onUpgradeTap,
+                  child: Container(
+                    margin: const EdgeInsets.only(left: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentDim,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'PRO',
+                      style: AppTheme.mono(
+                        fontSize: 9,
+                        color: AppTheme.accent,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
               // Debug button — compact, no splash, icon only.
               SizedBox(
                 width: 32,

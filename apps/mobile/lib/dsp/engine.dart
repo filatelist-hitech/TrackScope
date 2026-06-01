@@ -62,13 +62,17 @@ class DspEngine {
   /// [libraryPath] — явный путь к .dylib/.so; если не передан,
   /// используется платформенный дефолт (для iOS — статический линкаж
   /// через [ffi.DynamicLibrary.process]).
+  ///
+  /// [minBpm] — минимальный BPM для hitech-диапазона (Free tier: 170, Pro: 155).
+  /// Если не передан, используется дефолт Rust (155).
   factory DspEngine.open({
     String? libraryPath,
     Duration pollInterval = const Duration(milliseconds: 50),
+    double? minBpm,
   }) {
     final dylib = _openLibrary(libraryPath);
     return DspEngine.fromBindings(HitechBpmFfi(dylib),
-        pollInterval: pollInterval);
+        pollInterval: pollInterval, minBpm: minBpm);
   }
 
   /// Создание из уже разрешённых привязок. Полезно для тестов, которые
@@ -76,8 +80,11 @@ class DspEngine {
   factory DspEngine.fromBindings(
     HitechBpmFfi bindings, {
     Duration pollInterval = const Duration(milliseconds: 50),
+    double? minBpm,
   }) {
-    final handle = bindings.engineNew();
+    final handle = minBpm != null
+        ? bindings.engineNewWithMinBpm(minBpm)
+        : bindings.engineNew();
     if (handle == ffi.nullptr) {
       throw StateError('hitech_bpm_engine_new вернул null');
     }

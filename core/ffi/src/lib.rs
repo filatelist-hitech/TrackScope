@@ -26,6 +26,25 @@ pub extern "C" fn hitech_bpm_engine_new() -> *mut HitechBpmEngine {
     }))
 }
 
+/// Создать движок с кастомным минимальным BPM для hitech-диапазона.
+/// `min_bpm` зажимается в [80.0, 230.0]; не-finite значения заменяются на 155.0.
+/// Используется для Free-tier (170) vs Pro-tier (155) гейтирования.
+#[no_mangle]
+pub extern "C" fn hitech_bpm_engine_new_with_min_bpm(min_bpm: f32) -> *mut HitechBpmEngine {
+    let clamped = if min_bpm.is_finite() {
+        min_bpm.clamp(80.0, 230.0)
+    } else {
+        155.0
+    };
+    let cfg = DspConfig {
+        target_bpm_min: clamped,
+        ..DspConfig::default()
+    };
+    Box::into_raw(Box::new(HitechBpmEngine {
+        inner: DspEngine::new(cfg),
+    }))
+}
+
 /// # Safety
 /// `engine` must be a valid pointer returned by `hitech_bpm_engine_new`, or null.
 /// After calling this function, `engine` is invalid and must not be used.

@@ -16,6 +16,9 @@ final class HitechBpmEngine extends ffi.Opaque {}
 typedef _engine_new_c = ffi.Pointer<HitechBpmEngine> Function();
 typedef HitechBpmEngineNew = ffi.Pointer<HitechBpmEngine> Function();
 
+typedef _engine_new_with_min_bpm_c = ffi.Pointer<HitechBpmEngine> Function(ffi.Float);
+typedef HitechBpmEngineNewWithMinBpm = ffi.Pointer<HitechBpmEngine> Function(double);
+
 typedef _engine_free_c = ffi.Void Function(ffi.Pointer<HitechBpmEngine>);
 typedef HitechBpmEngineFree = void Function(ffi.Pointer<HitechBpmEngine>);
 
@@ -57,6 +60,10 @@ final class HitechBpmFfi {
       : engineNew = dylib
             .lookup<ffi.NativeFunction<_engine_new_c>>('hitech_bpm_engine_new')
             .asFunction<HitechBpmEngineNew>(),
+        engineNewWithMinBpm = dylib
+            .lookup<ffi.NativeFunction<_engine_new_with_min_bpm_c>>(
+                'hitech_bpm_engine_new_with_min_bpm')
+            .asFunction<HitechBpmEngineNewWithMinBpm>(),
         engineFree = dylib
             .lookup<ffi.NativeFunction<_engine_free_c>>('hitech_bpm_engine_free')
             .asFunction<HitechBpmEngineFree>(),
@@ -76,6 +83,7 @@ final class HitechBpmFfi {
             .asFunction<HitechBpmStringFree>();
 
   final HitechBpmEngineNew engineNew;
+  final HitechBpmEngineNewWithMinBpm engineNewWithMinBpm;
   final HitechBpmEngineFree engineFree;
   final HitechBpmEngineReset engineReset;
   final HitechBpmEnginePushSamples enginePushSamples;

@@ -104,6 +104,7 @@ class BpmSmoother {
       signalQuality: raw.signalQuality, // передаём as-is для debug-экрана
       candidates: raw.candidates, // raw-кандидаты никогда не скрываем
       timing: raw.timing,
+      debug: raw.debug, // debug-метрики пробрасываем без изменений
     );
   }
 
