@@ -28,10 +28,12 @@ class CaptureBridge {
   CaptureBridge({
     this.libraryPath,
     this.pollInterval = const Duration(milliseconds: 50),
+    this.minBpm,
   });
 
   final String? libraryPath;
   final Duration pollInterval;
+  final double? minBpm;
 
   Isolate? _worker;
   SendPort? _workerInbox;
@@ -138,6 +140,7 @@ class CaptureBridge {
       libraryPath: libraryPath ?? _platformDefaultLibrary(),
       captureSampleRate: sampleRate,
       pollIntervalMs: pollInterval.inMilliseconds,
+      minBpm: minBpm,
     );
     _worker = await Isolate.spawn<WorkerInit>(
       dspWorkerEntry,

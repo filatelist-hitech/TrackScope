@@ -134,6 +134,29 @@ pub struct DspTiming {
     pub first_lock_time_sec: Option<f32>,
 }
 
+/// Диагностические поля, эмитируемые вместе с каждым `DspResult`.
+///
+/// Все значения вычисляются в `analyze_from_envelope` как побочный продукт
+/// обычного анализа — без дополнительной CPU-стоимости.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct DspDebug {
+    /// Количество значимых темповых пиков (онсет-событий) в секунду в текущем
+    /// окне анализа. Вычисляется как `raw_peaks.len() / duration_sec`.
+    pub onset_rate_hz: f32,
+    /// Среднее значение огибающей онсетов по всему окну анализа (spectral flux).
+    pub onset_strength: f32,
+    /// Prominence главного темпового пика в нормализованной автокорреляции.
+    /// Чем выше — тем чище пик, тем убедительнее темп.
+    pub tempo_peak_prominence: f32,
+    /// Мера неоднозначности: насколько сильно конкурирующие кандидаты
+    /// претендуют на то же темповое пространство. 0 = нет конкуренции.
+    pub harmonic_ambiguity: f32,
+    /// stability_score основного кандидата на момент снапшота.
+    pub stability_score: f32,
+    /// Текстовые предупреждения: клиппинг, брейкдаун, неоднозначность.
+    pub warnings: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct DspResult {
     pub primary_bpm: Option<f32>,
@@ -142,6 +165,8 @@ pub struct DspResult {
     pub signal_quality: SignalQuality,
     pub candidates: Vec<TempoCandidate>,
     pub timing: DspTiming,
+    /// Диагностика алгоритма — присутствует в каждом снапшоте.
+    pub debug: DspDebug,
 }
 
 /// Скользящее состояние онсетов, поддерживаемое `DspEngine::push_samples`.
@@ -808,6 +833,33 @@ fn analyze_from_envelope(
     }
 
     candidates.truncate(10);
+
+    // ── Сборка DspDebug ───────────────────────────────────────────────────────
+    let onset_rate_hz = if duration_sec > 0.0 {
+        round_3(raw_peaks.len() as f32 / duration_sec)
+    } else {
+        0.0
+    };
+    let mut warnings: Vec<String> = Vec::new();
+    if signal_quality.clipping {
+        warnings.push("clipping".to_string());
+    }
+    if signal_quality.breakdown_likely {
+        warnings.push("breakdown_likely".to_string());
+    }
+    if harmonic_ambiguity > 0.5 {
+        warnings.push(format!("harmonic_ambiguity={:.2}", harmonic_ambiguity));
+    }
+    let primary_stability = candidates.first().map(|c| c.stability_score).unwrap_or(0.0);
+    let debug = DspDebug {
+        onset_rate_hz,
+        onset_strength: round_6(onset_strength),
+        tempo_peak_prominence: round_6(prominence),
+        harmonic_ambiguity: round_6(harmonic_ambiguity),
+        stability_score: round_6(primary_stability),
+        warnings,
+    };
+
     DspResult {
         primary_bpm,
         confidence: round_3(confidence),
@@ -815,6 +867,7 @@ fn analyze_from_envelope(
         signal_quality,
         candidates,
         timing,
+        debug,
     }
 }
 
@@ -871,6 +924,14 @@ pub fn analyze_candidates(
             window_time_sec: config.analysis_window_seconds,
             hop_time_sec: 0.0,
             first_lock_time_sec: primary_bpm.map(|_| analysis_time_sec.min(config.lock_min_seconds)),
+        },
+        debug: DspDebug {
+            onset_rate_hz: 0.0,
+            onset_strength: 0.0,
+            tempo_peak_prominence: 0.0,
+            harmonic_ambiguity: 0.0,
+            stability_score: 0.0,
+            warnings: Vec::new(),
         },
     }
 }
@@ -1483,6 +1544,14 @@ fn empty_result(
             window_time_sec: config.analysis_window_seconds,
             hop_time_sec: 0.0,
             first_lock_time_sec: None,
+        },
+        debug: DspDebug {
+            onset_rate_hz: 0.0,
+            onset_strength: 0.0,
+            tempo_peak_prominence: 0.0,
+            harmonic_ambiguity: 0.0,
+            stability_score: 0.0,
+            warnings: Vec::new(),
         },
     }
 }

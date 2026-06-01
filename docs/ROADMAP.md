@@ -264,3 +264,59 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - `flutter build apk --release` → `app-release.apk` с release-подписью.
 
 Известное ограничение: виртуальный микрофон AVD не позволяет проверить реальную точность детектора — для этого нужно физическое Android-устройство.
+
+## Phase 11: Design System v2 + DspDebug — **ЗАВЕРШЕНО** (2026-06-01)
+
+Цель: полный редизайн Flutter UI по дизайн-системе + экспозиция диагностики DspDebug в Signal Analyzer.
+
+Артефакты:
+
+- Tab Bar навигация (`AppNavigator`, `IndexedStack`): Радар / История / Настройки. `CaptureBridge` не пересоздаётся при смене вкладок.
+- `BpmHeroDisplay` (72 px IBM Plex Mono, 3 режима: idle / detecting / unstable).
+- `ConfidenceBar` (7 px, red < 30 % / yellow 30–70 % / teal > 70 %, анимация 400 мс).
+- `SignalAnalyzerScreen` (Pro-only, push из Radar и Settings): показывает BPM-кандидатов со score bar, качество сигнала, тайминги и реальные DspDebug-метрики алгоритма.
+- `SettingsScreen` (5 секций, SharedPreferences, WakelockPlus).
+- `AppSettings` (ChangeNotifier singleton, SharedPreferences-persistence).
+- Design tokens v2: `lib/theme/app_colors.dart` (#050807 bg, #00DFB0 accent) + `lib/theme/app_text_styles.dart` (IBM Plex Mono, роли).
+- `PaywallScreen` v2: value headline, column headers FREE/PRO, CTA-иерархия, Roadmap card.
+- **DspDebug в Rust `DspResult`**: `onset_rate_hz`, `onset_strength`, `tempo_peak_prominence`, `harmonic_ambiguity`, `stability_score`, `warnings`. Populated в `analyze_from_envelope` без дополнительной CPU-стоимости.
+- **DspDebug класс в Dart** (`dsp_result.dart`): `fromJson` с graceful defaults (missing key → zero). Backward-compatible.
+- `Signal Analyzer` показывает реальные метрики алгоритма (секция «Метрики алгоритма» — не placeholder).
+- Зависимости: `shared_preferences ^2.3.0`, `wakelock_plus ^1.2.0`.
+- Тесты: +3 Rust (`debug_field_populated_on_stable_signal`, `debug_serializes_to_json_with_debug_key`, `debug_empty_on_silence`), +6 Dart (`test/dsp_debug_test.dart`).
+
+Критерии выхода — выполнены:
+
+- `flutter analyze` → 0 errors ✓
+- `flutter test` → 132/132 ✓
+- `cargo test --workspace` → 75/75 ✓
+- BPM null → «— — —» dim #1E3530 ✓
+- ConfidenceBar 7 px + red/yellow/teal ✓
+- Tab Bar: 3 вкладки, CaptureBridge не пересоздаётся ✓
+- Signal Analyzer показывает реальные DspDebug-метрики ✓
+
+---
+
+## Phase 10: Freemium monetization (Free / Pro) — **ЗАВЕРШЕНО** (2026-05-31)
+
+Цель: двухуровневая монетизация (Free / Pro) с RevenueCat IAP, paywall, гейтинг BPM-диапазона, debug-экрана, истории и экспорта.
+
+Артефакты:
+
+- FFI: `hitech_bpm_engine_new_with_min_bpm(float)` — обратно-совместимый второй конструктор; Free = 170–230, Pro = 155–230.
+- `lib/monetization/`: `PurchasesGateway` (абстракция), `RevenueCatGateway` (единственный импорт `purchases_flutter`), `ProStatusService` (ChangeNotifier), `FeatureFlags`, `PaywallScreen`.
+- `lib/history/`: `BpmHistory`, `SessionHistoryController` (даунсэмплер ~1 Hz), `HistoryScreen`.
+- `lib/export/`: `buildCsv`/`buildJson` (чистые билдеры), `exportCsv`/`exportJson` (share_plus).
+- `main.dart`: ProStatusService init, ListenableBuilder для tier-reactive CaptureBridge.
+- `main_web.dart`: web-safe, без revenuecat-зависимостей.
+- `config.dart.template` + `.gitignore` для `config.dart`.
+- Тесты: feature_flags, pro_status_service, paywall_screen, bpm_history, bpm_exporter, widget_test (debug-gate).
+
+Критерии выхода:
+
+- `cargo test --workspace`, `flutter analyze` (0 errors), `flutter test` — все зелёные.
+- FFI: Free engine 170–230, Pro engine 155–230; смена tier без перезапуска.
+- Debug screen + export → paywall в Free; доступны в Pro.
+- History: 30 сек (Free) / 24 ч (Pro) на выделенном экране.
+- Restore работает. Widget показывает «Скоро».
+- `config.dart` gitignored; Free работает keyless/offline.

@@ -6,6 +6,59 @@
 
 ## [Unreleased]
 
+### Added — Design System v2 (Phase 11)
+
+- **Tab Bar навигация** (`lib/navigation/app_navigator.dart`): три вкладки
+  Радар / История / Настройки через `IndexedStack`. `CaptureBridge` не
+  пересоздаётся при смене вкладок — живёт в `_CapturePipeline`.
+- **BPM Hero Display** (`lib/widgets/bpm_hero_display.dart`): 72 px IBM Plex
+  Mono, три режима (idle/detecting/unstable). Null → «— — —» dim #1E3530.
+- **ConfidenceBar** (`lib/widgets/confidence_bar.dart`): 7 px, red < 30 %,
+  yellow 30–70 %, teal > 70 %. Анимация 400 мс.
+- **BreakButton** (`lib/widgets/break_button.dart`): иконка паузы + «Зафиксировать брейк».
+- **ListeningIndicator** (`lib/widgets/listening_indicator.dart`): анимированная
+  точка accent + «слушаю».
+- **AppTabBar** (`lib/widgets/app_tab_bar.dart`): кастомный таб-бар с
+  accent/textMuted цветами, подписи «РАДАР / ИСТОРИЯ / НАСТРОЙКИ».
+- **SignalAnalyzerScreen** (`lib/screens/signal_analyzer_screen.dart`): Pro-only,
+  показывает BPM-кандидатов со score bar + качество сигнала + тайминги.
+  Секция «Метрики алгоритма» — реальные DspDebug-данные (onset rate, onset strength,
+  peak prominence, harmonic ambiguity, stability score, SNR, warnings).
+- **SettingsScreen** (`lib/screens/settings_screen.dart`): 5 секций, backed
+  by `AppSettings` (SharedPreferences). Keep Screen On → WakelockPlus.
+- **AppSettings** (`lib/settings/app_settings.dart`): ChangeNotifier singleton,
+  персист через SharedPreferences (showWaveform, showSpectrum, keepScreenOn, inputSensitivity).
+- **Design tokens v2** (`lib/theme/app_colors.dart`, `lib/theme/app_text_styles.dart`):
+  IBM Plex Mono, #050807 bg, #00DFB0 accent, confidence thresholds.
+- Зависимости: `shared_preferences ^2.3.0`, `wakelock_plus ^1.2.0`.
+
+### Added — DspDebug contract (Phase 11)
+
+- **DspDebug struct** в Rust `DspResult`: `onset_rate_hz`, `onset_strength`,
+  `tempo_peak_prominence`, `harmonic_ambiguity`, `stability_score`, `warnings[]`.
+  Populated в `analyze_from_envelope` без доп. CPU-стоимости — из уже вычисленных значений.
+  `empty_result()` и пути silence эмитят нулевой `DspDebug` (не `null`).
+- **DspDebug class** в Dart `dsp_result.dart`: `fromJson` с graceful defaults
+  (missing key → zero DspDebug). Backward-compatible с FFI без `debug`-ключа.
+- **Signal Analyzer** (`lib/screens/signal_analyzer_screen.dart`) показывает
+  реальные метрики алгоритма: onset rate, onset strength, peak prominence,
+  harmonic ambiguity, stability score, SNR, warnings. Placeholder «В разработке» удалён.
+- Тесты Rust: `debug_field_populated_on_stable_signal`,
+  `debug_serializes_to_json_with_debug_key`, `debug_empty_on_silence`
+  (в `core/dsp/tests/stability.rs`).
+- Тесты Dart: `test/dsp_debug_test.dart` (6 тестов: `fromJson`-парсинг, `DspResult.parse`).
+
+### Changed — Design System v2 (Phase 11)
+
+- **Paywall** редизайн: value headline «Читай любой трек. Без ограничений.» +
+  column headers ФУНКЦИЯ/FREE/PRO + CTA-иерархия (filled+badge / outline) +
+  Roadmap card (Key+Camelot, Energy, Lock-screen Widget). «Debug Screen» → «Signal Analyzer».
+- **Waveform** высота: flex-proportional → fixed 120 px.
+- **BPM number**: 52 px JetBrains Mono → 72 px IBM Plex Mono hero (в `_AnimatedBpmDisplay`).
+- **Confidence bar**: 2 px одноцветный → 7 px с цветовыми порогами (Design v2 ConfidenceBar).
+- **main.dart**: `MainScreen` → `AppNavigator`; `AppSettings.instance.load()` при старте.
+- **ARCHITECTURE.md**: обновлена навигационная структура и слои приложения.
+
 ### Changed
 
 - **Расширен диапазон детекции BPM 170–230 → 155–230** (Phase 8.2). Ранний hitech
@@ -361,3 +414,21 @@ iPhone 11, iOS 26.3.1, 2026-05-26. Треки hitech-psytrance 192/200/207 BPM, 
 - Half-time- и double-time-кандидаты никогда не скрываются — они остаются в списке кандидатов с relation/source-метаданными.
 
 [Unreleased]: https://github.com/filatelist-hitech/hitech-bpm-radar/compare/main...HEAD
+
+### Added
+
+- **Freemium monetization (Free / Pro)** — двухуровневая модель с RevenueCat IAP.
+  - FFI: `hitech_bpm_engine_new_with_min_bpm(float)` — Free 170–230, Pro 155–230.
+  - `lib/monetization/`: `PurchasesGateway`, `RevenueCatGateway`, `ProStatusService`,
+    `FeatureFlags`, `PaywallScreen` (сравнение Free/Pro, Lifetime $4.99, Annual $3.99/yr,
+    Restore, «Скоро» виджет).
+  - `lib/history/`: `BpmHistory`, `SessionHistoryController` (~1 Hz даунсэмплер),
+    `HistoryScreen` (Free: 30 сек cap + upgrade баннер; Pro: 24 ч + экспорт).
+  - `lib/export/`: `buildCsv`/`buildJson` (чистые билдеры), `exportCsv`/`exportJson`
+    (share_plus + path_provider).
+  - `main.dart`: ProStatusService init через `--dart-define`, ListenableBuilder для
+    tier-reactive CaptureBridge (смена minBpm без перезапуска).
+  - `main_web.dart`: web-safe — без revenuecat-зависимостей, fixed `isPro: false`.
+  - `config.dart.template` + `.gitignore` для `config.dart`.
+  - Тесты: feature_flags, pro_status_service, paywall_screen, bpm_history,
+    bpm_exporter, widget_test (debug-gate, PRO badge).
