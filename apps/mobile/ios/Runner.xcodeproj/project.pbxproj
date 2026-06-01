@@ -18,7 +18,7 @@
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
-		E3973F992FC5ED78000D59A1 /* libhitech_bpm_ffi.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E3973F982FC5ED78000D59A1 /* libhitech_bpm_ffi.a */; };
+		/* libhitech_bpm_ffi.a linked via -force_load in OTHER_LDFLAGS (platform-conditional) */
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,7 +69,7 @@
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BF2F1A590CDA5A289B7309F5 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		BFE38C6D393A25049E5A99A9 /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
-		E3973F982FC5ED78000D59A1 /* libhitech_bpm_ffi.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libhitech_bpm_ffi.a; path = Frameworks/libhitech_bpm_ffi.a; sourceTree = "<group>"; };
+		/* libhitech_bpm_ffi.a: platform-specific libs in Frameworks/iphoneos/ and Frameworks/iphonesimulator/ */
 		F12F8DC66CCD1AB01B666B91 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -78,7 +78,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E3973F992FC5ED78000D59A1 /* libhitech_bpm_ffi.a in Frameworks */,
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
 				02D431D1DE0CBB347992A3FE /* Pods_Runner.framework in Frameworks */,
 			);
@@ -169,7 +168,6 @@
 		E3973F972FC5ED78000D59A1 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				E3973F982FC5ED78000D59A1 /* libhitech_bpm_ffi.a */,
 				776E34F182A653A37DD3150E /* Pods_Runner.framework */,
 				F12F8DC66CCD1AB01B666B91 /* Pods_RunnerTests.framework */,
 			);
@@ -499,11 +497,12 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
+					"$(PROJECT_DIR)/Frameworks/$(PLATFORM_NAME)",
 					"$(PROJECT_DIR)/Frameworks",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-force_load $(PROJECT_DIR)/Frameworks/libhitech_bpm_ffi.a",
+					"-force_load $(PROJECT_DIR)/Frameworks/$(PLATFORM_NAME)/libhitech_bpm_ffi.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.hitech.bpmradar.filatelist;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -690,11 +689,12 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
+					"$(PROJECT_DIR)/Frameworks/$(PLATFORM_NAME)",
 					"$(PROJECT_DIR)/Frameworks",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-force_load $(PROJECT_DIR)/Frameworks/libhitech_bpm_ffi.a",
+					"-force_load $(PROJECT_DIR)/Frameworks/$(PLATFORM_NAME)/libhitech_bpm_ffi.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.hitech.bpmradar.filatelist;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -722,11 +722,12 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
+					"$(PROJECT_DIR)/Frameworks/$(PLATFORM_NAME)",
 					"$(PROJECT_DIR)/Frameworks",
 				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-force_load $(PROJECT_DIR)/Frameworks/libhitech_bpm_ffi.a",
+					"-force_load $(PROJECT_DIR)/Frameworks/$(PLATFORM_NAME)/libhitech_bpm_ffi.a",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.hitech.bpmradar.filatelist;
 				PRODUCT_NAME = "$(TARGET_NAME)";
