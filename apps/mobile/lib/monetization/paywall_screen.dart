@@ -1,7 +1,8 @@
 // Экран Paywall — Free vs Pro сравнение и покупка.
 //
 // Показывает таблицу сравнения Free/Pro, кнопки покупки (Lifetime $4.99,
-// Annual $3.99/yr), кнопку Restore, и плитку lock-screen-виджета "Скоро".
+// Annual $3.99/yr + 14 дней бесплатно), кнопку Restore.
+// v2: добавлены строки coming-soon (Key+Camelot, Energy, Watch, Widget).
 // Стилизован через AppTheme (accent #00E5CC, bg #07070F, mono).
 
 import 'package:flutter/material.dart';
@@ -43,11 +44,7 @@ class PaywallScreen extends StatelessWidget {
                 onTap: () => _purchaseLifetime(context),
               ),
               const SizedBox(height: 12),
-              _buildPurchaseButton(
-                context,
-                label: 'Annual — \$3.99/yr',
-                onTap: () => _purchaseAnnual(context),
-              ),
+              _buildAnnualButton(context),
               const SizedBox(height: 24),
 
               // Restore button
@@ -58,10 +55,6 @@ class PaywallScreen extends StatelessWidget {
                   style: AppTheme.mono(fontSize: 13, color: AppTheme.textSecondary),
                 ),
               ),
-              const SizedBox(height: 32),
-
-              // Lock-screen widget "Скоро" tile
-              _buildWidgetTile(),
             ],
           ),
         ),
@@ -80,11 +73,21 @@ class PaywallScreen extends StatelessWidget {
         children: [
           _buildComparisonRow('BPM Range', '170–230', '155–230'),
           const Divider(color: AppTheme.surfaceHigh, height: 24),
+          _buildComparisonRow('Multi-Genre', '3 жанра', '7 + Custom'),
+          const Divider(color: AppTheme.surfaceHigh, height: 24),
           _buildComparisonRow('Debug Screen', '—', '✓'),
           const Divider(color: AppTheme.surfaceHigh, height: 24),
-          _buildComparisonRow('History', '30 sec', 'Unlimited'),
+          _buildComparisonRow('History', '30 сек', 'Unlimited'),
+          const Divider(color: AppTheme.surfaceHigh, height: 24),
+          _buildComparisonRow('Setlist Tracker', '—', '✓'),
           const Divider(color: AppTheme.surfaceHigh, height: 24),
           _buildComparisonRow('Export CSV/JSON', '—', '✓'),
+          const Divider(color: AppTheme.surfaceHigh, height: 24),
+          _buildComparisonRow('Key + Camelot', '—', 'Скоро'),
+          const Divider(color: AppTheme.surfaceHigh, height: 24),
+          _buildComparisonRow('Energy Level', '—', 'Скоро'),
+          const Divider(color: AppTheme.surfaceHigh, height: 24),
+          _buildComparisonRow('Apple Watch', '—', 'Скоро'),
           const Divider(color: AppTheme.surfaceHigh, height: 24),
           _buildComparisonRow('Lock-screen Widget', '—', 'Скоро'),
         ],
@@ -147,34 +150,45 @@ class PaywallScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildWidgetTile() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          const Icon(Icons.widgets_outlined, color: AppTheme.textSecondary, size: 32),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Lock-screen Widget',
-                  style: AppTheme.mono(fontSize: 14, color: AppTheme.textPrimary),
+  Widget _buildAnnualButton(BuildContext context) {
+    return Material(
+      color: AppTheme.accent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: () => _purchaseAnnual(context),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Annual — \$3.99/yr',
+                style: AppTheme.mono(
+                  fontSize: 15,
+                  color: AppTheme.background,
+                  weight: FontWeight.w600,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Скоро · iOS 16+ и Android',
-                  style: AppTheme.mono(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.background.withAlpha(40),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-              ],
-            ),
+                child: Text(
+                  '14 дней бесплатно',
+                  style: AppTheme.mono(
+                    fontSize: 11,
+                    color: AppTheme.background,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

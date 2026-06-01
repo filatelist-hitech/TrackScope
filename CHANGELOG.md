@@ -6,6 +6,30 @@
 
 ## [Unreleased]
 
+### Added — v2 Roadmap Scaffolding (2026-06-01)
+
+- **`docs/ROADMAP_V2.md`** — полный v2 roadmap: Vision, Competitive Positioning (table vs liveBPM/MixedInKey/Tunebat/KeyMatch), Phase 1 (Quick Wins), Phase 2 (Harmonic Analysis), Phase 3 (Intelligence), Metrics & Success Criteria, What We Are NOT Building.
+- **`docs/adr/001-key-detection-approach.md`** — ADR: HPCP + Krumhansl-Schmuckler в Rust vs Essentia FFI vs TFLite; принято Option A.
+- **`docs/adr/002-energy-analysis.md`** — ADR: RMS + spectral flux + onset density → 1–10.
+- **`docs/adr/003-multi-genre-config.md`** — ADR: `GenrePreset` enum через существующий `min_bpm` FFI knob.
+- **`docs/adr/004-setlist-tracker-architecture.md`** — ADR: in-memory `SetlistService` + subscription к `CaptureBridge.results`.
+- **`core/dsp/src/genre_preset.rs`** — `GenrePreset` enum: 7 пресетов (HitechPsy 155–230, Psytrance 130–160, Darkpsy 145–180, DrumAndBass 160–185, Techno 125–145, Hardstyle 138–160, Hardcore 155–185, Custom [Pro]). Нормализационные пороги per-genre. 7 Rust-тестов PASS.
+- **`core/dsp/src/key_analyzer.rs`** — Phase 2 skeleton: `KeyAnalyzer`, `MusicalKey` (12 нот), `KeyMode`, `CamelotKey`, `KeyResult`. `todo!("Phase 2")` на всех методах. 3 Rust-теста (camelot label, default, serialization) PASS.
+- **`core/dsp/src/energy_analyzer.rs`** — Phase 2 skeleton: `EnergyAnalyzer`, `EnergyResult { level: u8, rms_dbfs, spectral_flux, onset_density_hz }`. 2 Rust-теста PASS.
+- **`DspResult`** расширен: `genre_preset: GenrePreset` (сериализуется в JSON), `key_result: Option<KeyResult>` (None в Phase 1, skip_serializing_if = None), `energy_result: Option<EnergyResult>` (None в Phase 1). Обратно совместимо — все 84 Rust-теста PASS.
+- **`apps/mobile/lib/features/tap_tempo/tap_tempo_controller.dart`** — `TapTempoController` (ChangeNotifier): последние 8 тапов, окно 3 сек, BPM = 60000/avg. Free tier.
+- **`apps/mobile/lib/features/setlist/setlist_entry.dart`** — `SetlistEntry`: timestamp + BPM + lockState + confidence + inputLevelDbfs. `toJson()` + `toCsvRow()`.
+- **`apps/mobile/lib/features/setlist/setlist_service.dart`** — `SetlistService` (ChangeNotifier): запись только STABLE + ненулевой BPM, дедупликация (delta < 0.5 BPM AND < 5 сек), `exportJson()` / `exportCsv()`. Pro-only (gate на уровне UI).
+- **`apps/mobile/test/features/tap_tempo/tap_tempo_controller_test.dart`** — 6 unit-тестов: single tap null, 4 taps ~200 BPM, пауза > 3 сек сброс, > 8 тапов trim, reset, two taps. PASS.
+- **`apps/mobile/test/features/setlist/setlist_service_test.dart`** — 9 unit-тестов: recording gate, STABLE gate, null BPM gate, дедупликация, delta > 0.5 pass, stopRecording, exportJson/Csv структура, clear, averageBpm. PASS.
+
+### Changed — v2 Paywall 2.0 (2026-06-01)
+
+- **`apps/mobile/lib/monetization/paywall_screen.dart`** — Таблица сравнения расширена с 5 до 10 строк: добавлены Multi-Genre (3 жанра Free / 7+Custom Pro), Setlist Tracker, Key + Camelot (Скоро), Energy Level (Скоро), Apple Watch (Скоро). `_buildWidgetTile()` удалён (заменён строкой в таблице). Annual-кнопка переработана: `Column` с лейблом + «14 дней бесплатно» badge. Lock-screen Widget теперь строка таблицы (Скоро).
+- **`apps/mobile/lib/monetization/feature_flags.dart`** — без изменений (P1.2 genre picker — бэклог Phase 1 UI).
+- **`apps/mobile/test/monetization/paywall_screen_test.dart`** — обновлён: проверяет все 10 строк, 4× «Скоро», «14 дней бесплатно» badge, Multi-Genre и Setlist строки.
+- **`docs/ARCHITECTURE.md`** — добавлена секция «v2 компоненты (Phase 1 scaffolding)».
+
 ### Changed
 
 - **Расширен диапазон детекции BPM 170–230 → 155–230** (Phase 8.2). Ранний hitech

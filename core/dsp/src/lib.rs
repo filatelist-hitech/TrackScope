@@ -4,6 +4,14 @@
 //! гейтов качества сигнала и hitech-нормализации кандидатов. Realtime-детекция
 //! онсетов и оценка кандидатов заполнят эту границу в Phase 2.
 
+pub mod energy_analyzer;
+pub mod genre_preset;
+pub mod key_analyzer;
+
+pub use energy_analyzer::EnergyResult;
+pub use genre_preset::GenrePreset;
+pub use key_analyzer::KeyResult;
+
 use std::collections::VecDeque;
 
 use serde::Serialize;
@@ -142,6 +150,15 @@ pub struct DspResult {
     pub signal_quality: SignalQuality,
     pub candidates: Vec<TempoCandidate>,
     pub timing: DspTiming,
+    /// Жанровый пресет, использованный при анализе. Default = HitechPsy.
+    /// Присутствует в JSON для диагностики; Dart-парсер игнорирует неизвестные поля.
+    pub genre_preset: GenrePreset,
+    /// Результат определения тональности. None в Phase 1 (Phase 2 skeleton).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_result: Option<KeyResult>,
+    /// Результат анализа энергии 1–10. None в Phase 1 (Phase 2 skeleton).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub energy_result: Option<EnergyResult>,
 }
 
 /// Скользящее состояние онсетов, поддерживаемое `DspEngine::push_samples`.
@@ -815,6 +832,9 @@ fn analyze_from_envelope(
         signal_quality,
         candidates,
         timing,
+        genre_preset: GenrePreset::default(),
+        key_result: None,
+        energy_result: None,
     }
 }
 
@@ -872,6 +892,9 @@ pub fn analyze_candidates(
             hop_time_sec: 0.0,
             first_lock_time_sec: primary_bpm.map(|_| analysis_time_sec.min(config.lock_min_seconds)),
         },
+        genre_preset: GenrePreset::default(),
+        key_result: None,
+        energy_result: None,
     }
 }
 
@@ -1484,6 +1507,9 @@ fn empty_result(
             hop_time_sec: 0.0,
             first_lock_time_sec: None,
         },
+        genre_preset: GenrePreset::default(),
+        key_result: None,
+        energy_result: None,
     }
 }
 
