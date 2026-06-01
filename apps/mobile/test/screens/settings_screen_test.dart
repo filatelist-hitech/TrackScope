@@ -85,10 +85,13 @@ void main() {
 
     testWidgets('tapping Сбросить данные shows confirmation dialog', (tester) async {
       await tester.pumpWidget(makeScreen());
+      // Scroll with large step + ensureVisible so element is fully in viewport.
       await tester.scrollUntilVisible(
-        find.text('Сбросить данные'), 80,
+        find.text('Сбросить данные'), 120,
         scrollable: find.byType(Scrollable),
       );
+      await tester.ensureVisible(find.text('Сбросить данные'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Сбросить данные'));
       await tester.pumpAndSettle();
       expect(find.text('Сбросить данные?'), findsOneWidget);
@@ -97,9 +100,11 @@ void main() {
     testWidgets('tapping Отмена dismisses dialog', (tester) async {
       await tester.pumpWidget(makeScreen());
       await tester.scrollUntilVisible(
-        find.text('Сбросить данные'), 80,
+        find.text('Сбросить данные'), 120,
         scrollable: find.byType(Scrollable),
       );
+      await tester.ensureVisible(find.text('Сбросить данные'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Сбросить данные'));
       await tester.pumpAndSettle();
       // Use byWidgetPredicate to find Отмена in dialog

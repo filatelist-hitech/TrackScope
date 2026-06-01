@@ -218,9 +218,7 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
       child: Text(
         title,
-        style: AppTextStyles.mono(
-            7, FontWeight.w400, AppColors.textMuted,
-            letterSpacing: 0.14 * 7),
+        style: AppTextStyles.sectionLabel,
       ),
     );
   }
@@ -277,7 +275,7 @@ class _ToggleRow extends StatelessWidget {
                   child: Text(
                     label,
                     style: AppTextStyles.mono(
-                        9, FontWeight.w400, AppColors.textSecondary),
+                        12, FontWeight.w400, AppColors.textSecondary),
                   ),
                 ),
                 Switch(
@@ -332,10 +330,10 @@ class _SliderRow extends StatelessWidget {
             children: [
               Text(label,
                   style: AppTextStyles.mono(
-                      9, FontWeight.w400, AppColors.textSecondary)),
+                      12, FontWeight.w400, AppColors.textSecondary)),
               Text(displayText,
                   style: AppTextStyles.mono(
-                      9, FontWeight.w400, AppColors.accent)),
+                      11, FontWeight.w400, AppColors.accent)),
             ],
           ),
         ),
@@ -392,7 +390,7 @@ class _SmoothingRow extends StatelessWidget {
                 child: Text(
                   'Сглаживание BPM',
                   style: AppTextStyles.mono(
-                      9, FontWeight.w400, AppColors.textSecondary),
+                      12, FontWeight.w400, AppColors.textSecondary),
                 ),
               ),
               // Compact segment selector
@@ -420,7 +418,7 @@ class _SmoothingRow extends StatelessWidget {
                       child: Text(
                         opt.label,
                         style: AppTextStyles.mono(
-                          7.5, FontWeight.w400,
+                          10, FontWeight.w400,
                           isOn ? AppColors.accent : AppColors.textMuted,
                         ),
                       ),
@@ -464,11 +462,11 @@ class _InfoRow extends StatelessWidget {
               Expanded(
                 child: Text(label,
                     style: AppTextStyles.mono(
-                        9, FontWeight.w400, AppColors.textSecondary)),
+                        12, FontWeight.w400, AppColors.textSecondary)),
               ),
               Text(value,
                   style: AppTextStyles.mono(
-                      8.5, FontWeight.w400, AppColors.textMuted)),
+                      11, FontWeight.w400, AppColors.textMuted)),
               if (badge != null) ...[
                 const SizedBox(width: 8),
                 Container(
