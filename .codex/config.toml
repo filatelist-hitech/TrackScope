@@ -10,3 +10,9 @@ sandbox_mode = "workspace-write"
 max_threads = 6
 max_depth = 1
 job_max_runtime_seconds = 1800
+
+[env]
+NODE_BINARY = "/opt/homebrew/opt/nodejs/bin/node"
+CARGO_BINARY = "/opt/homebrew/opt/rust/bin/cargo"
+
+PATH = "/opt/homebrew/opt/nodejs/bin:/opt/homebrew/opt/rust/bin:${PATH}"

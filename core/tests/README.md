@@ -1,17 +1,19 @@
 # core/tests
 
-Deterministic DSP tests and synthetic fixture expectations live here.
+Детерминированные DSP-тесты и ожидаемые результаты по синтетическим фикстурам.
 
-Required first tests:
+Обязательный первый набор тестов:
 
-- 170 BPM synthetic
-- 180 BPM synthetic
-- 190 BPM synthetic
-- 200 BPM synthetic
-- 220 BPM synthetic
-- 100 BPM half-time trap
-- 400 BPM double-time trap
-- silence
-- noise-only
-- clipped input
-- breakdown / no-kick section
+- синтетика 170 BPM;
+- синтетика 180 BPM;
+- синтетика 190 BPM;
+- синтетика 200 BPM;
+- синтетика 220 BPM;
+- half-time-ловушка 100 BPM;
+- double-time-ловушка 400 BPM;
+- тишина;
+- шум-без-сигнала;
+- клиппирующий вход;
+- брейкдаун / без kick-секции;
+- симуляция плотного hitech-баса;
+- симуляция нестабильной клубной записи.

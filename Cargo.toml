@@ -1,0 +1,12 @@
+[workspace]
+members = [
+    "core/dsp",
+    "core/ffi",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "UNLICENSED"
+repository = "hitech-bpm-radar"
+rust-version = "1.75"

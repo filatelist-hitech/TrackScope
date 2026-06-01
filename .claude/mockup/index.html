@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390,initial-scale=1">
+<title>HITECH BPM RADAR — UI Mockup</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:390px;height:844px;background:#07070F;font-family:'JetBrains Mono','SF Mono',monospace;overflow:hidden;color:#F0F0FF}
+.bar{display:flex;align-items:center;justify-content:space-between;height:52px;padding:0 16px;border-bottom:.5px solid rgba(255,255,255,.06)}
+.title{font-size:11px;letter-spacing:2.5px;color:#8888AA}
+.ico{font-size:18px;color:#44445A}
+.wrap{display:flex;flex-direction:column;height:792px}
+
+/* OSC panel */
+.osc{flex:0 0 238px;position:relative;background:#07070F}
+.osc canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+
+/* SPEC panel */
+.spec{flex:0 0 185px;position:relative;background:#07070F;border-top:.5px solid rgba(255,255,255,.05)}
+.spec canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+
+.plabel{position:absolute;top:6px;left:8px;font-size:7px;letter-spacing:1.5px;color:rgba(255,255,255,.22);pointer-events:none;z-index:2}
+
+/* Card */
+.card-wrap{flex:0 0 369px;padding:10px 12px 12px}
+.card{height:100%;background:rgba(255,255,255,.04);border:.5px solid rgba(255,255,255,.09);border-radius:16px;padding:14px 16px 12px;display:flex;flex-direction:column;gap:10px}
+.brow{display:flex;align-items:flex-end;justify-content:space-between}
+.bpm{font-size:52px;font-weight:600;line-height:1;letter-spacing:-1px}
+.unit{font-size:14px;color:#8888AA;margin-left:4px;letter-spacing:1px}
+.badge{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.5px;align-self:flex-end;margin-bottom:6px}
+.bl{background:rgba(255,179,0,.18);color:#FFB300;border:.5px solid rgba(255,179,0,.3)}
+.bs{background:rgba(0,200,83,.18);color:#00C853;border:.5px solid rgba(0,200,83,.3)}
+.crow{display:flex;align-items:center;gap:10px}
+.clbl{font-size:9px;color:#44445A;letter-spacing:1px;width:28px}
+.ctrk{flex:1;height:3px;background:rgba(255,255,255,.07);border-radius:2px}
+.cfil{height:100%;background:#00E5CC;border-radius:2px;width:46%}
+.cval{font-size:10px;color:#00E5CC;width:32px;text-align:right}
+.divl{height:.5px;background:rgba(255,255,255,.06);margin:2px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}
+.cell{display:flex;flex-direction:column;gap:2px}
+.cl{font-size:8px;color:#44445A;letter-spacing:1px;text-transform:uppercase}
+.cv{font-size:13px}
+.acc{color:#00E5CC}
+</style>
+</head>
+<body>
+<div class="bar"><span class="title">HITECH BPM RADAR</span><span class="ico">&#9881;</span></div>
+<div class="wrap">
+  <div class="osc" id="oscP"><canvas id="oscC"></canvas><span class="plabel">WAVEFORM</span></div>
+  <div class="spec" id="specP"><canvas id="specC"></canvas><span class="plabel">LIVE SPECTRUM</span></div>
+  <div class="card-wrap"><div class="card">
+    <div class="brow">
+      <div class="bpm" id="bpmN">187.3<span class="unit">BPM</span></div>
+      <div class="badge bl" id="bdg">захват</div>
+    </div>
+    <div class="crow">
+      <span class="clbl">CONF</span>
+      <div class="ctrk"><div class="cfil" id="cfil"></div></div>
+      <span class="cval" id="cval">46%</span>
+    </div>
+    <div class="divl"></div>
+    <div class="grid">
+      <div class="cell"><span class="cl">Уровень входа</span><span class="cv" id="dbfs">-15.2 dBFS</span></div>
+      <div class="cell"><span class="cl">Шум</span><span class="cv">средний</span></div>
+      <div class="cell"><span class="cl">Лучший кандидат</span><span class="cv acc">187.3 main</span></div>
+      <div class="cell"><span class="cl">x1/2 / x2</span><span class="cv">93.6 / -</span></div>
+    </div>
+  </div></div>
+</div>
+<script>
+var oscP  = document.getElementById('oscP');
+var specP = document.getElementById('specP');
+var oscC  = document.getElementById('oscC');
+var specC = document.getElementById('specC');
+
+var OW = 390, OH = 238, SW = 390, SH = 185;
+
+oscC.width  = OW; oscC.height = OH;
+specC.width = SW; specC.height = SH;
+
+var oCx = oscC.getContext('2d');
+var sCx = specC.getContext('2d');
+
+// ------ OSC state ------
+var BPM = 187.3;
+var HOP = 60000 / BPM; // ~320 ms
+var oscBuf = [];
+for (var i = 0; i < OW; i++) oscBuf.push(0);
+var oscPos = 0;
+var tStart = Date.now();
+
+function oscSample(ms) {
+  var beat = (ms % HOP) / HOP;
+  var kick = Math.exp(-beat * 14) * Math.sin(beat * Math.PI * 18) * 0.75;
+  var bass = Math.exp(-beat * 3) * Math.sin(2 * Math.PI * ms / 1000 * 65) * 0.22;
+  var hat  = beat < 0.06 ? (Math.random() - 0.5) * 0.12 : 0;
+  var rumble = Math.sin(2 * Math.PI * ms / 1000 * 32) * 0.06;
+  return kick + bass + hat + rumble;
+}
+
+function drawOsc(ms) {
+  for (var s = 0; s < 5; s++) {
+    oscBuf[oscPos] = oscSample(ms + s);
+    oscPos = (oscPos + 1) % OW;
+  }
+
+  oCx.fillStyle = '#07070F';
+  oCx.fillRect(0, 0, OW, OH);
+
+  // grid
+  oCx.strokeStyle = 'rgba(255,255,255,0.04)';
+  oCx.lineWidth = 0.5;
+  for (var r = 1; r < 4; r++) {
+    oCx.beginPath(); oCx.moveTo(0, OH*r/4); oCx.lineTo(OW, OH*r/4); oCx.stroke();
+  }
+  for (var c = 1; c < 6; c++) {
+    oCx.beginPath(); oCx.moveTo(OW*c/6, 0); oCx.lineTo(OW*c/6, OH); oCx.stroke();
+  }
+  // centre reference
+  oCx.strokeStyle = 'rgba(0,229,204,0.07)';
+  oCx.lineWidth = 0.5;
+  oCx.beginPath(); oCx.moveTo(0, OH/2); oCx.lineTo(OW, OH/2); oCx.stroke();
+
+  // glow pass
+  oCx.save();
+  oCx.shadowColor = '#00E5CC';
+  oCx.shadowBlur = 9;
+  oCx.strokeStyle = 'rgba(0,229,204,0.4)';
+  oCx.lineWidth = 3;
+  oCx.beginPath();
+  for (var x = 0; x < OW; x++) {
+    var idx = (oscPos - OW + x + OW * 10) % OW;
+    var v = oscBuf[idx];
+    var y = OH/2 - v * OH * 0.40;
+    if (x === 0) oCx.moveTo(x, y); else oCx.lineTo(x, y);
+  }
+  oCx.stroke();
+  oCx.restore();
+
+  // crisp pass
+  oCx.strokeStyle = '#00E5CC';
+  oCx.lineWidth = 1.5;
+  oCx.beginPath();
+  for (var x = 0; x < OW; x++) {
+    var idx = (oscPos - OW + x + OW * 10) % OW;
+    var v = oscBuf[idx];
+    var y = OH/2 - v * OH * 0.40;
+    if (x === 0) oCx.moveTo(x, y); else oCx.lineTo(x, y);
+  }
+  oCx.stroke();
+
+  // now cursor
+  oCx.strokeStyle = 'rgba(0,229,204,0.45)';
+  oCx.lineWidth = 1;
+  oCx.setLineDash([3,4]);
+  oCx.beginPath(); oCx.moveTo(OW-1.5, 0); oCx.lineTo(OW-1.5, OH); oCx.stroke();
+  oCx.setLineDash([]);
+}
+
+// ------ SPEC state ------
+var BINS = 128;
+var specSmooth = new Array(BINS).fill(0);
+var peakHold   = new Array(BINS).fill(0);
+var peakCount  = new Array(BINS).fill(0);
+
+function specFrame(ms) {
+  var beat = (ms % HOP) / HOP;
+  var kick = Math.exp(-beat * 7);
+  var out = [];
+  for (var i = 0; i < BINS; i++) {
+    var f = i / BINS;
+    var bassE  = f < 0.10 ? kick * Math.exp(-Math.pow(f/0.04,2)) * 0.9 : 0;
+    var subE   = f < 0.07 ? 0.5 * Math.exp(-Math.pow(f/0.025,2)) : 0;
+    var midE   = 0.22 * Math.exp(-Math.pow((f-0.15)/0.07,2));
+    var hatE   = beat < 0.10 ? 0.28 * Math.exp(-Math.pow((f-0.67)/0.14,2)) : 0;
+    var noise  = (Math.random()*0.04) * Math.exp(-f*3);
+    out.push(Math.min(1, bassE+subE+midE+hatE+noise));
+  }
+  return out;
+}
+
+var MARG = 16;
+var drawSH = SH - MARG;
+
+function drawSpec(ms) {
+  var raw = specFrame(ms);
+  for (var i = 0; i < BINS; i++) {
+    specSmooth[i] += (raw[i] - specSmooth[i]) * 0.28;
+    if (specSmooth[i] >= peakHold[i]) {
+      peakHold[i] = specSmooth[i]; peakCount[i] = 28;
+    } else if (peakCount[i] > 0) {
+      peakCount[i]--;
+    } else {
+      peakHold[i] *= 0.91;
+    }
+  }
+
+  sCx.fillStyle = '#07070F';
+  sCx.fillRect(0, 0, SW, SH);
+
+  var barW = SW / BINS;
+
+  // build smooth curve points
+  var xs = [], ys = [];
+  for (var i = 0; i < BINS; i++) {
+    xs.push(i * barW + barW/2);
+    ys.push(drawSH * (1 - specSmooth[i]));
+  }
+
+  // gradient fill
+  sCx.beginPath();
+  sCx.moveTo(xs[0], ys[0]);
+  for (var k = 0; k < xs.length-1; k++) {
+    var mx = (xs[k]+xs[k+1])/2;
+    var my = (ys[k]+ys[k+1])/2;
+    sCx.quadraticCurveTo(xs[k], ys[k], mx, my);
+  }
+  sCx.lineTo(xs[xs.length-1], ys[ys.length-1]);
+  sCx.lineTo(SW, drawSH);
+  sCx.lineTo(0, drawSH);
+  sCx.closePath();
+  var grad = sCx.createLinearGradient(0, 0, 0, drawSH);
+  grad.addColorStop(0, 'rgba(0,229,204,0.50)');
+  grad.addColorStop(0.5, 'rgba(0,229,204,0.12)');
+  grad.addColorStop(1, 'rgba(0,229,204,0)');
+  sCx.fillStyle = grad;
+  sCx.fill();
+
+  // glow
+  sCx.beginPath();
+  sCx.moveTo(xs[0], ys[0]);
+  for (var k = 0; k < xs.length-1; k++) {
+    var mx = (xs[k]+xs[k+1])/2;
+    var my = (ys[k]+ys[k+1])/2;
+    sCx.quadraticCurveTo(xs[k], ys[k], mx, my);
+  }
+  sCx.lineTo(xs[xs.length-1], ys[ys.length-1]);
+  sCx.save();
+  sCx.shadowColor = '#00E5CC';
+  sCx.shadowBlur = 10;
+  sCx.strokeStyle = 'rgba(0,229,204,0.55)';
+  sCx.lineWidth = 2.5;
+  sCx.stroke();
+  sCx.restore();
+
+  // crisp
+  sCx.beginPath();
+  sCx.moveTo(xs[0], ys[0]);
+  for (var k = 0; k < xs.length-1; k++) {
+    var mx = (xs[k]+xs[k+1])/2;
+    var my = (ys[k]+ys[k+1])/2;
+    sCx.quadraticCurveTo(xs[k], ys[k], mx, my);
+  }
+  sCx.lineTo(xs[xs.length-1], ys[ys.length-1]);
+  sCx.strokeStyle = '#00E5CC';
+  sCx.lineWidth = 1.5;
+  sCx.stroke();
+
+  // peak ticks
+  for (var i = 0; i < BINS; i++) {
+    var ph = peakHold[i];
+    if (ph < 0.04) continue;
+    var px = i * barW;
+    var py = drawSH * (1 - ph);
+    var a = Math.min(1, ph * 0.85);
+    sCx.fillStyle = 'rgba(0,229,204,' + a + ')';
+    sCx.fillRect(px, py, barW - 0.5, 1.5);
+  }
+
+  // freq labels
+  var lbls = [{l:'50',x:0.06},{l:'200',x:0.19},{l:'1k',x:0.40},{l:'4k',x:0.62},{l:'16k',x:0.87}];
+  sCx.fillStyle = 'rgba(255,255,255,0.25)';
+  sCx.font = '8px monospace';
+  for (var j = 0; j < lbls.length; j++) {
+    var lx = lbls[j].x * SW;
+    sCx.fillText(lbls[j].l, lx - 6, SH - 2);
+    sCx.strokeStyle = 'rgba(255,255,255,0.04)';
+    sCx.lineWidth = 0.5;
+    sCx.beginPath(); sCx.moveTo(lx,0); sCx.lineTo(lx, drawSH); sCx.stroke();
+  }
+}
+
+// ------ Info ------
+var states = [
+  {lbl:'захват',  cls:'bl', conf:0.46, bpm:'187.3'},
+  {lbl:'стабильно', cls:'bs', conf:0.87, bpm:'187.3'},
+  {lbl:'нестабильно', cls:'bl', conf:0.55, bpm:'187.3'}
+];
+var si = 0, sTimer = 0, confS = 0.46;
+
+function updateInfo(ms) {
+  sTimer++;
+  if (sTimer > 220) { sTimer = 0; si = (si+1) % states.length; }
+  var s = states[si];
+  confS += (s.conf - confS) * 0.04;
+  var pct = Math.round(confS * 100);
+  document.getElementById('cfil').style.width = pct + '%';
+  document.getElementById('cval').textContent = pct + '%';
+  document.getElementById('bdg').textContent = s.lbl;
+  document.getElementById('bdg').className = 'badge ' + s.cls;
+  var jit = (Math.random()-0.5)*0.15;
+  var bpmEl = document.getElementById('bpmN');
+  if (s.cls === 'bs') {
+    bpmEl.innerHTML = (187.3+jit).toFixed(1) + '<span class="unit">BPM</span>';
+  } else {
+    bpmEl.innerHTML = '<span style="color:#44445A;font-size:40px">-</span><span class="unit">BPM</span>';
+  }
+  document.getElementById('dbfs').textContent = (-15.2 + (Math.random()-0.5)*0.3).toFixed(1) + ' dBFS';
+}
+
+// ------ Loop ------
+function tick() {
+  var ms = Date.now() - tStart;
+  drawOsc(ms);
+  drawSpec(ms);
+  updateInfo(ms);
+  setTimeout(tick, 40);
+}
+
+tick();
+</script>
+</body>
+</html>

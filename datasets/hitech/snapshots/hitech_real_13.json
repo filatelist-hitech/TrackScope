@@ -1,0 +1,383 @@
+{
+  "captured_at": "2026-05-26T20:05:56Z",
+  "category": "real",
+  "expected_bpm_hint": 200.0,
+  "fixture_sha256": "98dfd9e370772b5addb1eb1cdc25c6eec8aa842f9f7aec77cd81dbaabf807ad2",
+  "python": {
+    "candidates": [
+      {
+        "bpm": 192.436,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.313345,
+          "peak_prominence": 0.313345,
+          "recent_stability": 0.313345,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.313345,
+        "relation": "main",
+        "score": 0.313345,
+        "source_bpm": null,
+        "stability_score": 0.313345
+      },
+      {
+        "bpm": 192.436,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.313345,
+          "peak_prominence": 0.313345,
+          "recent_stability": 0.313345,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.313345,
+        "relation": "raw",
+        "score": 0.313345,
+        "source_bpm": null,
+        "stability_score": 0.313345
+      },
+      {
+        "bpm": 211.005,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.31792,
+          "peak_prominence": 0.311562,
+          "recent_stability": 0.31792,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.31792,
+        "relation": "normalized_from_double",
+        "score": 0.311562,
+        "source_bpm": 422.01,
+        "stability_score": 0.31792
+      },
+      {
+        "bpm": 197.168,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.310689,
+          "peak_prominence": 0.310689,
+          "recent_stability": 0.310689,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.310689,
+        "relation": "raw",
+        "score": 0.310689,
+        "source_bpm": null,
+        "stability_score": 0.310689
+      },
+      {
+        "bpm": 171.818,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.309232,
+          "peak_prominence": 0.309232,
+          "recent_stability": 0.309232,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.309232,
+        "relation": "raw",
+        "score": 0.309232,
+        "source_bpm": null,
+        "stability_score": 0.309232
+      },
+      {
+        "bpm": 218.678,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.315217,
+          "peak_prominence": 0.308913,
+          "recent_stability": 0.315217,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.315217,
+        "relation": "normalized_from_double",
+        "score": 0.308913,
+        "source_bpm": 437.355,
+        "stability_score": 0.315217
+      },
+      {
+        "bpm": 182.231,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.312973,
+          "peak_prominence": 0.306713,
+          "recent_stability": 0.312973,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.312973,
+        "relation": "normalized_from_double",
+        "score": 0.306713,
+        "source_bpm": 364.463,
+        "stability_score": 0.312973
+      },
+      {
+        "bpm": 187.926,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.311375,
+          "peak_prominence": 0.305148,
+          "recent_stability": 0.311375,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.311375,
+        "relation": "normalized_from_double",
+        "score": 0.305148,
+        "source_bpm": 375.852,
+        "stability_score": 0.311375
+      },
+      {
+        "bpm": 224.809,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.31096,
+          "peak_prominence": 0.304741,
+          "recent_stability": 0.31096,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.31096,
+        "relation": "normalized_from_half",
+        "score": 0.304741,
+        "source_bpm": 112.404,
+        "stability_score": 0.31096
+      },
+      {
+        "bpm": 194.774,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.309538,
+          "peak_prominence": 0.303348,
+          "recent_stability": 0.309538,
+          "signal_quality": 0.92
+        },
+        "range_score": 1.0,
+        "raw_score": 0.309538,
+        "relation": "normalized_from_half",
+        "score": 0.303348,
+        "source_bpm": 97.387,
+        "stability_score": 0.309538
+      }
+    ],
+    "confidence": 0.219,
+    "debug": {
+      "harmonic_ambiguity": 0.99431,
+      "onset_rate_hz": 26.541,
+      "onset_strength": 0.04149,
+      "stability_score": 0.313345,
+      "tempo_peak_prominence": 0.005119,
+      "warnings": [
+        "weak periodic onset structure"
+      ]
+    },
+    "lock_state": "NOISE_ONLY",
+    "primary_bpm": null,
+    "signal_quality": {
+      "breakdown_likely": false,
+      "clipped_frame_ratio": 0.0,
+      "clipping": false,
+      "input_level_dbfs": -22.584,
+      "noise_level": "medium",
+      "peak_dbfs": -3.79,
+      "silence": false,
+      "snr_estimate_db": null
+    },
+    "timing": {
+      "analysis_time_sec": 30.0,
+      "first_lock_time_sec": null,
+      "hop_time_sec": 0.0025,
+      "window_time_sec": 30.0
+    }
+  },
+  "rust": {
+    "candidates": [
+      {
+        "bpm": 192.436,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.313346,
+          "peak_prominence": 0.313346,
+          "recent_stability": 0.313346,
+          "signal_quality": 0.805596
+        },
+        "range_score": 1.0,
+        "raw_score": 0.313346,
+        "relation": "main",
+        "score": 0.313346,
+        "source_bpm": null,
+        "stability_score": 0.313346
+      },
+      {
+        "bpm": 192.436,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.313346,
+          "peak_prominence": 0.313346,
+          "recent_stability": 0.313346,
+          "signal_quality": 0.805596
+        },
+        "range_score": 1.0,
+        "raw_score": 0.313346,
+        "relation": "raw",
+        "score": 0.313346,
+        "source_bpm": null,
+        "stability_score": 0.313346
+      },
+      {
+        "bpm": 211.005,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.31792,
+          "peak_prominence": 0.311562,
+          "recent_stability": 0.31792,
+          "signal_quality": 0.805596
+        },
+        "range_score": 1.0,
+        "raw_score": 0.31792,
+        "relation": "normalized_from_double",
+        "score": 0.311562,
+        "source_bpm": 422.01,
+        "stability_score": 0.31792
+      },
+      {
+        "bpm": 197.168,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.310689,
+          "peak_prominence": 0.310689,
+          "recent_stability": 0.310689,
+          "signal_quality": 0.805596
+        },
+        "range_score": 1.0,
+        "raw_score": 0.310689,
+        "relation": "raw",
+        "score": 0.310689,
+        "source_bpm": null,
+        "stability_score": 0.310689
+      },
+      {
+        "bpm": 171.818,
+        "confidence_factors": {
+          "harmonic_support": 0.68,
+          "onset_clarity": 0.309232,
+          "peak_prominence": 0.309232,
+          "recent_stability": 0.309232,
+          "signal_quality": 0.805596
+        },
+        "range_score": 1.0,
+        "raw_score": 0.309232,
+        "relation": "raw",
+        "score": 0.309232,
+        "source_bpm": null,
+        "stability_score": 0.309232
+      },
+      {
+        "bpm": 218.678,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.315218,
+          "peak_prominence": 0.308913,
+          "recent_stability": 0.315218,
+          "signal_quality": 0.805596
+        },
+        "range_score": 1.0,
+        "raw_score": 0.315218,
+        "relation": "normalized_from_double",
+        "score": 0.308913,
+        "source_bpm": 437.355,
+        "stability_score": 0.315218
+      },
+      {
+        "bpm": 182.231,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.312973,
+          "peak_prominence": 0.306713,
+          "recent_stability": 0.312973,
+          "signal_quality": 0.805596
+        },
+        "range_score": 1.0,
+        "raw_score": 0.312973,
+        "relation": "normalized_from_double",
+        "score": 0.306713,
+        "source_bpm": 364.463,
+        "stability_score": 0.312973
+      },
+      {
+        "bpm": 187.926,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.311375,
+          "peak_prominence": 0.305148,
+          "recent_stability": 0.311375,
+          "signal_quality": 0.805596
+        },
+        "range_score": 1.0,
+        "raw_score": 0.311375,
+        "relation": "normalized_from_double",
+        "score": 0.305148,
+        "source_bpm": 375.852,
+        "stability_score": 0.311375
+      },
+      {
+        "bpm": 224.809,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.31096,
+          "peak_prominence": 0.304741,
+          "recent_stability": 0.31096,
+          "signal_quality": 0.805596
+        },
+        "range_score": 1.0,
+        "raw_score": 0.31096,
+        "relation": "normalized_from_half",
+        "score": 0.304741,
+        "source_bpm": 112.404,
+        "stability_score": 0.31096
+      },
+      {
+        "bpm": 194.774,
+        "confidence_factors": {
+          "harmonic_support": 0.82,
+          "onset_clarity": 0.309539,
+          "peak_prominence": 0.303348,
+          "recent_stability": 0.309539,
+          "signal_quality": 0.805596
+        },
+        "range_score": 1.0,
+        "raw_score": 0.309539,
+        "relation": "normalized_from_half",
+        "score": 0.303348,
+        "source_bpm": 97.387,
+        "stability_score": 0.309539
+      }
+    ],
+    "confidence": 0.212,
+    "lock_state": "NOISE_ONLY",
+    "primary_bpm": null,
+    "signal_quality": {
+      "breakdown_likely": false,
+      "clipped_frame_ratio": 0.0,
+      "clipping": false,
+      "input_level_dbfs": -22.584,
+      "noise_level": "medium",
+      "peak_dbfs": -3.79,
+      "silence": false,
+      "snr_estimate_db": 13.057
+    },
+    "timing": {
+      "analysis_time_sec": 30.0,
+      "first_lock_time_sec": null,
+      "hop_time_sec": 0.002494331,
+      "window_time_sec": 30.0
+    }
+  },
+  "source_file": "13 Unknown Artist - Various - Chemical Monsters 2 - 07 Mimic Vat - Pairidaeza 200.wav"
+}

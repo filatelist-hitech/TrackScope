@@ -1,7 +1,12 @@
 # core/dsp
 
-Pure DSP boundary for BPM detection.
+Граница Rust DSP — источник истины для определения BPM, плюс временный Python/Node-офлайн-прототип, оставленный для регрессионного покрытия Phase 1.
 
-This module will own the engine contract, preprocessing, onset detection, tempo candidate estimation, hitech normalization, confidence scoring, and lock state machine.
+Этот модуль владеет контрактом движка, препроцессингом, детекцией онсетов, оценкой BPM-кандидатов, hitech-нормализацией, скорингом уверенности и автоматом состояния захвата.
 
-Do not add UI code, microphone permission code, file decoding, or demo BPM values here.
+Текущее состояние:
+
+- Rust-крейт определяет `DspResult`, `TempoCandidate`, `SignalQuality`, состояния захвата, hitech-нормализацию, PCM-анализ онсетов, оценку темпа автокорреляцией, гейты уверенности и границу потокового движка.
+- Python/Node-код остаётся как детерминированное офлайн-прототипное покрытие, пока подтверждается parity с Rust.
+
+Не добавляйте сюда UI-код, код разрешений микрофона, декодинг файлов и демо-значения BPM.
