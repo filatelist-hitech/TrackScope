@@ -66,7 +66,7 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 - Half-time / double-time кандидаты всегда видны; никогда не скрываются
 - Anti-fake: нет хардкоженых BPM, нет фейкового пульса по таймеру
 - SNR-оценка и гейтинг качества сигнала
-- 43 Rust-теста + 21 Python-тест + 126 Flutter-тестов, 21 реальная hitech-фикстура (180–210 BPM)
+- 75 Rust-тестов + 21 Python-тест + 132 Flutter-теста, 21 реальная hitech-фикстура (180–210 BPM)
 
 ## Design v2
 
@@ -75,9 +75,10 @@ Design System v2 (Phase 11) обновляет весь Flutter UI:
 - **Tab Bar**: три вкладки Радар / История / Настройки через `IndexedStack` (CaptureBridge не пересоздаётся).
 - **BPM Hero**: 72 px IBM Plex Mono, три режима (idle → «— — —» dim, detecting → accent, unstable → amber).
 - **ConfidenceBar**: 7 px, цвет по порогу (red < 30 %, yellow 30–70 %, teal > 70 %).
-- **Signal Analyzer**: Pro-экран с BPM-кандидатами, качеством сигнала, таймингами.
+- **Signal Analyzer**: Pro-экран с BPM-кандидатами, качеством сигнала, таймингами и реальными DspDebug-метриками (onset rate, peak prominence, harmonic ambiguity, stability score, warnings).
 - **Settings**: 5 секций, SharedPreferences, Keep Screen On (WakelockPlus).
 - **Paywall v2**: value headline, column headers FREE/PRO, CTA-иерархия, Roadmap card.
+- **DspDebug в Rust `DspResult`**: диагностические поля алгоритма (`onset_rate_hz`, `onset_strength`, `tempo_peak_prominence`, `harmonic_ambiguity`, `stability_score`, `warnings`); присутствует в каждом снапшоте, без дополнительной CPU-стоимости.
 
 ## Текущая фаза
 

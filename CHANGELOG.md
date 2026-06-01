@@ -22,7 +22,8 @@
   accent/textMuted цветами, подписи «РАДАР / ИСТОРИЯ / НАСТРОЙКИ».
 - **SignalAnalyzerScreen** (`lib/screens/signal_analyzer_screen.dart`): Pro-only,
   показывает BPM-кандидатов со score bar + качество сигнала + тайминги.
-  DSP Algorithm Metrics — placeholder «В разработке» (DspDebug не в Dart-контракте).
+  Секция «Метрики алгоритма» — реальные DspDebug-данные (onset rate, onset strength,
+  peak prominence, harmonic ambiguity, stability score, SNR, warnings).
 - **SettingsScreen** (`lib/screens/settings_screen.dart`): 5 секций, backed
   by `AppSettings` (SharedPreferences). Keep Screen On → WakelockPlus.
 - **AppSettings** (`lib/settings/app_settings.dart`): ChangeNotifier singleton,
@@ -30,6 +31,22 @@
 - **Design tokens v2** (`lib/theme/app_colors.dart`, `lib/theme/app_text_styles.dart`):
   IBM Plex Mono, #050807 bg, #00DFB0 accent, confidence thresholds.
 - Зависимости: `shared_preferences ^2.3.0`, `wakelock_plus ^1.2.0`.
+
+### Added — DspDebug contract (Phase 11)
+
+- **DspDebug struct** в Rust `DspResult`: `onset_rate_hz`, `onset_strength`,
+  `tempo_peak_prominence`, `harmonic_ambiguity`, `stability_score`, `warnings[]`.
+  Populated в `analyze_from_envelope` без доп. CPU-стоимости — из уже вычисленных значений.
+  `empty_result()` и пути silence эмитят нулевой `DspDebug` (не `null`).
+- **DspDebug class** в Dart `dsp_result.dart`: `fromJson` с graceful defaults
+  (missing key → zero DspDebug). Backward-compatible с FFI без `debug`-ключа.
+- **Signal Analyzer** (`lib/screens/signal_analyzer_screen.dart`) показывает
+  реальные метрики алгоритма: onset rate, onset strength, peak prominence,
+  harmonic ambiguity, stability score, SNR, warnings. Placeholder «В разработке» удалён.
+- Тесты Rust: `debug_field_populated_on_stable_signal`,
+  `debug_serializes_to_json_with_debug_key`, `debug_empty_on_silence`
+  (в `core/dsp/tests/stability.rs`).
+- Тесты Dart: `test/dsp_debug_test.dart` (6 тестов: `fromJson`-парсинг, `DspResult.parse`).
 
 ### Changed — Design System v2 (Phase 11)
 

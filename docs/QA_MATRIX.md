@@ -260,8 +260,14 @@ real` = 0 (нет регрессий).
 - `widget_test.dart` (расширен) — все поля InfoCard из STABLE-снапшота: уровень
   входа (`-14.2 dBFS`), лучший кандидат (`200.0 BPM`), ×½/×2-ячейка (`100.0 / —`),
   клиппинг (`нет`), шум (`низкий`). Существующее покрытие (7 badge-состояний,
-  null→`—`, debug-навигация, permission-экран, debug-кандидаты) сохранено в
-  `widget_test.dart`. Всего 50 Flutter-тестов — PASS.
+  null→`—`, debug-навигация, permission-экран, debug-кандидаты) сохранено.
+- `test/dsp_debug_test.dart` (Phase 11) — 6 тестов: `DspDebug.fromJson`-парсинг
+  (штатный / missing key → zero / нулевой), `DspResult.parse` с `debug`-полем.
+- `test/screens/signal_analyzer_screen_test.dart` (Phase 11) — SignalAnalyzerScreen
+  рендерит реальные DspDebug-метрики (onset rate, peak prominence, harmonic
+  ambiguity, stability score, warnings).
+
+Всего **132 Flutter-теста** — PASS (Verified on 2026-06-01).
 
 Примечание: standalone-виджеты из исходного задания (`LockStateBadge`, `InfoCard`,
 `BpmDisplayWidget`, `MockDspEngine`) не существуют — реальный UI использует
