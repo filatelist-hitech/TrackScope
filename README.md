@@ -92,6 +92,23 @@ Rust-крейт в `core/dsp/` — продакшен-источник исти�
 состояния захвата на нативном Rust. `core/dsp/tempo.py` и `core/dsp/synthetic.py`
 остаются как читаемая алгоритмическая референс-реализация.
 
+### Быстрая сборка
+
+```sh
+# Android (Free APK + PRO APK):
+bash scripts/release.sh android
+
+# iOS PRO → на iPhone:
+bash scripts/release.sh ios-pro
+
+# Помощь:
+bash scripts/release.sh help
+```
+
+Полное руководство: [docs/BUILD_GUIDE.md](docs/BUILD_GUIDE.md)
+
+---
+
 ### Android APK (macOS, без физического устройства)
 
 Требования: Android Studio с NDK 27.x, rustup.
@@ -205,6 +222,7 @@ flutter run --release
 - [Ручной тест-чеклист (mobile)](docs/MANUAL_TEST_CHECKLIST.md)
 - [Релизный чеклист](docs/RELEASE_CHECKLIST.md)
 - [Android тест-план](docs/ANDROID_TEST_PLAN.md)
+- [Build Guide](docs/BUILD_GUIDE.md)
 - [Глоссарий терминов](docs/GLOSSARY.md)
 
 ## Работа с Claude Code
