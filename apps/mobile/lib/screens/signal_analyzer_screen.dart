@@ -311,6 +311,23 @@ class _MetricsGroup extends StatelessWidget {
         value: fluxPct / 100.0,
         pct: fluxPct,
         color: AppColors.yellow,
+        showDivider: true,
+      ),
+      // Harmonic ambiguity: 0.0 = clean, 1.0+ = ambiguous → amber when high
+      _MetricTextRow(
+        label: 'Harmonic Ambiguity',
+        value: debug.harmonicAmbiguity.toStringAsFixed(2),
+        valueColor: debug.harmonicAmbiguity > 0.5
+            ? AppColors.amberText
+            : AppColors.textPrimary,
+        showDivider: true,
+      ),
+      // Stability score: 0.0–1.0 → bar with accent colour
+      _MetricBarRow(
+        label: 'Stability',
+        value: debug.stabilityScore.clamp(0.0, 1.0),
+        pct: (debug.stabilityScore.clamp(0.0, 1.0) * 100).round(),
+        color: AppColors.accent,
         showDivider: quality.snrEstimateDb != null ||
             quality.inputLevelDbfs != null ||
             debug.warnings.isNotEmpty,
@@ -406,10 +423,12 @@ class _MetricTextRow extends StatelessWidget {
   const _MetricTextRow({
     required this.label,
     required this.value,
+    this.valueColor,
     this.showDivider = false,
   });
   final String label;
   final String value;
+  final Color? valueColor;
   final bool showDivider;
 
   @override
@@ -430,7 +449,8 @@ class _MetricTextRow extends StatelessWidget {
               Text(
                 value,
                 style: AppTextStyles.mono(
-                    9, FontWeight.w400, AppColors.textPrimary),
+                    9, FontWeight.w400,
+                    valueColor ?? AppColors.textPrimary),
               ),
             ],
           ),
