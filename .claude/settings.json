@@ -85,6 +85,10 @@
           {
             "type": "command",
             "command": "bash -c 'f=\"$CLAUDE_TOOL_INPUT_FILE_PATH\"; case \"$f\" in *.rs) /opt/homebrew/opt/rust/bin/cargo fmt --check -- \"$f\" || true ;; *.py) python3 -m py_compile \"$f\" 2>&1 || true ;; esac'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'f=\"$CLAUDE_TOOL_INPUT_FILE_PATH\"; case \"$f\" in *core/dsp/src/lib.rs|*core/dsp/src/bin*|*core/ffi/src*|*apps/mobile/lib/navigation*|*apps/mobile/lib/dsp*|*apps/mobile/lib/capture/capture_bridge*|*scripts/build_*) echo \"{\\\"hookSpecificOutput\\\":{\\\"additionalContext\\\":\\\"REMINDER: architecture-relevant file changed ($f) — update .claude/docs/project-map.md if module structure or public API changed\\\"}}\";; esac'"
           }
         ]
       }
