@@ -1,14 +1,14 @@
-// UI smoke tests (Phase 7 updated). The mic / FFI path is exercised by
+// UI smoke tests (Phase 11 updated). The mic / FFI path is exercised by
 // `dsp_engine_test.dart`; these tests pump synthetic `DspResult`
 // snapshots into the screens to assert wiring (StreamBuilder, lock
-// badge, candidate visibility) without needing a real mic or device.
+// chip, candidate visibility) without needing a real mic or device.
 //
-// Phase 7 changes:
-//   • CLIPPED_MIC badge label changed from 'перегруз микрофона' to 'перегруз'.
-//   • Two visualization panels ('Ожидание микрофона…') — assertion updated to
-//     findsWidgets.
-//   • Added smoke tests for all remaining badge states (UNSTABLE, BREAKDOWN,
-//     NOISE_ONLY, LOCKING).
+// Phase 11 design changes reflected here:
+//   • Russian badge labels replaced by IDLE / ACTIVE / UNSTABLE mode chips.
+//     Only UNSTABLE still shows "нестабильно" pill inside _AnimatedBpmDisplay.
+//   • InfoCard dropped УВЕРЕННОСТЬ and ×½/×2 cells (now 2×2 grid).
+//   • Debug/signal-analyzer button icon changed to Icons.settings_outlined.
+//   • Zone labels 'WAVEFORM' and 'LIVE SPECTRUM' added above viz panels.
 
 import 'dart:async';
 
@@ -176,7 +176,7 @@ void main() {
   });
 
   testWidgets(
-      'MainScreen renders primary_bpm and стабильно badge from STABLE snapshot',
+      'MainScreen renders primary_bpm and ACTIVE chip from STABLE snapshot',
       (tester) async {
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
@@ -194,9 +194,9 @@ void main() {
 
     // BPM displayed.
     expect(find.text('200.0'), findsOneWidget);
-    // Russian label for STABLE state.
-    expect(find.text('стабильно'), findsOneWidget);
-    // Confidence shown in both ConfidenceBar and УВЕРЕННОСТЬ cell (Design v2).
+    // Design v2: STABLE shows ACTIVE chip (not "стабильно" badge).
+    expect(find.text('ЗАХВАТ'), findsOneWidget);
+    // Confidence bar shows percentage.
     expect(find.textContaining('87%'), findsAtLeast(1));
   });
 
@@ -217,20 +217,24 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Metric labels.
-    expect(find.text('УВЕРЕННОСТЬ'), findsOneWidget);
-    expect(find.text('УРОВЕНЬ ВХОДА'), findsOneWidget);
-    expect(find.text('ЛУЧШИЙ КАНДИДАТ'), findsOneWidget);
+    // Zone labels (Phase 11 addition).
+    expect(find.text('WAVEFORM'), findsOneWidget);
+    expect(find.text('LIVE SPECTRUM'), findsOneWidget);
+
+    // InfoCard stat grid labels (mixed-case, no toUpperCase() in _StatCell).
+    expect(find.text('Уровень входа'), findsOneWidget);
+    expect(find.text('Лучший кандидат'), findsOneWidget);
+    expect(find.text('Клиппинг'), findsOneWidget);
+    // ×½ / ×2 cell restored — shows half/double candidates (never hidden).
     expect(find.text('×½ / ×2'), findsOneWidget);
-    expect(find.text('КЛИППИНГ'), findsOneWidget);
-    expect(find.text('ШУМ'), findsOneWidget);
+    // Уверенность cell still absent.
+    expect(find.text('Уверенность'), findsNothing);
 
     // Values.
     expect(find.text('-14.2 dBFS'), findsOneWidget); // input level
     expect(find.text('200.0 BPM'), findsOneWidget); // best (main) candidate
-    expect(find.text('100.0 / —'), findsOneWidget); // half / double cell
+    expect(find.text('100.0 / —'), findsOneWidget); // half=100, double=null
     expect(find.text('нет'), findsOneWidget); // clipping == false
-    expect(find.text('низкий'), findsOneWidget); // noise_level == 'low'
   });
 
   testWidgets('MainScreen shows поиск badge for SEARCHING snapshot',
@@ -249,10 +253,11 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // primary_bpm null → em-dash, never an invented number.
+    // primary_bpm null → em-dash placeholder, never an invented number.
     expect(find.text('—'), findsWidgets,
         reason: 'SEARCHING must render placeholder, never an invented BPM');
-    expect(find.text('поиск'), findsOneWidget);
+    // Phase 11: mode chips. SEARCHING → IDLE chip active.
+    expect(find.text('ПОИСК'), findsOneWidget);
   });
 
   testWidgets('MainScreen shows перегруз badge for CLIPPED_MIC',
@@ -271,10 +276,10 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Phase 7: badge label shortened to 'перегруз'.
-    expect(find.text('перегруз'), findsOneWidget);
-    // Clipping warning in table cell.
-    expect(find.textContaining('ПЕРЕГРУЗ'), findsOneWidget);
+    // Phase 11: no Russian badge; mode chip CLIPPED_MIC → IDLE active.
+    expect(find.text('ПОИСК'), findsOneWidget);
+    // Clipping value in InfoCard cell (lowercase with warning emoji).
+    expect(find.text('⚠ перегруз'), findsOneWidget);
     // BPM must be null, not a fake number.
     expect(find.text('—'), findsWidgets,
         reason: 'CLIPPED_MIC with null primary_bpm must show placeholder');
@@ -310,7 +315,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('брейк'), findsOneWidget);
+    // Phase 11: BREAKDOWN → IDLE chip active (no Russian badge).
+    expect(find.text('ПОИСК'), findsOneWidget);
   });
 
   testWidgets('MainScreen shows только шум badge for NOISE_ONLY', (tester) async {
@@ -324,7 +330,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('только шум'), findsOneWidget);
+    // Phase 11: NOISE_ONLY → IDLE chip active (no Russian badge).
+    expect(find.text('ПОИСК'), findsOneWidget);
   });
 
   testWidgets('MainScreen shows захват badge for LOCKING', (tester) async {
@@ -338,7 +345,8 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('захват'), findsOneWidget);
+    // Phase 11: LOCKING → ACTIVE chip active (no Russian badge).
+    expect(find.text('ЗАХВАТ'), findsOneWidget);
   });
 
   testWidgets('MainScreen surfaces capture errors from the error stream',
@@ -373,7 +381,7 @@ void main() {
     await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
     await tester.pump();
 
-    await tester.tap(find.byIcon(Icons.bug_report_outlined));
+    await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
 
     expect(find.text('stub-debug'), findsOneWidget);
@@ -473,7 +481,7 @@ void main() {
     ));
     await tester.pump();
 
-    await tester.tap(find.byIcon(Icons.bug_report_outlined));
+    await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pump();
 
     expect(paywallFeature, 'debug_screen');

@@ -46,9 +46,22 @@ class BpmSmoother {
         _confidenceAlpha = confidenceAlpha,
         _stableHysteresisFrames = stableHysteresisFrames;
 
-  final int _bpmWindowSize;
+  int _bpmWindowSize;
   final double _confidenceAlpha;
   final int _stableHysteresisFrames;
+
+  /// Update the median-window size at runtime (e.g. when AppSettings change).
+  /// If [value] is smaller than the current buffer, excess oldest entries are
+  /// removed immediately so the next smooth() uses the new size.
+  set windowSize(int value) {
+    assert(value >= 1);
+    _bpmWindowSize = value;
+    while (_bpmWindow.length > _bpmWindowSize) {
+      _bpmWindow.removeFirst();
+    }
+  }
+
+  int get windowSize => _bpmWindowSize;
 
   final Queue<double> _bpmWindow = Queue();
   double? _smoothedConf;

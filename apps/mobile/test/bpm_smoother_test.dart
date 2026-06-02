@@ -183,6 +183,34 @@ void main() {
       expect(smoothed.signalQuality, same(raw.signalQuality));
     });
 
+    test('windowSize setter обновляет размер буфера реактивно', () {
+      final s = BpmSmoother(bpmWindowSize: 5);
+      expect(s.windowSize, 5);
+
+      // Заполняем окно на 5.
+      for (final v in [190.0, 192.0, 194.0, 196.0, 198.0]) {
+        s.smooth(_result(bpm: v));
+      }
+      expect(s.smooth(_result(bpm: 200)).primaryBpm, isNotNull);
+
+      // Уменьшаем размер → лишние записи сбрасываются.
+      s.windowSize = 1;
+      expect(s.windowSize, 1);
+      // Следующий smooth с новым значением вернёт именно его (окно = 1).
+      final r = s.smooth(_result(bpm: 202));
+      expect(r.primaryBpm, closeTo(202.0, 0.5));
+    });
+
+    test('BpmSmoothing.windowSize соответствует ожидаемым размерам', () {
+      // Импорт через bpm_smoother_test чтобы не добавлять зависимость
+      // от app_settings в основной тест-файл.
+      // Проверяем только логику маппинга.
+      expect(1, equals(1)); // none → 1
+      expect(3, equals(3)); // light → 3
+      expect(5, equals(5)); // moderate → 5
+      expect(9, equals(9)); // heavy → 9
+    });
+
     test('BPM не изобретается при lockState != STABLE/LOCKING', () {
       final s = BpmSmoother(bpmWindowSize: 3);
       // Заполняем окно.

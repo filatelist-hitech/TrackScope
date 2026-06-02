@@ -180,6 +180,7 @@ class _CapturePipelineState extends State<_CapturePipeline> {
       rawPcm: _bridge.rawPcm,
       flags: widget.flags,
       historyController: _history,
+      onBreak: _bridge.resetEngine,
     );
   }
 }

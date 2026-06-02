@@ -6,8 +6,6 @@
 
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
 import '../ui/design_tokens.dart';
 import 'pro_status_service.dart';
 import 'purchases_gateway.dart';
@@ -78,13 +76,30 @@ class PaywallScreen extends StatelessWidget {
               TextButton(
                 onPressed: () => _restore(context),
                 child: Text(
-                  'Restore purchases',
+                  'Восстановить покупки',
                   style: AppTextStyles.mono(
                     11, FontWeight.w400, AppColors.textMuted,
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+
+              // ── Legal text ────────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 4),
+                child: Text(
+                  'Оплата взимается с аккаунта App Store при подтверждении покупки. '
+                  'Подписка автоматически возобновляется, если не отменена '
+                  'минимум за 24 часа до окончания текущего периода. '
+                  'Управление: Настройки — Apple ID — Подписки.',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.mono(
+                    6.5, FontWeight.w400, AppColors.textMuted,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
 
               // ── Roadmap card ──────────────────────────────────────────────────
               const _RoadmapCard(),
@@ -195,7 +210,7 @@ class _ComparisonTable extends StatelessWidget {
           const Divider(color: AppColors.borderFaint, height: 16),
           const _TableRow('BPM Range', '170–230', '155–230'),
           const Divider(color: AppColors.borderFaint, height: 16),
-          const _TableRow('Signal Analyzer', '—', '✓'),
+          const _TableRow('Анализатор сигнала', '—', '✓'),
           const Divider(color: AppColors.borderFaint, height: 16),
           const _TableRow('История', '30 сек', '24 ч'),
           const Divider(color: AppColors.borderFaint, height: 16),
