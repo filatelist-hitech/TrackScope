@@ -372,15 +372,14 @@ class _GlassmorphismCard extends StatelessWidget {
             child: Container(
               color: Colors.white.withAlpha(8),
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-              // NeverScrollableScrollPhysics: card never scrolls (no indicator,
-              // no programmatic scroll jump). ScrollView still handles overflow
-              // gracefully on small screens without throwing layout errors.
-              // The pill jitter was caused by ClampingScrollPhysics re-computing
-              // scroll extent during AnimatedSwitcher's dual-child phase (both
-              // old+new BPM text live briefly) → scroll position jumped. With
-              // NeverScrollable the position is locked to 0.
+              // ClampingScrollPhysics: allows finger-scroll on small screens so
+              // energy / key rows at the bottom are reachable. The original
+              // NeverScrollable band-aid (Phase 6) prevented ClampingScrollPhysics
+              // from jumping during AnimatedSwitcher's dual-child phase; that's
+              // no longer a problem because the switcher now fires only on
+              // null↔value transitions (ValueKey(hasValue)), not every 50 ms tick.
               child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
+                physics: const ClampingScrollPhysics(),
                 child: _InfoTableContent(
                   result: result,
                   viz: viz,
@@ -420,6 +419,11 @@ class _InfoTableContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = result;
+    final energyResult = r?.energyResult;
+    final keyResult = r?.keyResult;
+    final hasEnergy = energyResult != null;
+    final kResult = keyResult;
+    final hasKey = kResult != null && kResult.confidence >= 0.25;
     final bpm = displayBpm ?? r?.primaryBpm;
     final conf = r?.confidence ?? 0.0;
     final lock = r?.lockState ?? LockState.searching;
@@ -537,6 +541,31 @@ class _InfoTableContent extends StatelessWidget {
             centered: true,
           ),
         ),
+        // ── Energy + Key row (conditional — shown only when data available) ──
+        if (hasEnergy || hasKey) ...[
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: hasEnergy
+                    ? _EnergyCell(energyResult: energyResult)
+                    : const SizedBox(),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: hasKey
+                    ? _StatCell(
+                        label: 'ТОНАЛЬНОСТЬ',
+                        value: kResult.camelot ?? '—',
+                        centered: true,
+                      )
+                    : const SizedBox(),
+              ),
+            ],
+          ),
+        ],
+
         const SizedBox(height: 8),
 
         // ── Lock state chips ─────────────────────────────────────────────────
@@ -1041,6 +1070,55 @@ class _RecBadgeState extends State<_RecBadge>
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Energy cell (label + numeric value + compact colour bar) ─────────────────
+// Gated: only rendered when energyResult != null.
+// Color: levels 1–3 danger / 4–7 warning / 8–10 accent — mirrors ConfidenceBar.
+
+class _EnergyCell extends StatelessWidget {
+  const _EnergyCell({required this.energyResult});
+  final EnergyResult energyResult;
+
+  static Color _barColor(int level) {
+    if (level <= 3) return AppColors.danger;
+    if (level <= 7) return AppColors.warning;
+    return AppColors.accent;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final level = energyResult.level.clamp(1, 10);
+    final fraction = level / 10.0;
+    final color = _barColor(level);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'ЭНЕРГИЯ',
+          style: AppTextStyles.statsLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '$level/10',
+          style: AppTextStyles.statsValue,
+        ),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(2),
+          child: LinearProgressIndicator(
+            value: fraction,
+            backgroundColor: AppColors.surface2,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            minHeight: 4,
+          ),
+        ),
+      ],
     );
   }
 }

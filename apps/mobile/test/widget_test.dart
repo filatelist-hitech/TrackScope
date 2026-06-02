@@ -133,6 +133,73 @@ DspResult _lockSnapshot(String lockState) => DspResult.fromJson({
       },
     });
 
+DspResult _stableSnapshotWithEnergy({int level = 7}) =>
+    DspResult.fromJson({
+      'primary_bpm': 200.0,
+      'confidence': 0.87,
+      'lock_state': 'STABLE',
+      'signal_quality': {
+        'input_level_dbfs': -14.2,
+        'peak_dbfs': -2.1,
+        'clipping': false,
+        'clipped_frame_ratio': 0.0,
+        'noise_level': 'low',
+        'snr_estimate_db': null,
+        'silence': false,
+        'breakdown_likely': false,
+      },
+      'candidates': <Map<String, dynamic>>[
+        {'bpm': 200.0, 'relation': 'main', 'score': 0.87, 'raw_score': 0.87, 'stability_score': 0.9, 'range_score': 1.0},
+      ],
+      'timing': {
+        'analysis_time_sec': 12.0,
+        'window_time_sec': 6.0,
+        'hop_time_sec': 0.0025,
+        'first_lock_time_sec': 5.4,
+      },
+      'energy_result': {
+        'level': level,
+        'rms_dbfs': -18.0,
+        'spectral_flux': 0.08,
+        'onset_density_hz': 3.2,
+      },
+    });
+
+DspResult _stableSnapshotWithKey({
+  String camelot = '8B',
+  double confidence = 0.80,
+}) =>
+    DspResult.fromJson({
+      'primary_bpm': 200.0,
+      'confidence': 0.87,
+      'lock_state': 'STABLE',
+      'signal_quality': {
+        'input_level_dbfs': -14.2,
+        'peak_dbfs': -2.1,
+        'clipping': false,
+        'clipped_frame_ratio': 0.0,
+        'noise_level': 'low',
+        'snr_estimate_db': null,
+        'silence': false,
+        'breakdown_likely': false,
+      },
+      'candidates': <Map<String, dynamic>>[
+        {'bpm': 200.0, 'relation': 'main', 'score': 0.87, 'raw_score': 0.87, 'stability_score': 0.9, 'range_score': 1.0},
+      ],
+      'timing': {
+        'analysis_time_sec': 12.0,
+        'window_time_sec': 6.0,
+        'hop_time_sec': 0.0025,
+        'first_lock_time_sec': 5.4,
+      },
+      'key_result': {
+        'key': 'C',
+        'mode': 'Major',
+        'camelot': camelot,
+        'confidence': confidence,
+      },
+    });
+
 /// Helper: wraps [MainScreen] without a rawPcm stream (simulates pre-mic state).
 Widget _buildMainScreen(
   Stream<DspResult> results,
@@ -521,5 +588,105 @@ void main() {
     await tester.pump();
 
     expect(find.text('PRO'), findsNothing);
+  });
+
+  // ── Energy / Key display (Phase 2.3) ────────────────────────────────────────
+
+  testWidgets('displays energy level on STABLE signal with energy_result',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshotWithEnergy(level: 7));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('7/10'), findsOneWidget);
+    expect(find.text('ЭНЕРГИЯ'), findsOneWidget);
+  });
+
+  testWidgets('displays key camelot on STABLE signal with key_result',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshotWithKey(camelot: '8B', confidence: 0.80));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('8B'), findsOneWidget);
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
+  });
+
+  testWidgets('hides energy row when energy_result is null', (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshot()); // no energy_result
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('ЭНЕРГИЯ'), findsNothing);
+    expect(find.textContaining('/10'), findsNothing);
+  });
+
+  testWidgets('hides key row when key_result is null', (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshot()); // no key_result
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsNothing);
+  });
+
+  testWidgets('hides key row when key_result confidence is below threshold',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshotWithKey(camelot: '8B', confidence: 0.15));
+    await tester.pump();
+    await tester.pump();
+
+    // confidence 0.15 < 0.25 threshold → key row must not render
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsNothing);
+    expect(find.text('8B'), findsNothing);
   });
 }

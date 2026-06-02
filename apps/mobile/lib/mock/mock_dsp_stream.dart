@@ -104,6 +104,28 @@ class MockDspStream {
         final inputLevel = mode == MockDspMode.idle ? -42.9 : -21.3;
         final noiseLevel = mode == MockDspMode.idle ? 'low' : 'medium';
 
+        // Energy level: simulate increasing 1→7 as confidence grows (active mode),
+        // null in idle/searching. Present in locking/stable only.
+        final energyLevel = (confidence * 9 + 1).round().clamp(1, 10);
+        final energyResult = locked
+            ? EnergyResult(
+                level: energyLevel,
+                rmsDbfs: inputLevel + (_rng.nextDouble() - 0.5) * 2,
+                spectralFlux: 0.06 + confidence * 0.09,
+                onsetDensityHz: 2.8 + confidence * 0.5,
+              )
+            : null;
+
+        // Key result: emitted only in stable state (enough history for HPCP).
+        final keyResult = state == LockState.stable
+            ? const KeyResult(
+                key: 'A',
+                mode: 'Minor',
+                camelot: '8A',
+                confidence: 0.62,
+              )
+            : null;
+
         yield DspResult(
           primaryBpm: primaryBpm,
           confidence: confidence,
@@ -152,6 +174,8 @@ class MockDspStream {
             stabilityScore: confidence * 0.9,
             warnings: const [],
           ),
+          energyResult: energyResult,
+          keyResult: keyResult,
         );
       }
     } finally {
