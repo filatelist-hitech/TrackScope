@@ -142,9 +142,9 @@ class _MainScreenState extends State<MainScreen> {
                 // ── Zone label: WAVEFORM ──────────────────────────────────
                 const _ZoneLabelRow(label: 'WAVEFORM'),
 
-                // ── Waveform — fixed 90 px ───────────────────────────────
+                // ── Waveform — fixed 120 px ──────────────────────────────
                 SizedBox(
-                  height: 90,
+                  height: 120,
                   child: RepaintBoundary(
                     child: _WaveformView(viz: _viz),
                   ),
@@ -155,7 +155,7 @@ class _MainScreenState extends State<MainScreen> {
 
                 // ── Live spectrum ─────────────────────────────────────────
                 Expanded(
-                  flex: 15,
+                  flex: 22,
                   child: RepaintBoundary(
                     child: _LiveSpectrumView(viz: _viz),
                   ),
@@ -163,7 +163,7 @@ class _MainScreenState extends State<MainScreen> {
 
                 // ── Info card ─────────────────────────────────────────────
                 Expanded(
-                  flex: 55,
+                  flex: 43,
                   child: RepaintBoundary(
                     child: _GlassmorphismCard(
                       result: result,
@@ -196,7 +196,7 @@ class _ZoneLabelRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 2, 2, 1),
+      padding: const EdgeInsets.fromLTRB(2, 6, 2, 2),
       child: Text(
         label,
         style: AppTextStyles.sectionLabel,
@@ -368,15 +368,22 @@ class _GlassmorphismCard extends StatelessWidget {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: Container(
-              color: Colors.white.withAlpha(8),
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
-              child: _InfoTableContent(
-                result: result,
-                viz: viz,
-                displayBpm: displayBpm,
-                isLockingDisplay: isLockingDisplay,
-                onBestCandidateTap: onBestCandidateTap,
-                onBreak: onBreak,
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(8),
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+              clipBehavior: Clip.hardEdge,
+              child: OverflowBox(
+                alignment: Alignment.topCenter,
+                maxHeight: double.infinity,
+                child: _InfoTableContent(
+                  result: result,
+                  viz: viz,
+                  displayBpm: displayBpm,
+                  isLockingDisplay: isLockingDisplay,
+                  onBestCandidateTap: onBestCandidateTap,
+                  onBreak: onBreak,
+                ),
               ),
             ),
           ),
@@ -471,7 +478,7 @@ class _InfoTableContent extends StatelessWidget {
 
         // ── Full-width confidence bar ────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.only(top: 5, bottom: 4),
+          padding: const EdgeInsets.only(top: 8, bottom: 6),
           child: ConfidenceBar(confidence: conf),
         ),
 
@@ -479,7 +486,7 @@ class _InfoTableContent extends StatelessWidget {
         Center(
           child: _BreakButtonInline(onTap: onBreak ?? () {}),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
 
         // ── Stats grid ───────────────────────────────────────────────────────
         // Row 1: Уровень входа (left-aligned) | Лучший кандидат (centered)
@@ -499,7 +506,7 @@ class _InfoTableContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 5),
         // Row 2: Клиппинг (left-aligned) | Шум (centered)
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -521,7 +528,7 @@ class _InfoTableContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 5),
         // Row 3: ×½ / ×2 — full width centered (both half and double visible)
         Center(
           child: _StatCell(
@@ -531,7 +538,7 @@ class _InfoTableContent extends StatelessWidget {
           ),
         ),
         // ── Energy + Key row — always shown; '—' when data unavailable ────────
-        const SizedBox(height: 4),
+        const SizedBox(height: 5),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -545,7 +552,7 @@ class _InfoTableContent extends StatelessWidget {
               child: hasKey
                   ? _StatCell(
                       label: 'ТОНАЛЬНОСТЬ',
-                      value: kResult!.camelot ?? '—',
+                      value: kResult.camelot ?? '—',
                       centered: true,
                     )
                   : const _StatCell(
@@ -557,7 +564,7 @@ class _InfoTableContent extends StatelessWidget {
           ],
         ),
 
-        const SizedBox(height: 4),
+        const SizedBox(height: 5),
 
         // ── Lock state chips ─────────────────────────────────────────────────
         _ModeChips(lockState: lock),
@@ -612,24 +619,23 @@ class _StatCell extends StatelessWidget {
         children: [
           Text(
             label,
-            style: AppTextStyles.mono(9, FontWeight.w400, AppColors.textMuted,
-                letterSpacing: 1.0),
+            style: AppTextStyles.statsLabel,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 1),
+          const SizedBox(height: 2),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 value,
-                style: AppTextStyles.mono(14, FontWeight.w400, color),
+                style: AppTextStyles.statsValue.copyWith(color: color),
               ),
               if (isLink) ...[
                 const SizedBox(width: 3),
                 Text(
                   '›',
-                  style: AppTextStyles.mono(10, FontWeight.w400, color),
+                  style: AppTextStyles.mono(12, FontWeight.w400, color),
                 ),
               ],
             ],
@@ -651,7 +657,7 @@ class _BreakButtonInline extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         decoration: BoxDecoration(
           color: AppColors.surface,
           border: Border.all(color: AppColors.bpmEmpty),
@@ -784,9 +790,9 @@ class _AnimatedBpmDisplay extends StatelessWidget {
     final effectiveColor =
         isLockingDisplay ? textColor.withAlpha(180) : textColor;
 
-    // Font size: always 52 to prevent layout jank on state change.
-    const fontSize = 52.0;
-    const letterSpacing = -1.5;
+    // Font size: always 72 to prevent layout jank on state change.
+    const fontSize = 72.0;
+    const letterSpacing = -2.5;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -833,9 +839,8 @@ class _AnimatedBpmDisplay extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 1),
         SizedBox(
-          height: 18,
+          height: 22,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
@@ -1087,17 +1092,16 @@ class _EnergyCell extends StatelessWidget {
       children: [
         Text(
           'ЭНЕРГИЯ',
-          style: AppTextStyles.mono(9, FontWeight.w400, AppColors.textMuted,
-              letterSpacing: 1.0),
+          style: AppTextStyles.statsLabel,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 1),
+        const SizedBox(height: 2),
         Text(
           '$level/10',
-          style: AppTextStyles.mono(14, FontWeight.w400, AppColors.textSecondary),
+          style: AppTextStyles.statsValue,
         ),
-        const SizedBox(height: 3),
+        const SizedBox(height: 4),
         ClipRRect(
           borderRadius: BorderRadius.circular(2),
           child: LinearProgressIndicator(
