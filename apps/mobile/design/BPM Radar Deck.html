@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BPM Radar — Design Audit</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  deck-stage:not(:defined){visibility:hidden}
+
+  :root {
+    --bg:       #07090a;
+    --bg2:      #0c1410;
+    --accent:   #00dfb0;
+    --amber:    #c8a020;
+    --red:      #e04040;
+    --yellow:   #e0b020;
+    --text:     #c8dcd8;
+    --dim:      #3a6858;
+    --muted:    #1e3530;
+    --mono:     'IBM Plex Mono', monospace;
+
+    --type-hero:     120px;
+    --type-title:    72px;
+    --type-subtitle: 46px;
+    --type-body:     34px;
+    --type-small:    26px;
+    --type-label:    20px;
+
+    --pad-x:    110px;
+    --pad-top:  96px;
+    --pad-bot:  80px;
+    --gap:      40px;
+    --gap-sm:   20px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  deck-stage section {
+    font-family: var(--mono);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  /* ── Typography ── */
+  .eyebrow { font-size: var(--type-label); letter-spacing: .22em; color: var(--accent); text-transform: uppercase; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; }
+  .eyebrow::before { content: ''; width: 32px; height: 1px; background: var(--accent); display: block; }
+  .title    { font-size: var(--type-title); font-weight: 400; color: var(--text); line-height: 1.08; letter-spacing: -.02em; }
+  .title strong { font-weight: 600; color: #fff; }
+  .subtitle { font-size: var(--type-subtitle); font-weight: 300; color: var(--dim); margin-top: 20px; line-height: 1.3; }
+  .body     { font-size: var(--type-body); color: var(--dim); line-height: 1.6; }
+  .small    { font-size: var(--type-small); color: var(--muted); }
+  .accent   { color: var(--accent); }
+  .white    { color: #fff; }
+  .amber    { color: var(--amber); }
+
+  /* ── Slide padding ── */
+  .pad { padding: var(--pad-top) var(--pad-x) var(--pad-bot); }
+  .pad-r { padding: var(--pad-top) 80px var(--pad-bot) var(--pad-x); }
+
+  /* ── Divider line ── */
+  .rule { width: 64px; height: 2px; background: var(--accent); margin-bottom: var(--gap); }
+
+  /* ── Pills / badges ── */
+  .badge { display: inline-block; font-size: var(--type-label); font-weight: 500; padding: 5px 16px; border-radius: 6px; letter-spacing: .06em; }
+  .badge-r { background: rgba(224,64,64,.16); color: #e04040; border: 1px solid rgba(224,64,64,.3); }
+  .badge-y { background: rgba(224,176,32,.14); color: var(--yellow); border: 1px solid rgba(224,176,32,.3); }
+  .badge-g { background: rgba(0,223,176,.12); color: var(--accent); border: 1px solid rgba(0,223,176,.3); }
+
+  /* ── Grid layouts ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 60px; align-items: start; }
+
+  /* ── Issue card ── */
+  .issue { background: #0c1410; border: 1px solid #1e3530; border-radius: 14px; padding: 36px 40px; display: flex; flex-direction: column; gap: 14px; }
+  .issue-num { font-size: var(--type-label); color: var(--accent); letter-spacing: .12em; }
+  .issue-title { font-size: var(--type-body); font-weight: 500; color: #d0e8e4; line-height: 1.3; }
+  .issue-desc { font-size: var(--type-small); color: var(--dim); line-height: 1.6; }
+  .issue-fix { font-size: var(--type-small); color: var(--accent); display: flex; gap: 10px; align-items: flex-start; margin-top: 4px; }
+  .issue-fix::before { content: '→'; flex-shrink: 0; }
+
+  /* ── Phone mockup ── */
+  .phone-mock {
+    width: 280px; flex-shrink: 0;
+    background: #050807;
+    border-radius: 36px;
+    border: 1.5px solid #1a2d24;
+    box-shadow: 0 0 0 5px #030504, 0 32px 80px rgba(0,0,0,.8);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    font-family: var(--mono);
+  }
+  .pm-sb { display: flex; justify-content: space-between; padding: 12px 18px 4px; font-size: 9px; color: #7ab8aa; flex-shrink: 0; }
+  .pm-nav { display: flex; justify-content: space-between; align-items: center; padding: 2px 18px 10px; flex-shrink: 0; }
+  .pm-title { font-size: 8px; letter-spacing: .18em; color: #253c32; }
+  .pm-pro { background: #00dfb0; color: #000; font-size: 8px; font-weight: 600; padding: 2px 8px; border-radius: 5px; }
+  .pm-wf { height: 90px; background: #040705; display: flex; align-items: center; padding: 0 18px; gap: 2px; flex-shrink: 0; }
+  .pm-bar { flex: 1; border-radius: 1px; background: #00dfb0; opacity: .65; }
+  .pm-sp { height: 54px; background: #040705; display: flex; align-items: flex-end; padding: 0 18px; gap: 1.5px; flex-shrink: 0; }
+  .pm-sbar { flex: 1; border-radius: 1px 1px 0 0; background: #00dfb0; opacity: .6; }
+  .pm-freq { display: flex; justify-content: space-between; padding: 3px 18px; font-size: 6.5px; color: #1a3028; border-top: 1px solid rgba(0,223,176,.18); background: #040705; flex-shrink: 0; }
+  .pm-card { background: #0c1410; border-radius: 18px 18px 0 0; padding: 16px 18px 18px; flex: 1; }
+
+  /* ── Before/After wrapper ── */
+  .ba-wrap { display: flex; gap: 60px; align-items: flex-start; }
+  .ba-col { display: flex; flex-direction: column; gap: 14px; }
+  .ba-lbl { font-size: var(--type-label); letter-spacing: .14em; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .ba-dot-b { width: 8px; height: 8px; border-radius: 50%; background: #1e3530; }
+  .ba-dot-a { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+  /* ── Stat blocks ── */
+  .stat-row { display: flex; gap: 80px; }
+  .stat { display: flex; flex-direction: column; gap: 8px; }
+  .stat-n { font-size: var(--type-hero); font-weight: 600; line-height: 1; }
+  .stat-l { font-size: var(--type-small); color: var(--dim); letter-spacing: .1em; }
+
+  /* ── Change list ── */
+  .ch-list { display: flex; flex-direction: column; gap: 28px; }
+  .ch-item { display: flex; gap: 20px; align-items: flex-start; }
+  .ch-n { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #000; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .ch-body strong { display: block; font-size: var(--type-body); font-weight: 500; color: #d0e8e4; margin-bottom: 6px; }
+  .ch-body span { font-size: var(--type-small); color: var(--dim); line-height: 1.55; }
+
+  /* ── Sprint table ── */
+  .sprint-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; }
+  .sprint { background: #0c1410; border: 1px solid #1e3530; border-radius: 14px; padding: 36px 40px; display: flex; flex-direction: column; gap: 16px; }
+  .sprint-hdr { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid #1a2d24; }
+  .sprint-name { font-size: var(--type-body); color: #d0e8e4; font-weight: 500; }
+  .sprint-task { font-size: var(--type-small); color: var(--dim); display: flex; align-items: center; gap: 10px; padding: 2px 0; border-bottom: 1px solid #0a1009; }
+  .sprint-task:last-child { border-bottom: none; }
+  .sprint-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+
+  /* ── Table ── */
+  .tbl { width: 100%; border-collapse: collapse; font-size: var(--type-small); }
+  .tbl th { text-align: left; padding: 14px 20px; font-size: var(--type-label); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid #1a2d24; }
+  .tbl td { padding: 18px 20px; border-bottom: 1px solid #0c1410; color: var(--dim); vertical-align: top; }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl .key { color: var(--text); font-weight: 500; }
+  .tbl .prio-r { color: #e04040; }
+  .tbl .prio-y { color: var(--yellow); }
+  .tbl .prio-g { color: var(--accent); }
+
+  /* ── Paywall preview ── */
+  .pw-feat { background: #0d1712; border-radius: 12px; overflow: hidden; font-size: 8px; }
+  .pw-feat-hdr { display: flex; padding: 8px 13px 5px; border-bottom: 1px solid #080c09; }
+  .pw-fn { flex: 1; font-size: 7px; letter-spacing: .1em; color: #1a3028; text-transform: uppercase; }
+  .pw-ff { width: 50px; text-align: center; font-size: 7px; color: #1a3028; letter-spacing: .08em; text-transform: uppercase; }
+  .pw-fp { width: 54px; text-align: right; font-size: 7px; color: #00dfb0; letter-spacing: .08em; text-transform: uppercase; }
+  .pw-row { display: flex; padding: 8px 13px; border-bottom: 1px solid #080c09; font-size: 8px; }
+  .pw-row:last-child { border-bottom: none; }
+  .pw-rn { flex: 1; color: #3a6858; }
+  .pw-rf { width: 50px; text-align: center; color: #1a3028; }
+  .pw-rp { width: 54px; text-align: right; color: #00dfb0; }
+
+  /* ── CTA mockups ── */
+  .cta-mock { border-radius: 12px; padding: 14px; text-align: center; font-size: 10px; font-weight: 600; font-family: var(--mono); }
+  .cta-before { background: #00dfb0; color: #000; }
+  .cta-after-p { background: #00dfb0; color: #000; position: relative; }
+  .cta-after-s { background: transparent; border: 1.5px solid #1e3530; color: #3a6858; }
+  .best-tag { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: #e0822a; color: #fff; font-size: 7px; font-weight: 600; padding: 2px 10px; border-radius: 7px; white-space: nowrap; }
+  .conf-demo { height: 8px; border-radius: 4px; margin: 4px 0; }
+  .conf-track { background: #111916; }
+
+  /* ── Analyzer preview ── */
+  .fft-mock { height: 80px; background: #040705; border-radius: 8px; overflow: hidden; position: relative; }
+  .fft-curve { position: absolute; bottom: 0; left: 0; right: 0; height: 100%; }
+
+  /* ── Section header slide ── */
+  .sec-slide { background: #0a100d !important; }
+  .sec-num { font-size: var(--type-hero); font-weight: 600; color: rgba(0,223,176,.12); line-height: 1; letter-spacing: -.04em; }
+
+  /* ── Horizontal rule ── */
+  hr { border: none; border-top: 1px solid #1a2d24; }
+
+  /* Cover slide specific */
+  .cover-grid { display: grid; grid-template-columns: 1fr 480px; height: 100%; }
+  .cover-left { display: flex; flex-direction: column; justify-content: flex-end; padding: var(--pad-top) 0 var(--pad-bot) var(--pad-x); gap: var(--gap-sm); }
+  .cover-right { background: #040705; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+
+</style>
+</head>
+<body>
+<deck-stage width="1920" height="1080">
+
+<!-- ═════ 01 · COVER ═════ -->
+<section data-label="Cover" class="sec-slide" style="background:#050807">
+  <div class="cover-grid">
+    <div class="cover-left">
+      <div class="eyebrow" style="margin-bottom:8px;font-size:24px">Design Audit · May 2026</div>
+      <h1 class="title" style="font-size:88px;line-height:1.05">BPM Radar<br><strong>Redesign</strong></h1>
+      <p class="subtitle" style="max-width:620px;margin-top:28px">Аудит 5 экранов · Before/After · Signal Analyzer · Implementation roadmap</p>
+      <div style="margin-top:56px;display:flex;gap:32px">
+        <div><div style="font-size:48px;font-weight:600;color:var(--accent);line-height:1">11</div><div style="font-size:24px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-top:6px">Проблем</div></div>
+        <div style="width:1px;background:var(--muted)"></div>
+        <div><div style="font-size:48px;font-weight:600;color:var(--accent);line-height:1">5</div><div style="font-size:24px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-top:6px">Экранов</div></div>
+        <div style="width:1px;background:var(--muted)"></div>
+        <div><div style="font-size:48px;font-weight:600;color:var(--accent);line-height:1">3</div><div style="font-size:24px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-top:6px">Спринта</div></div>
+      </div>
+    </div>
+    <div class="cover-right">
+      <!-- Phone decoration -->
+      <div style="width:260px;height:560px;background:#080c09;border-radius:40px;border:1.5px solid #1a2d24;box-shadow:0 0 0 5px #030504,0 40px 100px rgba(0,0,0,.9);display:flex;flex-direction:column;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;padding:14px 18px 4px;font-size:9px;color:#7ab8aa;flex-shrink:0"><span>04:05</span><span>▲▲▲ 69</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 18px 10px;flex-shrink:0"><span></span><span style="font-size:8px;letter-spacing:.18em;color:#253c32">HITECH BPM RADAR</span><span style="background:#00dfb0;color:#000;font-size:8px;font-weight:600;padding:2px 8px;border-radius:5px">PRO</span></div>
+        <div style="font-size:7px;color:#1a3028;padding:6px 18px 3px;flex-shrink:0;letter-spacing:.18em">WAVEFORM</div>
+        <div style="height:88px;background:#040705;display:flex;align-items:center;padding:0 18px;gap:2px;flex-shrink:0">
+          <div style="flex:1;height:18%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:52%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:34%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:62%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:48%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:78%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:44%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:58%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:32%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:70%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:42%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:86%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:55%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:28%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:66%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:38%;background:#00dfb0;border-radius:1px;opacity:.65"></div>
+        </div>
+        <div style="height:48px;background:#040705;display:flex;align-items:flex-end;padding:0 18px;gap:1.5px;flex-shrink:0">
+          <div style="flex:1;height:88%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:72%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:64%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:58%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:50%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:44%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:36%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:28%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:22%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:16%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:12%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:9%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:7%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:5%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:3px 18px 4px;font-size:6px;color:#1a3028;border-top:1px solid rgba(0,223,176,.18);background:#040705;flex-shrink:0"><span>50</span><span>200</span><span>1k</span><span>4k</span><span>16k</span></div>
+        <div style="background:#0c1410;border-radius:18px 18px 0 0;padding:16px 18px;flex:1">
+          <div style="font-size:60px;font-weight:600;color:#00dfb0;line-height:1;letter-spacing:-.04em;text-align:center">174.4</div>
+          <div style="text-align:center;font-size:11px;color:#3a6858;letter-spacing:.2em;margin-top:4px">BPM</div>
+          <div style="height:7px;background:#111916;border-radius:4px;overflow:hidden;margin:12px 0 8px"><div style="height:100%;width:77%;background:#00dfb0;border-radius:4px"></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:8px">
+            <div><div style="font-size:5.5px;letter-spacing:.12em;color:#1a3028;text-transform:uppercase">Уровень входа</div><div style="font-size:9.5px;color:#5a8878">–21.3 dBFS</div></div>
+            <div><div style="font-size:5.5px;letter-spacing:.12em;color:#1a3028;text-transform:uppercase">Клиппинг</div><div style="font-size:9.5px;color:#00dfb0">нет</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════ 02 · ISSUES OVERVIEW ═════ -->
+<section data-label="Issues" class="pad">
+  <div class="eyebrow">Аудит</div>
+  <h2 class="title">11 проблем на 2 экранах</h2>
+  <div style="margin-top:60px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:36px">
+
+    <div class="issue">
+      <span class="badge badge-r">High · 5 проблем</span>
+      <div class="issue-title">Главный экран</div>
+      <div class="issue-desc">BPM не виден · Confidence невидим · Waveform занимает 60% экрана попусту</div>
+    </div>
+
+    <div class="issue">
+      <span class="badge badge-r">High · 3 проблемы</span>
+      <div class="issue-title">Paywall</div>
+      <div class="issue-desc">Нет заголовков таблицы · Нет ценностного текста · CTA без иерархии</div>
+    </div>
+
+    <div class="issue">
+      <span class="badge badge-y">Medium · 3 проблемы</span>
+      <div class="issue-title">Другие</div>
+      <div class="issue-desc">«Debug Screen» · Кнопка брейк без контекста · Дублирующая карточка виджета</div>
+    </div>
+
+    <div style="background:#0c1410;border:1px solid var(--accent);border-radius:14px;padding:36px 40px">
+      <div style="font-size:var(--type-hero);font-weight:600;color:var(--accent);line-height:1">8%</div>
+      <div style="font-size:var(--type-small);color:var(--dim);margin-top:10px">Уровень уверенности при старте — видим только если внимательно читать</div>
+    </div>
+
+    <div style="background:#0c1410;border:1px solid #1e3530;border-radius:14px;padding:36px 40px">
+      <div style="font-size:var(--type-hero);font-weight:600;color:#e0b020;line-height:1">2px</div>
+      <div style="font-size:var(--type-small);color:var(--dim);margin-top:10px">Высота confidence bar — визуально невидим при любом значении ниже 30%</div>
+    </div>
+
+    <div style="background:#0c1410;border:1px solid #1e3530;border-radius:14px;padding:36px 40px">
+      <div style="font-size:var(--type-hero);font-weight:600;color:#e04040;line-height:1">1.2</div>
+      <div style="font-size:var(--type-small);color:var(--dim);margin-top:10px">Контраст лейблов WAVEFORM / SPECTRUM — ниже минимального WCAG 3:1</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═════ 03 · RADAR BEFORE/AFTER ═════ -->
+<section data-label="Radar Before After" class="pad">
+  <div class="eyebrow">Экран 01 — Главный радар</div>
+  <h2 class="title" style="margin-bottom:44px">Waveform vs. BPM</h2>
+
+  <div class="ba-wrap" style="align-items:flex-start">
+    <!-- BEFORE phone -->
+    <div class="ba-col">
+      <div class="ba-lbl"><div class="ba-dot-b"></div>До</div>
+      <div style="width:260px;background:#050807;border-radius:36px;border:1.5px solid #182420;box-shadow:0 0 0 5px #030504,0 32px 80px rgba(0,0,0,.8);overflow:hidden;display:flex;flex-direction:column;font-family:var(--mono)">
+        <div style="display:flex;justify-content:space-between;padding:12px 16px 4px;font-size:9px;color:#7ab8aa;flex-shrink:0"><span>04:05</span><span>▲▲▲ 52</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 16px 8px;flex-shrink:0"><span style="font-size:7.5px;letter-spacing:.18em;color:#253c32">HITECH BPM RADAR</span><span style="background:#00dfb0;color:#000;font-size:7.5px;font-weight:600;padding:2px 7px;border-radius:5px">PRO</span></div>
+        <!-- BIG waveform zone -->
+        <div style="font-size:6.5px;color:#1a3028;padding:5px 16px 3px;letter-spacing:.18em;flex-shrink:0">WAVEFORM</div>
+        <div style="height:110px;background:#040705;display:flex;align-items:center;padding:0 16px;gap:1.5px;flex-shrink:0">
+          <div style="flex:1;height:6%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:4%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:8%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:3%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:5%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:7%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:4%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:6%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:3%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:5%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:8%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:4%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:6%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:3%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:7%;background:#00dfb0;opacity:.4;border-radius:1px"></div><div style="flex:1;height:5%;background:#00dfb0;opacity:.4;border-radius:1px"></div>
+        </div>
+        <div style="font-size:6.5px;color:#1a3028;padding:5px 16px 3px;letter-spacing:.18em;flex-shrink:0">LIVE SPECTRUM</div>
+        <div style="height:60px;background:#040705;display:flex;align-items:flex-end;padding:0 16px;gap:1.5px;flex-shrink:0">
+          <div style="flex:1;height:80%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:70%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:65%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:58%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:50%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:44%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:36%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:28%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:22%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:16%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:12%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:9%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:3px 16px;font-size:6px;color:#1a3028;border-top:1px solid rgba(0,223,176,.18);background:#040705;flex-shrink:0"><span>50</span><span>200</span><span>1k</span><span>4k</span><span>16k</span></div>
+        <!-- BEFORE card: blank BPM, 2px conf bar -->
+        <div style="background:#0c1410;border-radius:16px 16px 0 0;padding:14px 16px 16px;flex:1">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="width:52px;height:11px;background:#e8e8e8;border-radius:3px"></div>
+            <span style="font-size:9px;color:#253c32">BPM</span>
+            <span style="background:rgba(0,223,176,.12);border:1px solid rgba(0,223,176,.4);border-radius:12px;padding:3px 8px;font-size:7px;color:#00dfb0">брейк</span>
+          </div>
+          <div style="height:2px;background:#111916;border-radius:1px;margin-bottom:10px"><div style="height:100%;width:8%;background:#00dfb0"></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 10px">
+            <div><div style="font-size:5.5px;letter-spacing:.1em;color:#1a3028;text-transform:uppercase">Уверенность</div><div style="font-size:9px;color:#5a8878">8%</div></div>
+            <div><div style="font-size:5.5px;letter-spacing:.1em;color:#1a3028;text-transform:uppercase">Уровень входа</div><div style="font-size:9px;color:#5a8878">–42.9 dBFS</div></div>
+            <div><div style="font-size:5.5px;letter-spacing:.1em;color:#1a3028;text-transform:uppercase">Лучший кандидат</div><div style="font-size:9px;color:#5a8878">174.4 BPM</div></div>
+            <div><div style="font-size:5.5px;letter-spacing:.1em;color:#1a3028;text-transform:uppercase">Клиппинг</div><div style="font-size:9px;color:#00dfb0">нет</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AFTER phone -->
+    <div class="ba-col">
+      <div class="ba-lbl"><div class="ba-dot-a"></div>После</div>
+      <div style="width:260px;background:#050807;border-radius:36px;border:1.5px solid #1e3530;box-shadow:0 0 0 5px #030504,0 32px 80px rgba(0,0,0,.8);overflow:hidden;display:flex;flex-direction:column;font-family:var(--mono)">
+        <div style="display:flex;justify-content:space-between;padding:12px 16px 4px;font-size:9px;color:#7ab8aa;flex-shrink:0"><span>04:05</span><span>▲▲▲ 52</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 16px 8px;flex-shrink:0"><span style="font-size:7.5px;letter-spacing:.18em;color:#253c32">HITECH BPM RADAR</span><span style="background:#00dfb0;color:#000;font-size:7.5px;font-weight:600;padding:2px 7px;border-radius:5px">PRO</span></div>
+        <!-- Compact waveform -->
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 16px 3px;flex-shrink:0"><span style="font-size:6.5px;color:#3a6858;letter-spacing:.18em">WAVEFORM</span><div style="display:flex;align-items:center;gap:4px;font-size:6.5px;color:#00dfb0"><div style="width:5px;height:5px;border-radius:50%;background:#00dfb0"></div>слушаю</div></div>
+        <div style="height:80px;background:#040705;display:flex;align-items:center;padding:0 16px;gap:1.5px;flex-shrink:0">
+          <div style="flex:1;height:18%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:52%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:34%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:68%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:45%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:82%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:40%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:58%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:28%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:72%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:38%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:90%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:55%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:24%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:64%;background:#00dfb0;border-radius:1px;opacity:.65"></div><div style="flex:1;height:42%;background:#00dfb0;border-radius:1px;opacity:.65"></div>
+        </div>
+        <div style="height:48px;background:#040705;display:flex;align-items:flex-end;padding:0 16px;gap:1.5px;flex-shrink:0">
+          <div style="flex:1;height:82%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:70%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:62%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:56%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:48%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:40%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:32%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:26%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:20%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:15%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:10%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div><div style="flex:1;height:7%;background:#00dfb0;border-radius:1px 1px 0 0;opacity:.6"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:3px 16px;font-size:6px;color:#1a3028;border-top:1px solid rgba(0,223,176,.18);background:#040705;flex-shrink:0"><span>50</span><span>200</span><span>1k</span><span>4k</span><span>16k</span></div>
+        <!-- AFTER card: BPM hero + colored conf bar -->
+        <div style="background:#0c1410;border-radius:16px 16px 0 0;padding:14px 16px 16px;flex:1">
+          <div style="text-align:center;padding:8px 0 4px">
+            <div style="font-size:60px;font-weight:600;color:#00dfb0;line-height:1;letter-spacing:-.04em">174.4</div>
+            <div style="font-size:10px;color:#3a6858;letter-spacing:.2em;margin-top:3px">BPM</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;margin:10px 0 8px">
+            <div style="flex:1;height:7px;background:#111916;border-radius:4px;overflow:hidden"><div style="height:100%;width:77%;background:#00dfb0;border-radius:4px"></div></div>
+            <span style="font-size:9px;color:#00dfb0;font-weight:500">77%</span>
+          </div>
+          <div style="display:flex;justify-content:center;margin-bottom:8px">
+            <div style="background:#0c1410;border:1px solid #1e3530;border-radius:7px;padding:5px 12px;font-size:7px;color:#3a6858;display:flex;align-items:center;gap:4px">— Зафиксировать брейк</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 10px">
+            <div><div style="font-size:5.5px;letter-spacing:.1em;color:#1a3028;text-transform:uppercase">Уровень входа</div><div style="font-size:9px;color:#5a8878">–21.3 dBFS</div></div>
+            <div><div style="font-size:5.5px;letter-spacing:.1em;color:#1a3028;text-transform:uppercase">Клиппинг</div><div style="font-size:9px;color:#00dfb0">нет</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Change notes -->
+    <div style="flex:1;padding-top:36px">
+      <div class="ch-list">
+        <div class="ch-item"><div class="ch-n">1</div><div class="ch-body"><strong>BPM — центр карточки</strong><span>72px, главный элемент. Заглушка «— — —» вместо белого прямоугольника.</span></div></div>
+        <div class="ch-item"><div class="ch-n">2</div><div class="ch-body"><strong>Waveform −30% высоты</strong><span>Освободили место BPM. Индикатор «слушаю» подтверждает активность микрофона.</span></div></div>
+        <div class="ch-item"><div class="ch-n">3</div><div class="ch-body"><strong>Confidence: 7px + цвет</strong><span>&lt;30% → красный · 30–70% → жёлтый · >70% → teal</span></div></div>
+        <div class="ch-item"><div class="ch-n">4</div><div class="ch-body"><strong>Брейк с контекстом</strong><span>Кнопка с иконкой под BPM-числом, функция очевидна.</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════ 04 · PAYWALL BEFORE/AFTER ═════ -->
+<section data-label="Paywall" class="pad">
+  <div class="eyebrow">Экран 02 — Upgrade to Pro</div>
+  <h2 class="title" style="margin-bottom:44px">CTA-иерархия и таблица</h2>
+
+  <div style="display:grid;grid-template-columns:280px 280px 1fr;gap:60px;align-items:start">
+    <!-- BEFORE -->
+    <div class="ba-col">
+      <div class="ba-lbl"><div class="ba-dot-b"></div>До</div>
+      <div style="background:#050807;border-radius:36px;border:1.5px solid #182420;box-shadow:0 0 0 4px #030504;overflow:hidden;font-family:var(--mono)">
+        <div style="display:flex;justify-content:space-between;padding:10px 16px 3px;font-size:8.5px;color:#7ab8aa"><span>04:11</span><span>▲▲▲ 48</span></div>
+        <div style="display:flex;align-items:center;padding:4px 16px 10px;border-bottom:1px solid #0f1712"><span style="font-size:14px;color:#3a6858">‹</span><span style="font-size:9px;color:#c8dcd8;flex:1;text-align:center">Upgrade to Pro</span><span style="width:20px"></span></div>
+        <!-- Table without headers -->
+        <div style="margin:10px 11px;background:#0d1712;border-radius:11px;overflow:hidden">
+          <div style="display:flex;padding:8px 12px;border-bottom:1px solid #080c09"><span style="flex:1;font-size:8px;color:#3a6858">BPM Range</span><span style="width:50px;text-align:center;font-size:8px;color:#1a3028">170–230</span><span style="width:54px;text-align:right;font-size:8px;color:#00dfb0">155–230</span></div>
+          <div style="display:flex;padding:8px 12px;border-bottom:1px solid #080c09"><span style="flex:1;font-size:8px;color:#3a6858">Debug Screen</span><span style="width:50px;text-align:center;font-size:8px;color:#1a3028">–</span><span style="width:54px;text-align:right;font-size:8px;color:#00dfb0">✓</span></div>
+          <div style="display:flex;padding:8px 12px;border-bottom:1px solid #080c09"><span style="flex:1;font-size:8px;color:#3a6858">History</span><span style="width:50px;text-align:center;font-size:8px;color:#1a3028">30 sec</span><span style="width:54px;text-align:right;font-size:8px;color:#00dfb0">Unlimited</span></div>
+          <div style="display:flex;padding:8px 12px"><span style="flex:1;font-size:8px;color:#3a6858">Export CSV</span><span style="width:50px;text-align:center;font-size:8px;color:#1a3028">–</span><span style="width:54px;text-align:right;font-size:8px;color:#00dfb0">✓</span></div>
+        </div>
+        <!-- Identical CTAs -->
+        <div style="padding:0 11px;display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+          <div style="background:#00dfb0;border-radius:12px;padding:11px;text-align:center;font-size:9px;font-weight:600;color:#000">Lifetime — $4.99</div>
+          <div style="background:#00dfb0;border-radius:12px;padding:11px;text-align:center;font-size:9px;font-weight:600;color:#000">Annual — $3.99/yr</div>
+        </div>
+        <div style="text-align:center;font-size:7px;color:#1a3028;padding:6px">Restore purchases</div>
+      </div>
+    </div>
+
+    <!-- AFTER -->
+    <div class="ba-col">
+      <div class="ba-lbl"><div class="ba-dot-a"></div>После</div>
+      <div style="background:#050807;border-radius:36px;border:1.5px solid #1e3530;box-shadow:0 0 0 4px #030504;overflow:hidden;font-family:var(--mono)">
+        <div style="display:flex;justify-content:space-between;padding:10px 16px 3px;font-size:8.5px;color:#7ab8aa"><span>04:11</span><span>▲▲▲ 48</span></div>
+        <div style="display:flex;align-items:center;padding:4px 16px 10px;border-bottom:1px solid #0f1712"><span style="font-size:14px;color:#3a6858">‹</span><span style="font-size:9px;color:#c8dcd8;flex:1;text-align:center">Upgrade to Pro</span><span style="width:20px"></span></div>
+        <!-- Value headline -->
+        <div style="text-align:center;padding:12px 18px 8px">
+          <div style="font-size:12.5px;color:#c0dcd6;font-weight:500;line-height:1.4">Читай любой трек.<br>Без ограничений.</div>
+          <div style="font-size:7.5px;color:#1a3028;margin-top:3px">Единоразово · без автопродления</div>
+        </div>
+        <!-- Table with headers -->
+        <div style="margin:0 11px 10px;background:#0d1712;border-radius:11px;overflow:hidden">
+          <div style="display:flex;padding:6px 12px 4px;border-bottom:1px solid #080c09"><span style="flex:1;font-size:6.5px;letter-spacing:.1em;color:#1a3028;text-transform:uppercase">Функция</span><span style="width:50px;text-align:center;font-size:6.5px;color:#1a3028;text-transform:uppercase;letter-spacing:.08em">Free</span><span style="width:54px;text-align:right;font-size:6.5px;color:#00dfb0;text-transform:uppercase;letter-spacing:.08em">Pro</span></div>
+          <div style="display:flex;padding:8px 12px;border-bottom:1px solid #080c09"><span style="flex:1;font-size:8px;color:#3a6858">BPM Range</span><span style="width:50px;text-align:center;font-size:8px;color:#1a3028">170–230</span><span style="width:54px;text-align:right;font-size:8px;color:#00dfb0">155–230</span></div>
+          <div style="display:flex;padding:8px 12px;border-bottom:1px solid #080c09"><span style="flex:1;font-size:8px;color:#3a6858">Signal Analyzer</span><span style="width:50px;text-align:center;font-size:8px;color:#1a3028">–</span><span style="width:54px;text-align:right;font-size:8px;color:#00dfb0">✓</span></div>
+          <div style="display:flex;padding:8px 12px;border-bottom:1px solid #080c09"><span style="flex:1;font-size:8px;color:#3a6858">History</span><span style="width:50px;text-align:center;font-size:8px;color:#1a3028">30 sec</span><span style="width:54px;text-align:right;font-size:8px;color:#00dfb0">∞</span></div>
+          <div style="display:flex;padding:8px 12px"><span style="flex:1;font-size:8px;color:#3a6858">Export CSV</span><span style="width:50px;text-align:center;font-size:8px;color:#1a3028">–</span><span style="width:54px;text-align:right;font-size:8px;color:#00dfb0">✓</span></div>
+        </div>
+        <!-- Hierarchy CTAs -->
+        <div style="padding:0 11px;display:flex;flex-direction:column;gap:7px;margin-bottom:6px">
+          <div style="position:relative">
+            <div style="background:#00dfb0;border-radius:12px;padding:13px;text-align:center;font-size:9px;font-weight:600;color:#000">Lifetime — $4.99</div>
+            <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:#e0822a;color:#fff;font-size:6.5px;font-weight:600;padding:2px 9px;border-radius:7px;white-space:nowrap">Best value</div>
+          </div>
+          <div style="background:transparent;border:1px solid #1e3530;border-radius:12px;padding:11px;text-align:center;font-size:9px;color:#3a6858">Annual — $3.99 / yr</div>
+        </div>
+        <div style="text-align:center;font-size:7px;color:#1a3028;padding:5px">Restore purchases</div>
+      </div>
+    </div>
+
+    <!-- Changes -->
+    <div style="padding-top:28px">
+      <div class="ch-list">
+        <div class="ch-item"><div class="ch-n">1</div><div class="ch-body"><strong>«Читай любой трек»</strong><span>Ценностный заголовок отвечает на «зачем» до таблицы.</span></div></div>
+        <div class="ch-item"><div class="ch-n">2</div><div class="ch-body"><strong>Free / Pro в заголовках</strong><span>Структура таблицы понятна за 1 секунду без чтения строк.</span></div></div>
+        <div class="ch-item"><div class="ch-n">3</div><div class="ch-body"><strong>CTA-иерархия</strong><span>Lifetime = primary + «Best value». Annual = outline. Меньше паузы перед выбором.</span></div></div>
+        <div class="ch-item"><div class="ch-n">4</div><div class="ch-body"><strong>Signal Analyzer</strong><span>Вместо «Debug Screen» — звучит профессионально, добавляет ощущение Pro-инструмента.</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════ 05 · SIGNAL ANALYZER ═════ -->
+<section data-label="Signal Analyzer" style="background:#050807">
+  <div style="display:grid;grid-template-columns:1fr 520px;height:100%">
+    <div style="display:flex;flex-direction:column;justify-content:center;padding:var(--pad-top) 80px var(--pad-bot) var(--pad-x)">
+      <div class="eyebrow">Новый экран · Pro</div>
+      <h2 class="title" style="margin-bottom:28px">Signal Analyzer</h2>
+      <p class="body" style="max-width:560px;margin-bottom:52px">Инструмент для диагностики детектора. Показывает FFT-спектр в реальном времени, BPM-кандидатов и метрики алгоритма — всё что нужно для понимания «почему BPM показывает не то».</p>
+      <div class="ch-list">
+        <div class="ch-item"><div class="ch-n">1</div><div class="ch-body"><strong>FFT Spectrum</strong><span>Визуализация частотного отклика в реальном времени.</span></div></div>
+        <div class="ch-item"><div class="ch-n">2</div><div class="ch-body"><strong>BPM Candidates</strong><span>Топ-4 кандидата с confidence bars — откуда берётся финальное число.</span></div></div>
+        <div class="ch-item"><div class="ch-n">3</div><div class="ch-body"><strong>Algorithm Metrics</strong><span>Onset Detection · Autocorrelation · Spectral Flux · SNR</span></div></div>
+      </div>
+    </div>
+    <div style="background:#040705;display:flex;align-items:center;justify-content:center">
+      <div style="width:280px;background:#050807;border-radius:36px;border:1.5px solid #1e3530;box-shadow:0 0 0 5px #030504,0 32px 80px rgba(0,0,0,.9);overflow:hidden;font-family:var(--mono)">
+        <div style="display:flex;justify-content:space-between;padding:12px 16px 4px;font-size:9px;color:#7ab8aa"><span>04:06</span><span>▲▲▲ 69</span></div>
+        <div style="display:flex;align-items:center;padding:2px 16px 10px;border-bottom:1px solid #0f1712"><span style="width:24px"></span><span style="font-size:8.5px;letter-spacing:.14em;color:#7ab8aa;flex:1;text-align:center">SIGNAL ANALYZER</span><span style="background:#00dfb0;color:#000;font-size:7.5px;font-weight:600;padding:2px 7px;border-radius:5px">PRO</span></div>
+        <!-- FFT -->
+        <div style="font-size:6.5px;color:#1a3028;padding:6px 16px 3px;letter-spacing:.14em;text-transform:uppercase">FFT SPECTRUM</div>
+        <div style="height:100px;background:#040705;position:relative;overflow:hidden">
+          <svg width="100%" height="100" viewBox="0 0 280 100" preserveAspectRatio="none" style="position:absolute;inset:0">
+            <defs><linearGradient id="fftg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00dfb0" stop-opacity=".5"/><stop offset="100%" stop-color="#00dfb0" stop-opacity="0"/></linearGradient></defs>
+            <path d="M0,100 L0,12 Q10,8 20,15 Q35,5 50,18 Q65,30 80,35 Q95,42 110,50 Q125,58 140,65 Q160,72 180,78 Q200,83 220,87 Q240,90 260,93 L280,95 L280,100 Z" fill="url(#fftg)"/>
+            <path d="M0,12 Q10,8 20,15 Q35,5 50,18 Q65,30 80,35 Q95,42 110,50 Q125,58 140,65 Q160,72 180,78 Q200,83 220,87 Q240,90 260,93 L280,95" fill="none" stroke="#00dfb0" stroke-width="1.5"/>
+          </svg>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:3px 16px 4px;font-size:6px;color:#1a3028;border-top:1px solid rgba(0,223,176,.18);background:#040705"><span>50</span><span>200</span><span>1k</span><span>4k</span><span>16k</span></div>
+        <!-- Candidates -->
+        <div style="font-size:6.5px;color:#1a3028;padding:6px 16px 3px;letter-spacing:.14em;text-transform:uppercase">BPM КАНДИДАТЫ</div>
+        <div style="margin:0 12px;background:#0d1712;border-radius:10px;overflow:hidden">
+          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #080c09;gap:8px"><span style="font-size:15px;font-weight:600;color:#00dfb0;width:52px">188.0</span><div style="flex:1;height:4px;background:#111916;border-radius:2px;overflow:hidden"><div style="height:100%;width:78%;background:#00dfb0;border-radius:2px"></div></div><span style="font-size:8px;color:#3a6858;width:28px;text-align:right">78%</span></div>
+          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #080c09;gap:8px"><span style="font-size:15px;font-weight:600;color:#3a6858;width:52px">94.0</span><div style="flex:1;height:4px;background:#111916;border-radius:2px;overflow:hidden"><div style="height:100%;width:42%;background:#e0b020;border-radius:2px"></div></div><span style="font-size:8px;color:#3a6858;width:28px;text-align:right">42%</span></div>
+          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #080c09;gap:8px"><span style="font-size:15px;font-weight:600;color:#3a6858;width:52px">376.0</span><div style="flex:1;height:4px;background:#111916;border-radius:2px;overflow:hidden"><div style="height:100%;width:28%;background:#2a4a3e;border-radius:2px"></div></div><span style="font-size:8px;color:#3a6858;width:28px;text-align:right">28%</span></div>
+          <div style="display:flex;align-items:center;padding:7px 12px;gap:8px"><span style="font-size:15px;font-weight:600;color:#3a6858;width:52px">62.7</span><div style="flex:1;height:4px;background:#111916;border-radius:2px;overflow:hidden"><div style="height:100%;width:14%;background:#2a4a3e;border-radius:2px"></div></div><span style="font-size:8px;color:#3a6858;width:28px;text-align:right">14%</span></div>
+        </div>
+        <!-- Metrics -->
+        <div style="font-size:6.5px;color:#1a3028;padding:6px 16px 3px;letter-spacing:.14em;text-transform:uppercase">МЕТРИКИ АЛГОРИТМА</div>
+        <div style="margin:0 12px 12px;background:#0d1712;border-radius:10px;overflow:hidden">
+          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #080c09;gap:8px"><span style="flex:1;font-size:7.5px;color:#3a6858">Onset Detection</span><div style="width:64px;height:4px;background:#111916;border-radius:2px;overflow:hidden"><div style="height:100%;width:72%;background:#00dfb0;border-radius:2px"></div></div><span style="font-size:7.5px;color:#00dfb0;width:26px;text-align:right">72%</span></div>
+          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #080c09;gap:8px"><span style="flex:1;font-size:7.5px;color:#3a6858">Autocorrelation</span><div style="width:64px;height:4px;background:#111916;border-radius:2px;overflow:hidden"><div style="height:100%;width:68%;background:#00dfb0;border-radius:2px"></div></div><span style="font-size:7.5px;color:#00dfb0;width:26px;text-align:right">68%</span></div>
+          <div style="display:flex;align-items:center;padding:7px 12px;gap:8px"><span style="flex:1;font-size:7.5px;color:#3a6858">Spectral Flux</span><div style="width:64px;height:4px;background:#111916;border-radius:2px;overflow:hidden"><div style="height:100%;width:44%;background:#e0b020;border-radius:2px"></div></div><span style="font-size:7.5px;color:#e0b020;width:26px;text-align:right">44%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════ 06 · HISTORY + SETTINGS ═════ -->
+<section data-label="New Screens" class="pad">
+  <div class="eyebrow">Новые экраны</div>
+  <h2 class="title" style="margin-bottom:44px">History · Settings</h2>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:80px">
+    <!-- History -->
+    <div>
+      <div style="font-size:var(--type-body);font-weight:500;color:#d0e8e4;margin-bottom:20px">История сессий</div>
+      <div style="font-size:var(--type-small);color:var(--dim);line-height:1.65;margin-bottom:28px">Список BPM-сессий по дням. Каждая строка: крупное число BPM, время, duration, confidence-полоска с цветом, мини-waveform thumbnail.</div>
+      <div style="background:#0c1410;border-radius:14px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;border-bottom:1px solid #0a1009">
+          <div style="display:flex;gap:28px">
+            <div><div style="font-size:24px;font-weight:600;color:#00dfb0">14</div><div style="font-size:11px;color:#1a3028;text-transform:uppercase;letter-spacing:.1em">Сессий</div></div>
+            <div><div style="font-size:24px;font-weight:600;color:#00dfb0">196.2</div><div style="font-size:11px;color:#1a3028;text-transform:uppercase;letter-spacing:.1em">Avg BPM</div></div>
+            <div><div style="font-size:24px;font-weight:600;color:#00dfb0">4.1h</div><div style="font-size:11px;color:#1a3028;text-transform:uppercase;letter-spacing:.1em">Всего</div></div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;padding:14px 22px;border-bottom:1px solid #0a1009;gap:14px"><div style="font-size:22px;font-weight:600;color:#00dfb0;width:64px">207.9</div><div style="flex:1"><div style="font-size:12px;color:#3a6858;margin-bottom:6px">22:09 · 18 мин</div><div style="height:3px;background:#111916;border-radius:2px;overflow:hidden"><div style="height:100%;width:82%;background:#00dfb0"></div></div></div></div>
+        <div style="display:flex;align-items:center;padding:14px 22px;border-bottom:1px solid #0a1009;gap:14px"><div style="font-size:22px;font-weight:600;color:#ffe090;width:64px">188.1</div><div style="flex:1"><div style="font-size:12px;color:#3a6858;margin-bottom:6px">21:34 · 6 мин</div><div style="height:3px;background:#111916;border-radius:2px;overflow:hidden"><div style="height:100%;width:46%;background:#e0b020"></div></div></div></div>
+        <div style="display:flex;align-items:center;padding:14px 22px;gap:14px"><div style="font-size:22px;font-weight:600;color:#00dfb0;width:64px">196.4</div><div style="flex:1"><div style="font-size:12px;color:#3a6858;margin-bottom:6px">15:11 · 42 мин</div><div style="height:3px;background:#111916;border-radius:2px;overflow:hidden"><div style="height:100%;width:71%;background:#00dfb0"></div></div></div></div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div>
+      <div style="font-size:var(--type-body);font-weight:500;color:#d0e8e4;margin-bottom:20px">Настройки</div>
+      <div style="font-size:var(--type-small);color:var(--dim);line-height:1.65;margin-bottom:28px">Централизованное управление: диапазон BPM, чувствительность, сглаживание, отображение, Pro-фичи с бейджами.</div>
+      <div style="background:#0c1410;border-radius:14px;overflow:hidden">
+        <div style="padding:14px 22px;border-bottom:1px solid #0a1009">
+          <div style="font-size:10px;letter-spacing:.12em;color:#1a3028;text-transform:uppercase;margin-bottom:12px">Детектор BPM</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><span style="flex:1;font-size:14px;color:#3a6858">Диапазон</span><div style="display:flex;gap:5px"><div style="border:1px solid #1e3530;border-radius:6px;padding:3px 9px;font-size:11px;color:#1e3530">170–230</div><div style="border:1px solid #00dfb0;border-radius:6px;padding:3px 9px;font-size:11px;color:#00dfb0">155–230</div></div></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="flex:1;font-size:14px;color:#3a6858">Сглаживание</span><span style="font-size:12px;color:#1a3028">Умеренное ›</span></div>
+        </div>
+        <div style="padding:14px 22px;border-bottom:1px solid #0a1009">
+          <div style="font-size:10px;letter-spacing:.12em;color:#1a3028;text-transform:uppercase;margin-bottom:12px">Отображение</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><span style="flex:1;font-size:14px;color:#3a6858">Waveform</span><div style="width:30px;height:18px;background:#00dfb0;border-radius:9px;position:relative"><div style="position:absolute;right:2px;top:2px;width:14px;height:14px;background:#fff;border-radius:50%"></div></div></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="flex:1;font-size:14px;color:#3a6858">Не гасить экран</span><div style="width:30px;height:18px;background:#00dfb0;border-radius:9px;position:relative"><div style="position:absolute;right:2px;top:2px;width:14px;height:14px;background:#fff;border-radius:50%"></div></div></div>
+        </div>
+        <div style="padding:14px 22px">
+          <div style="font-size:10px;letter-spacing:.12em;color:#1a3028;text-transform:uppercase;margin-bottom:12px">Pro-функции</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><span style="flex:1;font-size:14px;color:#3a6858">Signal Analyzer</span><span style="background:#00dfb0;color:#000;font-size:9px;font-weight:600;padding:2px 7px;border-radius:4px">Pro</span><span style="color:#1a3028;font-size:13px">›</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="flex:1;font-size:14px;color:#3a6858">История сессий</span><span style="background:#00dfb0;color:#000;font-size:9px;font-weight:600;padding:2px 7px;border-radius:4px">Pro</span><span style="color:#1a3028;font-size:13px">›</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════ 07 · ROADMAP ═════ -->
+<section data-label="Roadmap" class="pad" style="padding-top:60px;padding-bottom:44px">
+  <div class="eyebrow">Реализация</div>
+  <h2 class="title" style="margin-bottom:26px">3 спринта</h2>
+
+  <div class="sprint-grid" style="margin-top:-8px">
+    <!-- Sprint 1 -->
+    <div class="sprint" style="padding:20px 24px;gap:6px">
+      <div class="sprint-hdr">
+        <span class="sprint-name">Спринт 1</span>
+        <span class="badge badge-r">Critical</span>
+      </div>
+      <div style="font-size:var(--type-small);color:var(--muted);margin-bottom:4px">Главный экран + Paywall</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e04040"></div>BPM: 72px, semibold, центр карточки</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e04040"></div>Пустое состояние BPM: «— — —»</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e04040"></div>Confidence bar: 7px + 3 цвета</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e04040"></div>Paywall: заголовки Free / Pro</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e04040"></div>Paywall: ценностный заголовок</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e04040"></div>CTA-иерархия + Best value badge</div>
+    </div>
+
+    <!-- Sprint 2 -->
+    <div class="sprint" style="padding:20px 24px;gap:6px">
+      <div class="sprint-hdr">
+        <span class="sprint-name">Спринт 2</span>
+        <span class="badge badge-y">Medium</span>
+      </div>
+      <div style="font-size:var(--type-small);color:var(--muted);margin-bottom:4px">UX-полировка</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e0b020"></div>«Debug Screen» → «Signal Analyzer»</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e0b020"></div>Кнопка брейк: иконка + полный лейбл</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e0b020"></div>Waveform-зона: высота 120pt</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e0b020"></div>Лейблы WAVEFORM / SPECTRUM CR 3:1+</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e0b020"></div>Индикатор «слушаю» при активном mic</div>
+      <div class="sprint-task"><div class="sprint-dot" style="background:#e0b020"></div>Widget card → Roadmap «Coming to Pro»</div>
+    </div>
+
+    <!-- Sprint 3 -->
+    <div class="sprint" style="padding:20px 24px;gap:6px">
+      <div class="sprint-hdr">
+        <span class="sprint-name">Спринт 3</span>
+        <span class="badge badge-g">New screens</span>
+      </div>
+      <div style="font-size:var(--type-small);color:var(--muted);margin-bottom:4px">Новые экраны</div>
+      <div class="sprint-task"><div class="sprint-dot"></div>Tab bar: Радар / История / Настройки</div>
+      <div class="sprint-task"><div class="sprint-dot"></div>Экран История + data persistence</div>
+      <div class="sprint-task"><div class="sprint-dot"></div>Export CSV / JSON</div>
+      <div class="sprint-task"><div class="sprint-dot"></div>Экран Настройки + UserDefaults</div>
+      <div class="sprint-task"><div class="sprint-dot"></div>Signal Analyzer + FFT visualization</div>
+      <div class="sprint-task"><div class="sprint-dot"></div>BPM Session data model</div>
+    </div>
+  </div>
+
+  <div style="margin-top:28px;padding:22px 32px;background:#0c1410;border:1px solid var(--accent);border-radius:14px;display:flex;gap:48px;align-items:center">
+    <div style="flex-shrink:0"><div style="font-size:40px;font-weight:600;color:var(--accent);line-height:1">Quick wins</div><div style="font-size:var(--type-small);color:var(--dim);margin-top:4px">Реализуемы за 1 день</div></div>
+    <div style="width:1px;height:50px;background:var(--muted);flex-shrink:0"></div>
+    <div style="font-size:var(--type-small);color:var(--dim);line-height:1.7">
+      <span style="color:#d0e8e4">1. Заголовки Free / Pro</span> — 30 мин &nbsp;·&nbsp; <span style="color:#d0e8e4">2. Confidence bar 7px + цвет</span> — 1 час &nbsp;·&nbsp; <span style="color:#d0e8e4">3. CTA-иерархия</span> — 45 мин
+    </div>
+  </div>
+</section>
+
+</deck-stage>
+
+<script src="deck-stage.js"></script>
+</body>
+</html>

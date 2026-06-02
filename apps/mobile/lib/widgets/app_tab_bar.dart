@@ -29,7 +29,7 @@ class AppTabBar extends StatelessWidget {
           top: BorderSide(color: AppColors.borderFaint),
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(0, 10, 0, 16),
+      padding: const EdgeInsets.fromLTRB(0, 14, 0, 20),
       child: Row(
         children: AppTab.values.map((tab) {
           return _TabItem(
@@ -84,23 +84,27 @@ class _TabItem extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _icon,
-              size: 20,
-              color: color,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _label,
-              style: AppTextStyles.mono(
-                8, FontWeight.w400, color,
-                letterSpacing: 1.5,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 50),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _icon,
+                size: 20,
+                color: color,
               ),
-            ),
-          ],
+              const SizedBox(height: 6),
+              Text(
+                _label,
+                style: AppTextStyles.mono(
+                  9, FontWeight.w400, color,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

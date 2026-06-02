@@ -13,9 +13,9 @@ void main() {
     ));
     await tester.pump();
 
-    // Comparison rows (Design v2: "Debug Screen" renamed to "Signal Analyzer").
+    // Comparison rows (Design v2, localized).
     expect(find.text('BPM Range'), findsOneWidget);
-    expect(find.text('Signal Analyzer'), findsOneWidget);
+    expect(find.text('Анализатор сигнала'), findsOneWidget);
     expect(find.text('История'), findsWidgets);
     expect(find.text('Export CSV/JSON'), findsOneWidget);
 
@@ -32,7 +32,7 @@ void main() {
     expect(find.textContaining('Annual'), findsOneWidget);
 
     // Restore.
-    expect(find.text('Restore purchases'), findsOneWidget);
+    expect(find.text('Восстановить покупки'), findsOneWidget);
 
     // Roadmap card (replaces widget tile).
     expect(find.text('COMING TO PRO'), findsOneWidget);

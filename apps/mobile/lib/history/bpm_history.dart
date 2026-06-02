@@ -11,16 +11,19 @@ class BpmSample {
     required this.bpm,
     required this.lockState,
     required this.timestamp,
+    this.confidence = 0.0,
   });
 
   final double bpm;
   final LockState lockState;
   final DateTime timestamp;
+  final double confidence; // 0.0–1.0
 
   Map<String, dynamic> toJson() => {
         'timestamp': timestamp.toIso8601String(),
         'bpm': bpm,
         'lock_state': lockState.name,
+        'confidence': confidence,
       };
 }
 
