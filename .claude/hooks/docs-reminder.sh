@@ -124,6 +124,63 @@ case "$rel" in
     ;;
 esac
 
+# ── Design system / theme ────────────────────────────────────────────────────
+case "$rel" in
+  apps/mobile/lib/theme/app_colors.dart)
+    add "apps/mobile/design/BPM Radar Prototype v2.html" "verify all new tokens match prototype values"
+    add "docs/ARCHITECTURE.md"     "Design System V2 tokens section"
+    add ".claude/docs/project-map.md" "Flutter Layer: lib/theme/"
+    ;;
+  apps/mobile/lib/theme/app_text_styles.dart)
+    add "apps/mobile/design/BPM Radar Prototype v2.html" "verify typography roles match prototype spec"
+    add ".claude/docs/project-map.md" "Flutter Layer: lib/theme/"
+    ;;
+  apps/mobile/lib/theme/design_tokens.dart)
+    add "apps/mobile/lib/theme/app_colors.dart" "design_tokens is proxy — verify it delegates to AppColors"
+    add "docs/ARCHITECTURE.md"     "legacy Design System reference"
+    ;;
+esac
+
+# ── Widgets (visual components) ───────────────────────────────────────────────
+case "$rel" in
+  apps/mobile/lib/widgets/bpm_hero_display.dart)
+    add "apps/mobile/design/BPM Radar Prototype v2.html" "verify BPM Hero: 72px w600 ls:-0.04 active=#00DFB0 unstable=#FFE090 empty=#1E3530"
+    add "docs/ROADMAP.md"          "Phase 11/12 BPM Hero spec"
+    ;;
+  apps/mobile/lib/widgets/confidence_bar.dart)
+    add "apps/mobile/design/BPM Radar Prototype v2.html" "verify ConfidenceBar: h=8 r=4 400ms low/mid/high"
+    ;;
+  apps/mobile/lib/widgets/app_tab_bar.dart)
+    add "apps/mobile/design/BPM Radar Prototype v2.html" "verify Tab Bar: border=#0F1712 bg=#050807 9px w500 uppercase"
+    add ".claude/docs/project-map.md" "Flutter Layer: lib/widgets/app_tab_bar"
+    ;;
+esac
+
+# ── Viz / painters ────────────────────────────────────────────────────────────
+case "$rel" in
+  apps/mobile/lib/viz/waveform_painter.dart)
+    add "apps/mobile/design/BPM Radar Prototype v2.html" "verify Waveform: h=120 primary=#00DFB0 ambient glow + beat-reactive"
+    add "docs/ROADMAP.md"          "Phase 5/12 waveform spec"
+    ;;
+  apps/mobile/lib/viz/live_spectrum_painter.dart)
+    add "apps/mobile/design/BPM Radar Prototype v2.html" "verify Spectrum painter colors / gradient"
+    add "docs/ROADMAP.md"          "Phase 7/12 spectrum spec"
+    ;;
+  apps/mobile/lib/viz/viz_controller.dart)
+    add ".claude/docs/project-map.md" "Flutter Layer: lib/viz/viz_controller responsibilities"
+    ;;
+esac
+
+# ── Design prototype (source of truth changed) ────────────────────────────────
+case "$rel" in
+  apps/mobile/design/*)
+    add ".claude/docs/project-map.md" "design source of truth changed — update canonical values reference"
+    add "apps/mobile/lib/theme/app_colors.dart" "re-audit tokens against updated prototype"
+    add "apps/mobile/lib/theme/app_text_styles.dart" "re-audit typography against updated prototype"
+    add "docs/plans/design_system_v2.md" "update design spec if values changed"
+    ;;
+esac
+
 # ── Roadmap / phase completion ────────────────────────────────────────────────
 # If someone edits ROADMAP directly — check ARCHITECTURE for consistency
 case "$rel" in
