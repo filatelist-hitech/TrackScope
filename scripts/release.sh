@@ -50,6 +50,41 @@ warn() { echo -e "${YELLOW}⚠  $*${NC}"; }
 err()  { echo -e "${RED}✗  $*${NC}"; exit 1; }
 
 # ────────────────────────────────────────────────
+# Версионирование
+# ────────────────────────────────────────────────
+
+PUBSPEC="$MOBILE_DIR/pubspec.yaml"
+
+# Читает текущую версию из pubspec.yaml → "1.0.0+1"
+current_version() {
+  grep '^version:' "$PUBSPEC" | head -1 | sed 's/version:[[:space:]]*//'
+}
+
+# Разбирает "X.Y.Z+N" → возвращает N
+parse_build_number() {
+  echo "${1#*+}"
+}
+
+# Разбирает "X.Y.Z+N" → возвращает X.Y.Z
+parse_version_name() {
+  echo "${1%+*}"
+}
+
+# Увеличивает versionCode на 1 в pubspec.yaml, возвращает новую версию
+bump_build_number() {
+  local cur
+  cur="$(current_version)"
+  local name build
+  name="$(parse_version_name "$cur")"
+  build="$(parse_build_number "$cur")"
+  local new_build=$(( build + 1 ))
+  local new_ver="${name}+${new_build}"
+  # Заменяем строку version: в pubspec.yaml (sed совместим с macOS)
+  sed -i '' "s/^version:.*/version: ${new_ver}/" "$PUBSPEC"
+  echo "$new_ver"
+}
+
+# ────────────────────────────────────────────────
 # Утилиты
 # ────────────────────────────────────────────────
 
@@ -96,10 +131,27 @@ apk_output() {
 # Команда: android
 # ────────────────────────────────────────────────
 
+cmd_bump() {
+  local cur new_ver
+  cur="$(current_version)"
+  new_ver="$(bump_build_number)"
+  ok "Версия: $cur  →  $new_ver"
+  ok "pubspec.yaml обновлён."
+}
+
 cmd_android() {
   log "=== ANDROID BUILD ==="
   check_java
   check_flutter
+
+  # Автоматически увеличиваем versionCode перед каждой release-сборкой
+  if [[ "${NO_BUMP:-0}" != "1" ]]; then
+    local cur new_ver
+    cur="$(current_version)"
+    new_ver="$(bump_build_number)"
+    ok "versionCode bumped: $cur → $new_ver"
+  fi
+
   build_rust_android
 
   cd "$MOBILE_DIR"
@@ -256,7 +308,8 @@ hitech-bpm-radar release script
   bash scripts/release.sh <команда> [опции]
 
 КОМАНДЫ:
-  android       Собрать Android Free APK + PRO APK (release)
+  bump          Увеличить versionCode в pubspec.yaml (+1) без сборки
+  android       Собрать Android Free APK + PRO APK (release, auto-bumps versionCode)
   ios           Задеплоить Free + PRO на iPhone (IPHONE_ID)
   ios-free      Задеплоить только Free на iPhone
   ios-pro       Задеплоить только PRO на iPhone
@@ -272,6 +325,7 @@ hitech-bpm-radar release script
   JAVA_HOME     JDK 17+ (дефолт: Android Studio bundled JDK 21)
   ANDROID_HOME  Android SDK root (дефолт: ~/Library/Android/sdk)
   SKIP_NATIVE   Пропустить Rust-сборку: SKIP_NATIVE=1 bash scripts/release.sh android
+  NO_BUMP       Не трогать версию: NO_BUMP=1 bash scripts/release.sh android
 
 ПРИМЕРЫ:
   # Первая сборка (долго ~5 мин):
@@ -304,6 +358,7 @@ EOF
 # ────────────────────────────────────────────────
 
 case "$CMD" in
+  bump)        cmd_bump          ;;
   android)     cmd_android       ;;
   ios)         cmd_ios "both"    ;;
   ios-free)    cmd_ios "free"    ;;
