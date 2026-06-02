@@ -57,8 +57,28 @@ class AppNavigator extends StatefulWidget {
   State<AppNavigator> createState() => _AppNavigatorState();
 }
 
-class _AppNavigatorState extends State<AppNavigator> {
+class _AppNavigatorState extends State<AppNavigator>
+    with SingleTickerProviderStateMixin {
   AppTab _current = AppTab.radar;
+  late final AnimationController _fadeCtrl;
+  late final Animation<double> _fadeAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+      value: 1.0,
+    );
+    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _fadeCtrl.dispose();
+    super.dispose();
+  }
 
   void _onTabChanged(AppTab tab) {
     // History / Settings are Pro-gated at the tab level.
@@ -68,7 +88,10 @@ class _AppNavigatorState extends State<AppNavigator> {
       ));
       return;
     }
+    if (tab == _current) return;
+    _fadeCtrl.reset();
     setState(() => _current = tab);
+    _fadeCtrl.forward();
   }
 
   void _pushPaywall(String feature) {
@@ -93,7 +116,7 @@ class _AppNavigatorState extends State<AppNavigator> {
   void _onSwipe(DragEndDetails details) {
     final v = details.primaryVelocity ?? 0;
     const double threshold = 300.0;
-    final tabs = AppTab.values;
+    const tabs = AppTab.values;
     final idx = _current.index;
     if (v < -threshold && idx < tabs.length - 1) {
       // Swipe left → next tab
@@ -111,6 +134,8 @@ class _AppNavigatorState extends State<AppNavigator> {
       body: GestureDetector(
         onHorizontalDragEnd: _onSwipe,
         behavior: HitTestBehavior.translucent,
+        child: FadeTransition(
+        opacity: _fadeAnim,
         child: IndexedStack(
         index: _current.index,
         children: [
@@ -147,6 +172,7 @@ class _AppNavigatorState extends State<AppNavigator> {
             onUpgradeTap: () => _pushPaywall('upgrade'),
           ),
         ],
+        ),
         ),
       ),
       bottomNavigationBar: AppTabBar(

@@ -354,7 +354,7 @@ class _GlassmorphismCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 4, 0, 10),
+      padding: const EdgeInsets.fromLTRB(0, 2, 0, 6),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
@@ -371,7 +371,7 @@ class _GlassmorphismCard extends StatelessWidget {
             filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: Container(
               color: Colors.white.withAlpha(8),
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
               child: SingleChildScrollView(
                 physics: const ClampingScrollPhysics(),
                 child: _InfoTableContent(
@@ -471,7 +471,7 @@ class _InfoTableContent extends StatelessWidget {
 
         // ── Full-width confidence bar ────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 10),
+          padding: const EdgeInsets.only(top: 8, bottom: 6),
           child: ConfidenceBar(confidence: conf),
         ),
 
@@ -479,7 +479,7 @@ class _InfoTableContent extends StatelessWidget {
         Center(
           child: _BreakButtonInline(onTap: onBreak ?? () {}),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 8),
 
         // ── Stats grid ───────────────────────────────────────────────────────
         // Row 1: Уровень входа | Лучший кандидат
@@ -498,7 +498,7 @@ class _InfoTableContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         // Row 2: Клиппинг | Шум
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -514,7 +514,7 @@ class _InfoTableContent extends StatelessWidget {
             Expanded(child: _StatCell(label: 'Шум', value: noiseText)),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         // Row 3: ×½ / ×2 — full width centered (both half and double visible)
         Center(
           child: _StatCell(
@@ -523,7 +523,7 @@ class _InfoTableContent extends StatelessWidget {
             centered: true,
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 8),
 
         // ── Lock state chips ─────────────────────────────────────────────────
         _ModeChips(lockState: lock),
@@ -627,10 +627,12 @@ class _BreakButtonInline extends StatelessWidget {
             const Icon(Icons.pause_circle_outline,
                 size: 11, color: AppColors.textSecondary),
             const SizedBox(width: 6),
-            Text(
-              'Зафиксировать брейк',
-              style: AppTextStyles.mono(
-                  11, FontWeight.w400, AppColors.textSecondary),
+            Flexible(
+              child: Text(
+                'Зафиксировать брейк',
+                style: AppTextStyles.mono(
+                    11, FontWeight.w400, AppColors.textSecondary),
+              ),
             ),
           ],
         ),
@@ -754,6 +756,8 @@ class _AnimatedBpmDisplay extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Hero BPM number with beat-reactive accent glow.
+        // AnimatedSwitcher key = hasValue only: animates on null↔value transition,
+        // not on every BPM update (which fires every ~50 ms and stacks animations).
         RepaintBoundary(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 220),
@@ -762,7 +766,7 @@ class _AnimatedBpmDisplay extends StatelessWidget {
             transitionBuilder: (child, anim) =>
                 FadeTransition(opacity: anim, child: child),
             child: ListenableBuilder(
-              key: ValueKey(bpmText),
+              key: ValueKey(hasValue),
               listenable: viz,
               builder: (_, __) {
                 final g = viz.beatDecay;
