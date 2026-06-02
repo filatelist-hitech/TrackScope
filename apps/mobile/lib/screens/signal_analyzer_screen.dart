@@ -586,6 +586,18 @@ class _WarningRow extends StatelessWidget {
   final String text;
   final bool showDivider;
 
+  // Translate raw DSP warning keys → Russian.
+  static String _translate(String raw) {
+    if (raw == 'breakdown_likely') return 'вероятен брейкдаун';
+    if (raw == 'clipping') return 'клиппинг';
+    // harmonic_ambiguity=X.XX
+    if (raw.startsWith('harmonic_ambiguity=')) {
+      final val = raw.substring('harmonic_ambiguity='.length);
+      return 'гарм. неоднозначность: $val';
+    }
+    return raw;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -599,7 +611,7 @@ class _WarningRow extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  text,
+                  _translate(text),
                   style: AppTextStyles.mono(
                       9, FontWeight.w400, AppColors.amberText),
                 ),
@@ -621,20 +633,31 @@ class _QualityGroup extends StatelessWidget {
   const _QualityGroup({required this.quality});
   final SignalQuality quality;
 
+  static String _noiseLevel(String? v) {
+    switch (v) {
+      case 'low':       return 'низкий';
+      case 'medium':    return 'средний';
+      case 'high':      return 'высокий';
+      case 'noise_only':return 'только шум';
+      case 'unknown':   return 'неизвестно';
+      default:          return v ?? '—';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final rows = <(String, String, Color?)>[
       (
-        'Clipping',
+        'Клиппинг',
         quality.clipping ? '⚠ перегруз' : 'нет',
         quality.clipping ? AppColors.danger : null,
       ),
       (
-        'Clipped frames',
+        'Клипп. кадры',
         '${(quality.clippedFrameRatio * 100).toStringAsFixed(1)}%',
         null,
       ),
-      ('Noise Level', quality.noiseLevel, null),
+      ('Уровень шума', _noiseLevel(quality.noiseLevel), null),
       ('Тишина', quality.silence ? 'да' : 'нет', null),
       (
         'Вероятен брейк',

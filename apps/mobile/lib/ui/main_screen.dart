@@ -484,6 +484,7 @@ class _InfoTableContent extends StatelessWidget {
         // ── Stats grid ───────────────────────────────────────────────────────
         // Row 1: Уровень входа | Лучший кандидат
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(child: _StatCell(label: 'Уровень входа', value: inputLevel)),
             const SizedBox(width: 18),
@@ -500,6 +501,7 @@ class _InfoTableContent extends StatelessWidget {
         const SizedBox(height: 10),
         // Row 2: Клиппинг | Шум
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: _StatCell(
@@ -663,11 +665,11 @@ class _ModeChips extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _Chip(label: 'IDLE', isOn: active == _ChipMode.idle),
+        _Chip(label: 'ПОИСК', isOn: active == _ChipMode.idle),
         const SizedBox(width: 6),
-        _Chip(label: 'ACTIVE', isOn: active == _ChipMode.active),
+        _Chip(label: 'ЗАХВАТ', isOn: active == _ChipMode.active),
         const SizedBox(width: 6),
-        _Chip(label: 'UNSTABLE', isOn: active == _ChipMode.unstable),
+        _Chip(label: 'НЕСТАБ.', isOn: active == _ChipMode.unstable),
       ],
     );
   }
@@ -743,9 +745,9 @@ class _AnimatedBpmDisplay extends StatelessWidget {
     final effectiveColor =
         isLockingDisplay ? textColor.withAlpha(180) : textColor;
 
-    // Font size: 72 when value present, 58 for "— — —" placeholder.
-    final fontSize = hasValue ? 72.0 : 58.0;
-    final letterSpacing = hasValue ? -2.5 : -1.5;
+    // Font size: always 72 to prevent layout jank on state change.
+    const fontSize = 72.0;
+    const letterSpacing = -2.5;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,

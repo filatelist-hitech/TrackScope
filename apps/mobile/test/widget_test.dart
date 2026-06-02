@@ -195,7 +195,7 @@ void main() {
     // BPM displayed.
     expect(find.text('200.0'), findsOneWidget);
     // Design v2: STABLE shows ACTIVE chip (not "стабильно" badge).
-    expect(find.text('ACTIVE'), findsOneWidget);
+    expect(find.text('ЗАХВАТ'), findsOneWidget);
     // Confidence bar shows percentage.
     expect(find.textContaining('87%'), findsAtLeast(1));
   });
@@ -257,7 +257,7 @@ void main() {
     expect(find.text('—'), findsWidgets,
         reason: 'SEARCHING must render placeholder, never an invented BPM');
     // Phase 11: mode chips. SEARCHING → IDLE chip active.
-    expect(find.text('IDLE'), findsOneWidget);
+    expect(find.text('ПОИСК'), findsOneWidget);
   });
 
   testWidgets('MainScreen shows перегруз badge for CLIPPED_MIC',
@@ -277,7 +277,7 @@ void main() {
     await tester.pump();
 
     // Phase 11: no Russian badge; mode chip CLIPPED_MIC → IDLE active.
-    expect(find.text('IDLE'), findsOneWidget);
+    expect(find.text('ПОИСК'), findsOneWidget);
     // Clipping value in InfoCard cell (lowercase with warning emoji).
     expect(find.text('⚠ перегруз'), findsOneWidget);
     // BPM must be null, not a fake number.
@@ -316,7 +316,7 @@ void main() {
     await tester.pump();
 
     // Phase 11: BREAKDOWN → IDLE chip active (no Russian badge).
-    expect(find.text('IDLE'), findsOneWidget);
+    expect(find.text('ПОИСК'), findsOneWidget);
   });
 
   testWidgets('MainScreen shows только шум badge for NOISE_ONLY', (tester) async {
@@ -331,7 +331,7 @@ void main() {
     await tester.pump();
 
     // Phase 11: NOISE_ONLY → IDLE chip active (no Russian badge).
-    expect(find.text('IDLE'), findsOneWidget);
+    expect(find.text('ПОИСК'), findsOneWidget);
   });
 
   testWidgets('MainScreen shows захват badge for LOCKING', (tester) async {
@@ -346,7 +346,7 @@ void main() {
     await tester.pump();
 
     // Phase 11: LOCKING → ACTIVE chip active (no Russian badge).
-    expect(find.text('ACTIVE'), findsOneWidget);
+    expect(find.text('ЗАХВАТ'), findsOneWidget);
   });
 
   testWidgets('MainScreen surfaces capture errors from the error stream',

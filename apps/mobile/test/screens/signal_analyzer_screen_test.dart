@@ -167,7 +167,7 @@ void main() {
       ctrl.add(makeResult());
       await tester.pump();
 
-      expect(find.textContaining('harmonic_ambiguity'), findsOneWidget);
+      expect(find.textContaining('гарм. неоднозначность'), findsOneWidget);
     });
 
     testWidgets('signal quality section is present', (tester) async {
