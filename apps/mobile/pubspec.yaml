@@ -1,4 +1,4 @@
-name: hitech_bpm_radar
+name: TrackScope
 description: Realtime hitech/psytrance BPM radar mobile shell.
 publish_to: "none"
 version: 1.1.0+2
