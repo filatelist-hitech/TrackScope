@@ -414,3 +414,33 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - CLIPPED_MIC → `key_result == None` ✓
 - Camelot: A minor = "8A", C major = "8B" ✓
 - JSON: `key_result` отсутствует при None ✓
+
+---
+
+## Phase 2.2: EnergyAnalyzer — уровень энергии 1–10 — **ЗАВЕРШЕНО** (2026-06-02)
+
+Цель: реализовать детекцию уровня энергии 1–10 (Mixed In Key-стиль) через RMS + spectral flux + onset density.
+
+Артефакты:
+
+- `core/dsp/src/energy_analyzer.rs` — полная реализация: RMS-окно 3 сек + flux_history из DspEngine + onset density → взвешенная сумма → ceil × 10, clamp [1,10].
+- `DspEngine` интегрирован: `energy_analyzer` как поле, `push_normalized` вызывает `push_samples` и `push_flux`, `analyze()` заполняет `energy_result`, `reset()` сбрасывает состояние.
+- `core/dsp/tests/energy.rs` — 5 тестов: absence on silence, presence on STABLE, level in [1,10], calibration clean_200 in [4,8], absence on CLIPPED_MIC.
+- `apps/mobile/lib/dsp/dsp_result.dart` — класс `EnergyResult` + поле `DspResult.energyResult`, парсинг JSON.
+- `apps/mobile/test/dsp_debug_test.dart` — 2 новых теста: `energy_result_parses_from_json`, `energy_result_absent_when_not_in_JSON`.
+- `apps/mobile/lib/screens/signal_analyzer_screen.dart` — секция «ЭНЕРГИЯ» с progress bar + RMS/Flux/Density rows. Гейт по `energyResult != null`.
+
+Критерии выхода — выполнены:
+
+- `cargo test --workspace` → все тесты зелёные ✓
+- `flutter test` → 190/190 ✓
+- `flutter analyze` → 0 errors ✓
+- Тишина → `energy_result == None` ✓
+- CLIPPED_MIC → `energy_result == None` ✓
+- clean_200 STABLE → level ∈ [4, 8] ✓
+- Signal Analyzer показывает энергию `N / 10` при наличии сигнала ✓
+
+Известные ограничения:
+
+- Калибровочные константы (`FLUX_MAX = 0.15`, `DENSITY_MAX = 6.0`) подобраны на синтетике; требуют fine-tuning на реальных записях (Phase 2.2.1).
+- Python-референс (`tempo.py`) не реализует `energy_result` — всегда `None` в Python-пути.

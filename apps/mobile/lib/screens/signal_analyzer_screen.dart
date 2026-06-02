@@ -130,6 +130,12 @@ class _SignalAnalyzerScreenState extends State<SignalAnalyzerScreen> {
                     const _SectionHeader('КАНДИДАТЫ BPM'),
                     _CandidatesGroup(candidates: r.candidates),
 
+                    // ── Энергия ───────────────────────────────────────
+                    if (r.energyResult != null) ...[
+                      const _SectionHeader('ЭНЕРГИЯ'),
+                      _EnergyGroup(energy: r.energyResult!),
+                    ],
+
                     // ── Метрики алгоритма ─────────────────────────────
                     const _SectionHeader('МЕТРИКИ АЛГОРИТМА'),
                     _MetricsGroup(debug: r.debug, quality: r.signalQuality),
@@ -382,6 +388,93 @@ class _CandidateRow extends StatelessWidget {
             color: Color(0xFF080C09),
             indent: 0, endIndent: 0,
           ),
+      ],
+    );
+  }
+}
+
+// ── Energy group ─────────────────────────────────────────────────────────────
+
+class _EnergyGroup extends StatelessWidget {
+  const _EnergyGroup({required this.energy});
+  final EnergyResult energy;
+
+  @override
+  Widget build(BuildContext context) {
+    final levelFraction = energy.level / 10.0;
+    final rmsText = energy.rmsDbfs.isFinite
+        ? '${energy.rmsDbfs.toStringAsFixed(1)} dBFS'
+        : '—';
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0d1712),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('ENERGY', style: AppTextStyles.sectionLabel),
+              const Spacer(),
+              Text(
+                '${energy.level} / 10',
+                style: AppTextStyles.statsValue.copyWith(color: AppColors.accent),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: levelFraction,
+              minHeight: 7,
+              backgroundColor: AppColors.surfaceHigh,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _EnergyRow(label: 'RMS', value: rmsText),
+          _EnergyRow(label: 'Flux', value: energy.spectralFlux.toStringAsFixed(3)),
+          _EnergyRow(
+            label: 'Density',
+            value: '${energy.onsetDensityHz.toStringAsFixed(1)} /s',
+            showDivider: false,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EnergyRow extends StatelessWidget {
+  const _EnergyRow({
+    required this.label,
+    required this.value,
+    this.showDivider = true,
+  });
+  final String label;
+  final String value;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary)),
+              Text(value, style: AppTextStyles.caption),
+            ],
+          ),
+        ),
+        if (showDivider)
+          Divider(height: 1, thickness: 0.5, color: AppColors.surfaceHigh),
       ],
     );
   }

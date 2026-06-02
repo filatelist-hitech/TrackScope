@@ -455,3 +455,41 @@ Double-time-нормализация (>260 → ÷2) не затронута ра
 - Детекция мода (Major/Minor) на односоставных сигналах неточна — для надёжного результата нужен аккорд или мелодическая линия.
 - `key_result` не вычисляется в batch-пути `analyze_pcm` — только в потоковом `DspEngine`.
 - Python-референс (`tempo.py`) не реализует HPCP — `key_result` всегда `None` в Python-пути.
+
+## Анализ энергии (Phase 2.2)
+
+### Алгоритм
+
+`EnergyAnalyzer` вычисляет уровень энергии 1–10 из трёх компонент:
+
+1. **RMS dBFS** (40%) — скользящий PCM-буфер 3 сек; вычисляется независимо в `EnergyAnalyzer.push_samples()`.
+2. **Spectral flux** (35%) — среднее по `flux_history`, получаемой через `push_flux(flux)` из `DspEngine` (уже вычисленный flux, без дублирования CPU).
+3. **Onset density** (25%) — `onset_history.len() / analysis_window_seconds`.
+
+Нормализация: каждая компонента линейно масштабируется в [0, 1] по калибровочным константам, затем взвешивается. Результат → `ceil(sum × 10).clamp(1, 10)`.
+
+### Гейты подавления
+
+`energy_result == None` при:
+- `lock_state == CLIPPED_MIC` — клиппинг компрометирует RMS и flux.
+- `signal_quality.silence == true` — нет сигнала.
+
+### Константы (калибровка для hitech 155–230 BPM)
+
+| Константа | Значение | Назначение |
+|---|---|---|
+| `RMS_DBFS_MIN` | -50.0 dBFS | Нижняя граница RMS |
+| `RMS_DBFS_MAX` | -6.0 dBFS | Верхняя граница RMS |
+| `FLUX_MIN` | 0.0 | Нижняя граница flux |
+| `FLUX_MAX` | 0.15 | Верхняя граница flux (hitech пульс) |
+| `DENSITY_MIN` | 0.5 /s | Редкий пульс |
+| `DENSITY_MAX` | 6.0 /s | Плотный kick + суб-онсеты |
+| `WEIGHT_RMS` | 0.40 | Вес RMS |
+| `WEIGHT_FLUX` | 0.35 | Вес flux |
+| `WEIGHT_DENSITY` | 0.25 | Вес density |
+
+### Известные ограничения
+
+- Константы подобраны на синтетических фикстурах; требуют fine-tuning на реальных записях (Phase 2.2.1).
+- `energy_result` не вычисляется в batch-пути `analyze_pcm` — только в потоковом `DspEngine`.
+- Python-референс (`tempo.py`) не реализует `energy_result` — всегда `None` в Python-пути.

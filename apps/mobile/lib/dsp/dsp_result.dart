@@ -192,6 +192,36 @@ class DspDebug {
 /// Детектированная тональность (Phase 2.1).
 ///
 /// `key`, `mode` и `camelot` — `null` если уверенность ниже порога
+/// Уровень энергии 1–10 (Mixed In Key-стиль).
+/// `null` при тишине или CLIPPED_MIC — anti-fake: нет уровня без сигнала.
+class EnergyResult {
+  const EnergyResult({
+    required this.level,
+    required this.rmsDbfs,
+    required this.spectralFlux,
+    required this.onsetDensityHz,
+  });
+
+  /// 1 (очень тихо) — 10 (очень интенсивно).
+  final int level;
+
+  /// RMS-уровень в dBFS за скользящее окно.
+  final double rmsDbfs;
+
+  /// Средний spectral flux за скользящее окно.
+  final double spectralFlux;
+
+  /// Плотность онсетов (онсетов/сек).
+  final double onsetDensityHz;
+
+  factory EnergyResult.fromJson(Map<String, dynamic> json) => EnergyResult(
+        level: (json['level'] as num?)?.toInt() ?? 0,
+        rmsDbfs: _asDoubleOrNull(json['rms_dbfs']) ?? double.negativeInfinity,
+        spectralFlux: _asDoubleOrNull(json['spectral_flux']) ?? 0.0,
+        onsetDensityHz: _asDoubleOrNull(json['onset_density_hz']) ?? 0.0,
+      );
+}
+
 /// или DSP находится в CLIPPED_MIC / тишине. Никогда не содержит
 /// хардкодных значений — только результат Rust HPCP + K-S алгоритма.
 class KeyResult {
@@ -245,6 +275,7 @@ class DspResult {
     required this.timing,
     required this.debug,
     this.keyResult,
+    this.energyResult,
   });
 
   /// `null`, когда DSP не перешагнул порог захвата. UI ОБЯЗАН отрисовать
@@ -261,6 +292,9 @@ class DspResult {
 
   /// Детектированная тональность. `null` при тишине, клиппинге или низкой уверенности.
   final KeyResult? keyResult;
+
+  /// Уровень энергии 1–10. `null` при тишине или клиппинге.
+  final EnergyResult? energyResult;
 
   factory DspResult.fromJson(Map<String, dynamic> json) => DspResult(
         primaryBpm: _asDoubleOrNull(json['primary_bpm']),
@@ -281,6 +315,10 @@ class DspResult {
             ? null
             : KeyResult.fromJson(
                 (json['key_result'] as Map).cast<String, dynamic>()),
+        energyResult: json['energy_result'] == null
+            ? null
+            : EnergyResult.fromJson(
+                (json['energy_result'] as Map).cast<String, dynamic>()),
       );
 
   static DspResult parse(String json) =>

@@ -8,7 +8,7 @@ pub mod energy_analyzer;
 pub mod genre_preset;
 pub mod key_analyzer;
 
-pub use energy_analyzer::EnergyResult;
+pub use energy_analyzer::{EnergyAnalyzer, EnergyResult};
 pub use genre_preset::GenrePreset;
 pub use key_analyzer::{KeyAnalyzer, KeyResult};
 
@@ -245,6 +245,7 @@ pub struct DspEngine {
     onset_capacity: usize,
     hop_sec: f32,
     key_analyzer: KeyAnalyzer,
+    energy_analyzer: EnergyAnalyzer,
 }
 
 /// Ёмкость скользящего BPM-буфера в `DspEngine`.
@@ -321,6 +322,7 @@ impl DspEngine {
             onset_capacity,
             hop_sec,
             key_analyzer: KeyAnalyzer::new(config.sample_rate as f32),
+            energy_analyzer: EnergyAnalyzer::new(config.sample_rate as f32),
         }
     }
 
@@ -355,6 +357,7 @@ impl DspEngine {
 
         // Ограниченное PCM-кольцо: O(новых) работы, не растёт выше pcm_capacity.
         self.key_analyzer.push_samples(normalized);
+        self.energy_analyzer.push_samples(normalized);
         for &sample in normalized {
             if self.pcm_window.len() >= self.pcm_capacity && self.pcm_capacity > 0 {
                 self.pcm_window.pop_front();
@@ -373,6 +376,7 @@ impl DspEngine {
                 None => 0.0,
             };
             self.prev_frame_rms = Some(rms);
+            self.energy_analyzer.push_flux(flux);
             if self.onset_history.len() >= self.onset_capacity && self.onset_capacity > 0 {
                 self.onset_history.pop_front();
             }
@@ -623,6 +627,19 @@ impl DspEngine {
             }
         }
 
+        // Анализ энергии (Phase 2.2). Подавляется при клиппинге и тишине.
+        // Гейт по паттерну key_result: anti-fake — нет уровня без сигнала.
+        if !matches!(result.lock_state, LockState::ClippedMic)
+            && !result.signal_quality.silence
+        {
+            let window_secs = self.config.analysis_window_seconds;
+            let onset_count = self.onset_history.len();
+            let er = self.energy_analyzer.current_energy(onset_count, window_secs);
+            if er.level > 0 {
+                result.energy_result = Some(er);
+            }
+        }
+
         // Запомнить состояние для следующего вызова.
         self.prev_lock_state = Some(result.lock_state);
         result
@@ -641,6 +658,7 @@ impl DspEngine {
         self.force_next_searching = false;
         self.has_ever_been_stable = false;
         self.key_analyzer.reset();
+        self.energy_analyzer.reset();
     }
 
     fn observed_seconds(&self) -> f32 {

@@ -132,6 +132,47 @@ void main() {
       expect(result.keyResult, isNull);
     });
 
+    test('energy_result parses from JSON', () {
+      const withEnergy = '''
+      {
+        "primary_bpm": 200.0,
+        "confidence": 0.85,
+        "lock_state": "STABLE",
+        "signal_quality": {
+          "clipping": false, "clipped_frame_ratio": 0.0,
+          "noise_level": "low", "silence": false, "breakdown_likely": false
+        },
+        "candidates": [],
+        "timing": {
+          "analysis_time_sec": 12.0, "window_time_sec": 12.0,
+          "hop_time_sec": 0.0025
+        },
+        "debug": {
+          "onset_rate_hz": 3.0, "onset_strength": 0.03,
+          "tempo_peak_prominence": 0.4, "harmonic_ambiguity": 0.1,
+          "stability_score": 0.8, "warnings": []
+        },
+        "energy_result": {
+          "level": 7,
+          "rms_dbfs": -14.2,
+          "spectral_flux": 0.083,
+          "onset_density_hz": 3.15
+        }
+      }
+      ''';
+      final result = DspResult.parse(withEnergy);
+      expect(result.energyResult, isNotNull);
+      expect(result.energyResult!.level, equals(7));
+      expect(result.energyResult!.rmsDbfs, closeTo(-14.2, 0.01));
+      expect(result.energyResult!.spectralFlux, closeTo(0.083, 0.001));
+      expect(result.energyResult!.onsetDensityHz, closeTo(3.15, 0.01));
+    });
+
+    test('energy_result absent when not in JSON', () {
+      final result = DspResult.parse(minimalResult);
+      expect(result.energyResult, isNull);
+    });
+
     test('missing debug key → zero DspDebug', () {
       const noDebug = '''
       {
