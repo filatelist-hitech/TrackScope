@@ -76,7 +76,7 @@ void main() {
       expect(find.text('Ожидание первого снапшота DspResult…'), findsOneWidget);
     });
 
-    testWidgets('AppBar title is SIGNAL ANALYZER uppercase with PRO badge', (tester) async {
+    testWidgets('AppBar title is АНАЛИЗАТОР СИГНАЛА uppercase with PRO badge', (tester) async {
       final ctrl = StreamController<DspResult>.broadcast();
       addTearDown(ctrl.close);
 
@@ -85,10 +85,10 @@ void main() {
       ));
       await tester.pump();
 
-      expect(find.text('SIGNAL ANALYZER'), findsOneWidget);
+      expect(find.text('АНАЛИЗАТОР СИГНАЛА'), findsOneWidget);
       expect(find.text('PRO'), findsOneWidget);
-      // Old title must NOT appear.
-      expect(find.text('Signal Analyzer'), findsNothing);
+      // Old EN title must NOT appear.
+      expect(find.text('SIGNAL ANALYZER'), findsNothing);
     });
 
     testWidgets('shows BPM КАНДИДАТЫ section header after result', (tester) async {
@@ -101,7 +101,7 @@ void main() {
       ctrl.add(makeResult());
       await tester.pump();
 
-      expect(find.text('BPM КАНДИДАТЫ'), findsOneWidget);
+      expect(find.text('КАНДИДАТЫ BPM'), findsOneWidget);
     });
 
     testWidgets('candidate BPM shown, relation label NOT shown', (tester) async {
@@ -133,9 +133,9 @@ void main() {
       await tester.pump();
 
       expect(find.text('МЕТРИКИ АЛГОРИТМА'), findsOneWidget);
-      expect(find.text('Onset Detection'), findsOneWidget);
-      expect(find.text('Autocorrelation'), findsOneWidget);
-      expect(find.text('Spectral Flux'), findsOneWidget);
+      expect(find.text('Обнаружение онсетов'), findsOneWidget);
+      expect(find.text('Автокорреляция'), findsOneWidget);
+      expect(find.text('Спектральный поток'), findsOneWidget);
       // Old raw metric labels must not appear.
       expect(find.text('Onset rate'), findsNothing);
       expect(find.text('Peak prominence'), findsNothing);

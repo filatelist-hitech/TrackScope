@@ -112,11 +112,11 @@ class SettingsScreen extends StatelessWidget {
               ),
 
               // ── 3. PRO FEATURES ───────────────────────────────────────
-              const _SectionHeader('PRO FEATURES'),
+              const _SectionHeader('PRO-ФУНКЦИИ'),
               _SettingsGroup(
                 children: [
                   _NavRow(
-                    label: 'Signal Analyzer',
+                    label: 'Анализатор сигнала',
                     isPro: !flags.canAccessDebugScreen,
                     onTap: onSignalAnalyzerTap,
                     showDivider: true,
@@ -142,7 +142,7 @@ class SettingsScreen extends StatelessWidget {
                       showDivider: true,
                     ),
                   _NavRow(
-                    label: 'Restore purchases',
+                    label: 'Восстановить покупки',
                     labelColor: AppColors.textMuted,
                     onTap: () {},
                     showDivider: false,

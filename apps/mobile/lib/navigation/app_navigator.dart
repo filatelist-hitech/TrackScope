@@ -90,11 +90,28 @@ class _AppNavigatorState extends State<AppNavigator> {
     ));
   }
 
+  void _onSwipe(DragEndDetails details) {
+    final v = details.primaryVelocity ?? 0;
+    const double threshold = 300.0;
+    final tabs = AppTab.values;
+    final idx = _current.index;
+    if (v < -threshold && idx < tabs.length - 1) {
+      // Swipe left → next tab
+      _onTabChanged(tabs[idx + 1]);
+    } else if (v > threshold && idx > 0) {
+      // Swipe right → prev tab
+      _onTabChanged(tabs[idx - 1]);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: IndexedStack(
+      body: GestureDetector(
+        onHorizontalDragEnd: _onSwipe,
+        behavior: HitTestBehavior.translucent,
+        child: IndexedStack(
         index: _current.index,
         children: [
           // ── Tab 0: Radar ──────────────────────────────────────────────────
@@ -130,6 +147,7 @@ class _AppNavigatorState extends State<AppNavigator> {
             onUpgradeTap: () => _pushPaywall('upgrade'),
           ),
         ],
+        ),
       ),
       bottomNavigationBar: AppTabBar(
         current: _current,

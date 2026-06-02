@@ -59,10 +59,10 @@ class _SignalAnalyzerScreenState extends State<SignalAnalyzerScreen> {
         // Back icon
         iconTheme: const IconThemeData(color: AppColors.textSecondary),
         title: Text(
-          'SIGNAL ANALYZER',
+          'АНАЛИЗАТОР СИГНАЛА',
           style: AppTextStyles.mono(
-            10, FontWeight.w600, const Color(0xFF7AB8AA),
-            letterSpacing: 0.18 * 10,
+            11, FontWeight.w600, const Color(0xFF7AB8AA),
+            letterSpacing: 0.18 * 11,
           ),
         ),
         // PRO badge on right
@@ -95,7 +95,7 @@ class _SignalAnalyzerScreenState extends State<SignalAnalyzerScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('FFT SPECTRUM',
+                  Text('СПЕКТР FFT',
                       style: AppTextStyles.sectionLabel),
                   const SizedBox(height: 4),
                   SizedBox(
@@ -127,7 +127,7 @@ class _SignalAnalyzerScreenState extends State<SignalAnalyzerScreen> {
                   padding: EdgeInsets.zero,
                   children: [
                     // ── BPM Кандидаты ─────────────────────────────────
-                    const _SectionHeader('BPM КАНДИДАТЫ'),
+                    const _SectionHeader('КАНДИДАТЫ BPM'),
                     _CandidatesGroup(candidates: r.candidates),
 
                     // ── Метрики алгоритма ─────────────────────────────
@@ -217,7 +217,7 @@ class _VizSpectrumPainter extends CustomPainter {
 }
 
 // ── Section header (sa-hdr) ───────────────────────────────────────────────────
-// Outside cards: 7px uppercase dim label with standard padding.
+// Outside cards: 9px uppercase dim label with standard padding.
 
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader(this.label);
@@ -230,8 +230,8 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         label,
         style: AppTextStyles.mono(
-          7, FontWeight.w400, AppColors.textMuted,
-          letterSpacing: 0.14 * 7,
+          9, FontWeight.w500, const Color(0xFF7AB8AA),
+          letterSpacing: 0.14 * 9,
         ),
       ),
     );
@@ -334,16 +334,16 @@ class _CandidateRow extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
           child: Row(
             children: [
-              // BPM number — 60px wide, 17px semibold
+              // BPM number — 62px wide, 20px semibold
               SizedBox(
                 width: 62,
                 child: Text(
                   candidate.bpm.toStringAsFixed(1),
                   style: AppTextStyles.mono(
-                    17, FontWeight.w600, _bpmColor,
+                    20, FontWeight.w600, _bpmColor,
                   ),
                 ),
               ),
@@ -412,21 +412,21 @@ class _MetricsGroup extends StatelessWidget {
 
     final rows = <Widget>[
       _MetricBarRow(
-        label: 'Onset Detection',
+        label: 'Обнаружение онсетов',
         value: onsetDetPct / 100.0,
         pct: onsetDetPct,
         color: AppColors.accent,
         showDivider: true,
       ),
       _MetricBarRow(
-        label: 'Autocorrelation',
+        label: 'Автокорреляция',
         value: autocorrPct / 100.0,
         pct: autocorrPct,
         color: AppColors.accent,
         showDivider: true,
       ),
       _MetricBarRow(
-        label: 'Spectral Flux',
+        label: 'Спектральный поток',
         value: fluxPct / 100.0,
         pct: fluxPct,
         color: AppColors.yellow,
@@ -434,7 +434,7 @@ class _MetricsGroup extends StatelessWidget {
       ),
       // Harmonic ambiguity: 0.0 = clean, 1.0+ = ambiguous → amber when high
       _MetricTextRow(
-        label: 'Harmonic Ambiguity',
+        label: 'Гарм. неоднозначность',
         value: debug.harmonicAmbiguity.toStringAsFixed(2),
         valueColor: debug.harmonicAmbiguity > 0.5
             ? AppColors.amberText
@@ -443,7 +443,7 @@ class _MetricsGroup extends StatelessWidget {
       ),
       // Stability score: 0.0–1.0 → bar with accent colour
       _MetricBarRow(
-        label: 'Stability',
+        label: 'Стабильность',
         value: debug.stabilityScore.clamp(0.0, 1.0),
         pct: (debug.stabilityScore.clamp(0.0, 1.0) * 100).round(),
         color: AppColors.accent,

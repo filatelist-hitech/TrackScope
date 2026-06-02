@@ -76,7 +76,7 @@ class PaywallScreen extends StatelessWidget {
               TextButton(
                 onPressed: () => _restore(context),
                 child: Text(
-                  'Restore purchases',
+                  'Восстановить покупки',
                   style: AppTextStyles.mono(
                     11, FontWeight.w400, AppColors.textMuted,
                   ),
@@ -210,7 +210,7 @@ class _ComparisonTable extends StatelessWidget {
           const Divider(color: AppColors.borderFaint, height: 16),
           const _TableRow('BPM Range', '170–230', '155–230'),
           const Divider(color: AppColors.borderFaint, height: 16),
-          const _TableRow('Signal Analyzer', '—', '✓'),
+          const _TableRow('Анализатор сигнала', '—', '✓'),
           const Divider(color: AppColors.borderFaint, height: 16),
           const _TableRow('История', '30 сек', '24 ч'),
           const Divider(color: AppColors.borderFaint, height: 16),

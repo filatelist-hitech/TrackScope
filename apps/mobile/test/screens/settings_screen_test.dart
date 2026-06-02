@@ -46,14 +46,14 @@ void main() {
       expect(find.text('Не гасить экран'), findsOneWidget);
     });
 
-    testWidgets('Signal Analyzer nav row is rendered (may need scroll)', (tester) async {
+    testWidgets('Анализатор сигнала nav row is rendered (may need scroll)', (tester) async {
       await tester.pumpWidget(makeScreen());
-      // Scroll to find PRO FEATURES section
+      // Scroll to find PRO-ФУНКЦИИ section
       await tester.scrollUntilVisible(
-        find.text('Signal Analyzer'), 80,
+        find.text('Анализатор сигнала'), 80,
         scrollable: find.byType(Scrollable),
       );
-      expect(find.text('Signal Analyzer'), findsOneWidget);
+      expect(find.text('Анализатор сигнала'), findsOneWidget);
     });
 
     testWidgets('История сессий nav row is rendered', (tester) async {
@@ -118,13 +118,13 @@ void main() {
       expect(find.text('Сбросить данные?'), findsNothing);
     });
 
-    testWidgets('PRO FEATURES section header renders (via scroll)', (tester) async {
+    testWidgets('PRO-ФУНКЦИИ section header renders (via scroll)', (tester) async {
       await tester.pumpWidget(makeScreen());
       await tester.scrollUntilVisible(
-        find.text('PRO FEATURES'), 80,
+        find.text('PRO-ФУНКЦИИ'), 80,
         scrollable: find.byType(Scrollable),
       );
-      expect(find.text('PRO FEATURES'), findsOneWidget);
+      expect(find.text('PRO-ФУНКЦИИ'), findsOneWidget);
     });
   });
 }
