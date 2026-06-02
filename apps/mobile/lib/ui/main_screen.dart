@@ -489,7 +489,7 @@ class _InfoTableContent extends StatelessWidget {
         const SizedBox(height: 8),
 
         // ── Stats grid ───────────────────────────────────────────────────────
-        // Row 1: Уровень входа | Лучший кандидат
+        // Row 1: Уровень входа (left-aligned) | Лучший кандидат (centered)
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -501,12 +501,13 @@ class _InfoTableContent extends StatelessWidget {
                 value: bestCandText,
                 isLink: onBestCandidateTap != null,
                 onTap: onBestCandidateTap,
+                centered: true,
               ),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        // Row 2: Клиппинг | Шум
+        // Row 2: Клиппинг (left-aligned) | Шум (centered)
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -518,7 +519,13 @@ class _InfoTableContent extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 18),
-            Expanded(child: _StatCell(label: 'Шум', value: noiseText)),
+            Expanded(
+              child: _StatCell(
+                label: 'Шум',
+                value: noiseText,
+                centered: true,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -903,7 +910,9 @@ class _TraktorStyleAppBar extends StatelessWidget {
           // closer to the screen edge, visually level with the REC badge.
           padding: const EdgeInsets.only(left: 16, right: 10),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            // start: all items pin to the top of the row, so the gear icon
+            // sits a few px higher than it did with CrossAxisAlignment.center.
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Left: REC badge when capturing, spacer otherwise
               if (isCapturing)
@@ -926,7 +935,7 @@ class _TraktorStyleAppBar extends StatelessWidget {
               // Right: PRO badge + settings/debug icon
               Row(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (!isPro && onUpgradeTap != null)
                     GestureDetector(
