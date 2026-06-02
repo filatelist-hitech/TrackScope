@@ -168,6 +168,73 @@ adb install build/app/outputs/flutter-apk/app-release.apk
 
 ---
 
+## Типичные ошибки и решения
+
+### ❌ `NDK at ... did not have a source.properties file`
+
+**Причина:** NDK распакован с лишним уровнем вложенности (`ndk/28.x/android-ndk-r28c/` вместо `ndk/28.x/`).
+
+**Решение:**
+```sh
+NDK_VERSION="28.2.13676358"  # замени на свою версию
+NDK_DIR="$HOME/Library/Android/sdk/ndk/$NDK_VERSION"
+
+# Переместить содержимое вложенной папки на уровень выше
+mv "$NDK_DIR"/android-ndk-r28c/* "$NDK_DIR/"
+rmdir "$NDK_DIR/android-ndk-r28c"
+
+# Проверить
+cat "$NDK_DIR/source.properties"
+```
+
+Обновить `ANDROID_NDK_HOME`:
+```sh
+export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/28.2.13676358"  # без подпапки
+```
+
+---
+
+### ❌ `TLS handshake failed` / Maven download error при Gradle build
+
+**Причина:** Gradle запускается с Java 1.8 (`/usr/bin/java`). Gradle 9.x требует Java 17+.
+
+**Решение:** Добавить в `~/.zshrc`:
+```sh
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+```
+
+Проверить: `$JAVA_HOME/bin/java -version` → должна быть 17+ или 21.
+
+Зафиксировать для Flutter: `flutter config --jdk-dir="$JAVA_HOME"`
+
+---
+
+### ❌ `Cannot lock execution history cache` (Gradle daemon lock)
+
+**Причина:** Предыдущий упавший build оставил файловый лок. Часто возникает при смене JDK.
+
+**Решение:**
+```sh
+pkill -f "gradle" 2>/dev/null
+rm -f apps/mobile/android/.gradle/9.1.0/executionHistory/*.lock 2>/dev/null
+# Повторить сборку
+flutter build apk --debug
+```
+
+---
+
+### ❌ `NoSuchFileException: gradle-1.0.0.jar` при `flutter run`
+
+**Причина:** Gradle transform cache повреждён (частичная загрузка Flutter plugin jar).
+
+**Решение:** Очистить transform cache:
+```sh
+rm -rf ~/.gradle/caches/9.1.0/transforms/
+# Повторить flutter run — Gradle перекачает и перекеширует jar
+```
+
+---
+
 ## Известные ограничения
 
 - AVD не воспроизводит реальный BPM-детектор полноценно — только функциональные тесты (запуск, разрешения, UI, anti-fake silence check).

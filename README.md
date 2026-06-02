@@ -92,14 +92,34 @@ Rust-крейт в `core/dsp/` — продакшен-источник исти�
 состояния захвата на нативном Rust. `core/dsp/tempo.py` и `core/dsp/synthetic.py`
 остаются как читаемая алгоритмическая референс-реализация.
 
+### Быстрая сборка
+
+```sh
+# Android (Free APK + PRO APK):
+bash scripts/release.sh android
+
+# iOS PRO → на iPhone:
+bash scripts/release.sh ios-pro
+
+# Помощь:
+bash scripts/release.sh help
+```
+
+Полное руководство: [docs/BUILD_GUIDE.md](docs/BUILD_GUIDE.md)
+
+---
+
 ### Android APK (macOS, без физического устройства)
 
 Требования: Android Studio с NDK 27.x, rustup.
 
 ```sh
-# 1. Задать путь к Android SDK
+# 1. Задать переменные окружения (добавить в ~/.zshrc)
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 export ANDROID_HOME="$HOME/Library/Android/sdk"
-export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$(ls $ANDROID_HOME/ndk | sort -V | tail -1)"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$(ls "$ANDROID_HOME/ndk" | sort -V | tail -1)"
+# Важно: ANDROID_NDK_HOME должен указывать на папку с source.properties,
+# не на вложенную android-ndk-r28c/
 
 # 2. Добавить Rust Android таргеты (однократно)
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
@@ -202,6 +222,7 @@ flutter run --release
 - [Ручной тест-чеклист (mobile)](docs/MANUAL_TEST_CHECKLIST.md)
 - [Релизный чеклист](docs/RELEASE_CHECKLIST.md)
 - [Android тест-план](docs/ANDROID_TEST_PLAN.md)
+- [Build Guide](docs/BUILD_GUIDE.md)
 - [Глоссарий терминов](docs/GLOSSARY.md)
 
 ## Работа с Claude Code

@@ -42,6 +42,7 @@ class SessionHistoryController extends ChangeNotifier {
       bpm: result.primaryBpm!,
       lockState: result.lockState,
       timestamp: now,
+      confidence: result.confidence,
     ));
     notifyListeners();
   }

@@ -71,7 +71,7 @@ class LiveSpectrumPainter extends CustomPainter {
     fontFamily: 'monospace',
     color: Color(0x55FFFFFF),
   );
-  static const _kCornerLabel = Color(0x44FFFFFF);
+
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -130,11 +130,11 @@ class LiveSpectrumPainter extends CustomPainter {
     linePath.lineTo(xs.last, ys.last);
 
     // ── Gradient fill ─────────────────────────────────────────────────────────
-    // Extend the fill baseline to the full canvas width so no gap appears at
-    // the right edge when the last visible bin is just below 20 kHz.
+    // Close to (0, drawH) — not xs.first — so the fill covers the full canvas
+    // width including the low-frequency gap left of the first visible bin.
     final fillPath = Path()..addPath(linePath, Offset.zero);
     fillPath.lineTo(w, drawH);
-    fillPath.lineTo(xs.first, drawH);
+    fillPath.lineTo(0, drawH);
     fillPath.close();
 
     final fillPaint = Paint()
@@ -208,20 +208,8 @@ class LiveSpectrumPainter extends CustomPainter {
       tp.paint(canvas, Offset(lx, drawH + 2));
     }
 
-    // ── "LIVE SPECTRUM" label (top-left) ──────────────────────────────────────
-    final cornerTp = TextPainter(
-      text: const TextSpan(
-        text: 'LIVE SPECTRUM',
-        style: TextStyle(
-          fontSize: 8,
-          fontFamily: 'monospace',
-          color: _kCornerLabel,
-          letterSpacing: 1.5,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    cornerTp.paint(canvas, const Offset(4, 4));
+    // Zone label is now rendered as a Flutter widget (_ZoneLabelRow) above
+    // this panel in main_screen.dart — do not duplicate it on the canvas.
   }
 
   @override

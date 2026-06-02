@@ -10,6 +10,7 @@ abstract final class AppColors {
   static const background = Color(0xFF050807);
   static const surface = Color(0xFF0C1410);
   static const surface2 = Color(0xFF0D1712);
+  static const surfaceHigh = Color(0xFF0F1810); // elevated surface (badge fills)
 
   // ── Accent ───────────────────────────────────────────────────────────────────
   static const accent = Color(0xFF00DFB0);
@@ -20,7 +21,14 @@ abstract final class AppColors {
   static const amberText = Color(0xFFFFE090);
   static const amberBg = Color(0x1EC8A020); // 12 % alpha
   static const danger = Color(0xFFE04040);
+  static const dangerDim = Color(0x33E04040); // 20 % alpha
   static const yellow = Color(0xFFE0B020);
+  static const warning = Color(0xFFE0B020);     // alias for yellow
+  static const warningDim = Color(0x33E0B020);  // 20 % alpha
+  static const success = Color(0xFF00C853);
+  static const successDim = Color(0x3300C853);  // 20 % alpha
+  static const noisePurple = Color(0xFF9B59B6);
+  static const noiseDim = Color(0x339B59B6);    // 20 % alpha
 
   // ── Text ─────────────────────────────────────────────────────────────────────
   static const textPrimary = Color(0xFFC8DCD8);

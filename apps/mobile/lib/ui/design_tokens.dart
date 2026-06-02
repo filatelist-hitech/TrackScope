@@ -1,53 +1,46 @@
-// Design tokens for hitech-bpm-radar Phase 7 UI.
+// Design tokens — Phase 7 legacy compatibility shim.
 //
-// Single source of truth for colours and monospace typography.
-// Import this file wherever AppTheme is needed; never redeclare colours
-// in individual widgets.
-//
-// Colour naming convention:
-//   <role>      – full-strength colour (for text / fills)
-//   <role>Dim   – 20 % alpha overlay (for badge backgrounds)
+// AppTheme now forwards 1:1 to AppColors and AppTextStyles (Design System v2).
+// New code should import AppColors / AppTextStyles directly.
+// This file is kept so existing imports in main_screen.dart / paywall_screen.dart
+// continue to compile without changes.
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
+import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
+
+// Re-export so callers only need one import.
+export '../theme/app_colors.dart';
+export '../theme/app_text_styles.dart';
 
 abstract final class AppTheme {
   // ── Backgrounds ──────────────────────────────────────────────────────────────
-  /// Page background — nearly-black with a blue tint.
-  static const background = Color(0xFF07070F);
+  static const background  = AppColors.background;
+  static const surface     = AppColors.surface;
+  static const surfaceHigh = AppColors.surfaceHigh;
 
-  /// Card/panel surface.
-  static const surface = Color(0xFF0F0F1A);
-
-  /// Elevated surface (e.g. badge fill for neutral states).
-  static const surfaceHigh = Color(0xFF161625);
-
-  // ── Accent (one colour for the entire app) ───────────────────────────────────
-  static const accent = Color(0xFF00E5CC);
-  static const accentDim = Color(0x3300E5CC); // 20 % alpha
+  // ── Accent ───────────────────────────────────────────────────────────────────
+  static const accent    = AppColors.accent;
+  static const accentDim = AppColors.accentDim;
 
   // ── Semantic states ───────────────────────────────────────────────────────────
-  static const danger = Color(0xFFFF4444);
-  static const dangerDim = Color(0x33FF4444);
-
-  static const warning = Color(0xFFFFB300);
-  static const warningDim = Color(0x33FFB300);
-
-  static const success = Color(0xFF00C853);
-  static const successDim = Color(0x3300C853);
-
-  static const noisePurple = Color(0xFF9B59B6);
-  static const noiseDim = Color(0x336A0DAD);
+  static const danger     = AppColors.danger;
+  static const dangerDim  = AppColors.dangerDim;
+  static const warning    = AppColors.warning;
+  static const warningDim = AppColors.warningDim;
+  static const success    = AppColors.success;
+  static const successDim = AppColors.successDim;
+  static const noisePurple = AppColors.noisePurple;
+  static const noiseDim   = AppColors.noiseDim;
 
   // ── Text ─────────────────────────────────────────────────────────────────────
-  static const textPrimary = Color(0xFFF0F0FF);
-  static const textSecondary = Color(0xFF8888AA);
-  static const textDim = Color(0xFF44445A);
+  static const textPrimary   = AppColors.textPrimary;
+  static const textSecondary = AppColors.textSecondary;
+  static const textDim       = AppColors.textMuted;
 
   // ── Typography ───────────────────────────────────────────────────────────────
-  /// JetBrains Mono — used for BPM numerals and all numeric metric values.
-  /// Falls back to the system monospace font when the Google Fonts asset is
-  /// unavailable (e.g. offline first launch, widget tests).
+  /// IBM Plex Mono — forwards to AppTextStyles.mono().
   static TextStyle mono({
     double fontSize = 13,
     Color? color,
@@ -55,11 +48,10 @@ abstract final class AppTheme {
     double? letterSpacing,
     double? height,
   }) =>
-      GoogleFonts.jetBrainsMono(
-        fontSize: fontSize,
-        color: color ?? textPrimary,
-        fontWeight: weight,
+      AppTextStyles.mono(
+        fontSize,
+        weight ?? FontWeight.w400,
+        color ?? AppColors.textPrimary,
         letterSpacing: letterSpacing,
-        height: height,
       );
 }
