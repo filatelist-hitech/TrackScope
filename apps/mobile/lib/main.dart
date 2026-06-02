@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 
 import 'capture/capture_bridge.dart';
 import 'capture/microphone_source.dart';
+import 'features/setlist/setlist_service.dart';
 import 'history/session_history_controller.dart';
 import 'monetization/feature_flags.dart';
 import 'monetization/pro_status_service.dart';
@@ -121,6 +122,7 @@ class _CapturePipelineState extends State<_CapturePipeline> {
   late final CaptureBridge _bridge;
   late final MicrophoneSource _mic;
   late final SessionHistoryController _history;
+  late final SetlistService _setlist;
   Object? _startupError;
 
   @override
@@ -132,6 +134,8 @@ class _CapturePipelineState extends State<_CapturePipeline> {
       flags: widget.flags,
       resultsStream: _bridge.results,
     );
+    _setlist = SetlistService();
+    _bridge.results.listen(_setlist.onDspResult);
     _startCapture();
   }
 
@@ -154,6 +158,7 @@ class _CapturePipelineState extends State<_CapturePipeline> {
     _bridge.dispose();
     _mic.dispose();
     _history.dispose();
+    _setlist.dispose();
     super.dispose();
   }
 
@@ -181,6 +186,7 @@ class _CapturePipelineState extends State<_CapturePipeline> {
       flags: widget.flags,
       historyController: _history,
       onBreak: _bridge.resetEngine,
+      setlistService: _setlist,
     );
   }
 }

@@ -117,7 +117,6 @@ FFI-слой предоставляет `hitech_bpm_engine_new_with_min_bpm(floa
 - `core/dsp/src/key_analyzer.rs` — `KeyAnalyzer` skeleton: HPCP + Krumhansl-Schmuckler (Phase 2). `KeyResult { key, camelot, confidence }`.
 - `core/dsp/src/energy_analyzer.rs` — `EnergyAnalyzer` skeleton: RMS + flux + onset density → уровень 1–10 (Phase 2).
 - `DspResult` расширен: `genre_preset`, `key_result: Option<KeyResult>`, `energy_result: Option<EnergyResult>` (все None в Phase 1).
-- `lib/features/tap_tempo/` — `TapTempoController`: вспомогательный tap-tempo (Free).
 - `lib/features/setlist/` — `SetlistService` + `SetlistEntry`: запись сета с экспортом (Pro).
 - ADR-документы: `docs/adr/001-004` — архитектурные решения для v2 компонентов.
 

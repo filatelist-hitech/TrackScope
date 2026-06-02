@@ -17,6 +17,7 @@ class FeatureFlags {
   bool get canAccessDebugScreen => isPro;
   bool get canExport => isPro;
   bool get canAccessWidget => isPro;
+  bool get canAccessSetlist => isPro;
 
   // History limits
   Duration get maxHistoryDuration => isPro

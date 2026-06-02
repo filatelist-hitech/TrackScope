@@ -27,6 +27,10 @@ void main() {
       expect(flags.canAccessWidget, isFalse);
     });
 
+    test('canAccessSetlist is false', () {
+      expect(flags.canAccessSetlist, isFalse);
+    });
+
     test('maxHistoryDuration is 30 seconds', () {
       expect(flags.maxHistoryDuration, const Duration(seconds: 30));
     });
@@ -57,6 +61,10 @@ void main() {
 
     test('canAccessWidget is true', () {
       expect(flags.canAccessWidget, isTrue);
+    });
+
+    test('canAccessSetlist is true', () {
+      expect(flags.canAccessSetlist, isTrue);
     });
 
     test('maxHistoryDuration is 24 hours', () {

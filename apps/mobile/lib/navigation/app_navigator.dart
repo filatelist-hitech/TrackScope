@@ -19,6 +19,8 @@ import 'package:flutter/material.dart';
 import '../capture/capture_error.dart';
 import '../dsp/dsp_result.dart';
 import '../export/bpm_exporter.dart';
+import '../features/setlist/setlist_screen.dart';
+import '../features/setlist/setlist_service.dart';
 import '../history/history_screen.dart';
 import '../history/session_history_controller.dart';
 import '../monetization/feature_flags.dart';
@@ -42,12 +44,14 @@ class AppNavigator extends StatefulWidget {
     required this.historyController,
     this.rawPcm,
     this.onBreak,
+    this.setlistService,
   });
 
   final Stream<DspResult> results;
   final Stream<CaptureError> errors;
   final FeatureFlags flags;
   final SessionHistoryController historyController;
+  final SetlistService? setlistService;
   final Stream<Uint8List>? rawPcm;
 
   /// Called when the user taps the Break button — resets DSP engine state.
@@ -97,6 +101,19 @@ class _AppNavigatorState extends State<AppNavigator>
   void _pushPaywall(String feature) {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => PaywallScreen(feature: feature),
+    ));
+  }
+
+  void _pushSetlist() {
+    if (!widget.flags.canAccessSetlist || widget.setlistService == null) {
+      _pushPaywall('setlist');
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => SetlistScreen(
+        service: widget.setlistService!,
+        flags: widget.flags,
+      ),
     ));
   }
 
@@ -170,6 +187,7 @@ class _AppNavigatorState extends State<AppNavigator>
             onSignalAnalyzerTap: _pushSignalAnalyzer,
             onHistoryTap: () => setState(() => _current = AppTab.history),
             onUpgradeTap: () => _pushPaywall('upgrade'),
+            onSetlistTap: _pushSetlist,
           ),
         ],
         ),

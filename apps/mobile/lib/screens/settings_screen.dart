@@ -21,12 +21,14 @@ class SettingsScreen extends StatelessWidget {
     required this.onSignalAnalyzerTap,
     required this.onHistoryTap,
     required this.onUpgradeTap,
+    this.onSetlistTap,
   });
 
   final FeatureFlags flags;
   final VoidCallback onSignalAnalyzerTap;
   final VoidCallback onHistoryTap;
   final VoidCallback onUpgradeTap;
+  final VoidCallback? onSetlistTap;
 
   @override
   Widget build(BuildContext context) {
@@ -125,6 +127,12 @@ class SettingsScreen extends StatelessWidget {
                     label: 'История сессий',
                     isPro: !flags.isPro,
                     onTap: onHistoryTap,
+                    showDivider: true,
+                  ),
+                  _NavRow(
+                    label: 'Сетлист',
+                    isPro: !flags.canAccessSetlist,
+                    onTap: onSetlistTap ?? () {},
                     showDivider: false,
                   ),
                 ],

@@ -9,15 +9,7 @@
 
 Скриншоты будут добавлены при следующем запуске на реальном устройстве.
 
-## P1.1 Tap Tempo
-
-| Устройство | Скриншот |
-|---|---|
-| iOS Physical (filatelist) | — (pending device connection) |
-| iOS Simulator | — (pending Simulator launch) |
-| Android Emulator | — (pending Android Studio setup) |
-
-## P1.2 Multi-Genre Presets
+## P1.1 Multi-Genre Presets
 
 | Устройство | Скриншот |
 |---|---|
@@ -25,7 +17,7 @@
 | iOS Simulator | — |
 | Android Emulator | — |
 
-## P1.3 Setlist Tracker
+## P1.2 Setlist Tracker
 
 | Устройство | Скриншот |
 |---|---|
@@ -33,7 +25,7 @@
 | iOS Simulator | — |
 | Android Emulator | — |
 
-## P1.4 + P1.5 Paywall 2.0
+## P1.3 + P1.4 Paywall 2.0
 
 | Устройство | Скриншот |
 |---|---|
@@ -54,7 +46,7 @@ emulator -avd <avd_name> &
 # (WiFi: убедиться что устройство в Developer Mode)
 
 # Снять скриншоты
-flutter screenshot -d "iPhone 16 Pro" -o docs/previews/v2_tap_tempo_ios_sim.png
-flutter screenshot -d 00008030-0011382E21E0C02E -o docs/previews/v2_tap_tempo_ios_physical.png
-flutter screenshot -d emulator-5554 -o docs/previews/v2_tap_tempo_android.png
+flutter screenshot -d "iPhone 16 Pro" -o docs/previews/v2_genre_presets_ios_sim.png
+flutter screenshot -d 00008030-0011382E21E0C02E -o docs/previews/v2_genre_presets_ios_physical.png
+flutter screenshot -d emulator-5554 -o docs/previews/v2_setlist_android.png
 ```

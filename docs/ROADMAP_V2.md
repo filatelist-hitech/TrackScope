@@ -27,20 +27,7 @@
 
 ## Phase 1 — Quick Wins (v1.1, ~2 недели)
 
-### P1.1 Tap Tempo
-
-| | |
-|---|---|
-| **Описание** | Кнопка TAP для ручного вычисления BPM из интервалов нажатий |
-| **Ценность** | Позволяет сравнить DSP-результат с ручным отсчётом; полезно при плохом SNR |
-| **Tier** | Free |
-| **Сложность** | S (Flutter-only) |
-| **Домен** | Flutter |
-| **Статус** | ✅ реализовано (`lib/features/tap_tempo/tap_tempo_controller.dart`) |
-
-Логика: последние 8 тапов, окно 3 сек, средний интервал → 60000/avg. Не меняет DSP-логику — только UI-инструмент.
-
-### P1.2 Multi-Genre BPM Presets
+### P1.1 Multi-Genre BPM Presets
 
 | | |
 |---|---|
@@ -53,7 +40,7 @@
 
 Пресеты: HitechPsy (155–230), Psytrance (130–160), Darkpsy (145–180), DrumAndBass (160–185), Techno (125–145), Hardstyle (138–160), Hardcore (155–185), Custom (Pro).
 
-### P1.3 Setlist Tracker MVP
+### P1.2 Setlist Tracker MVP
 
 | | |
 |---|---|
@@ -66,7 +53,7 @@
 
 Дедупликация: новая запись только при delta BPM > 0.5 или delta time > 5 сек. Phase 2: добавить `camelotKey` и `energyLevel`.
 
-### P1.4 14-Day Pro Trial
+### P1.3 14-Day Pro Trial
 
 | | |
 |---|---|
@@ -79,7 +66,7 @@
 
 Бейдж «14 дней бесплатно» в Annual кнопке. Конфигурация trial — в RevenueCat Dashboard (не в коде).
 
-### P1.5 Paywall 2.0: Coming Soon v2
+### P1.4 Paywall 2.0: Coming Soon v2
 
 | | |
 |---|---|
