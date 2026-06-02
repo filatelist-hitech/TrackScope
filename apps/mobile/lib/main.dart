@@ -94,15 +94,25 @@ class _LiveCaptureScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Rebuild the entire capture pipeline when Pro status changes
-    // so that CaptureBridge picks up the new minBpm.
+    // Rebuild when Pro status OR selected genre changes so that
+    // CaptureBridge picks up the new minBpm/maxBpm.
+    // _CapturePipeline uses ValueKey(minBpm-maxBpm) so its state is
+    // only disposed/recreated when the BPM range actually changes —
+    // not on every unrelated AppSettings notification.
     return ListenableBuilder(
-      listenable: ProStatusService.instance,
+      listenable: Listenable.merge([
+        ProStatusService.instance,
+        AppSettings.instance,
+      ]),
       builder: (context, _) {
         final flags = FeatureFlags(
           isPro: _forceProTier || ProStatusService.instance.isPro,
+          selectedGenre: AppSettings.instance.selectedGenre,
         );
-        return _CapturePipeline(flags: flags);
+        return _CapturePipeline(
+          key: ValueKey('${flags.minBpm}-${flags.maxBpm}'),
+          flags: flags,
+        );
       },
     );
   }
@@ -111,7 +121,7 @@ class _LiveCaptureScaffold extends StatelessWidget {
 /// The actual capture pipeline that owns CaptureBridge, MicrophoneSource,
 /// and SessionHistoryController. Disposed and respawned on tier change.
 class _CapturePipeline extends StatefulWidget {
-  const _CapturePipeline({required this.flags});
+  const _CapturePipeline({super.key, required this.flags});
   final FeatureFlags flags;
 
   @override

@@ -15,10 +15,10 @@
 | Key detection | 🔜 v2 | ❌ | ✅ (офлайн) | ✅ (офлайн) | ✅ |
 | Realtime key (live mic) | 🔜 v2 | ❌ | ❌ | ❌ | ❌ |
 | Energy level | 🔜 v2 | ❌ | ✅ (офлайн) | ❌ | ❌ |
-| Setlist tracker | 🔜 v1.1 | ❌ | ❌ | ❌ | ❌ |
+| Setlist tracker | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 100% offline / on-device | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Mobile (iOS + Android) | ✅ | ✅ | ❌ (desktop) | ❌ (web) | iOS только |
-| Multi-genre presets | 🔜 v1.1 | ❌ | ❌ | ❌ | ❌ |
+| Multi-genre presets | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Apple Watch | 🔜 v2 | ❌ | ❌ | ❌ | ❌ |
 
 **Ключевое конкурентное преимущество:** единственное приложение, совмещающее realtime BPM-захват (оптимизированный под hitech/psy) с планируемым realtime Camelot key detection — всё через микрофон, без загрузки файлов.
@@ -36,7 +36,7 @@
 | **Tier** | Free: HitechPsy + Psytrance + Darkpsy; Pro: всё + Custom(min, max) |
 | **Сложность** | M (Rust enum + Flutter picker) |
 | **Домен** | DSP + Flutter |
-| **Статус** | ✅ реализовано (`core/dsp/src/genre_preset.rs`) |
+| **Статус** | ✅ реализовано (`core/dsp/src/genre_preset.rs` + Dart picker) |
 
 Пресеты: HitechPsy (155–230), Psytrance (130–160), Darkpsy (145–180), DrumAndBass (160–185), Techno (125–145), Hardstyle (138–160), Hardcore (155–185), Custom (Pro).
 

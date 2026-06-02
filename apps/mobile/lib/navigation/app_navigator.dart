@@ -25,6 +25,7 @@ import '../history/history_screen.dart';
 import '../history/session_history_controller.dart';
 import '../monetization/feature_flags.dart';
 import '../monetization/paywall_screen.dart';
+import '../monetization/pro_status_service.dart';
 import '../screens/settings_screen.dart';
 import '../screens/signal_analyzer_screen.dart';
 import '../ui/main_screen.dart';
@@ -187,6 +188,7 @@ class _AppNavigatorState extends State<AppNavigator>
             onSignalAnalyzerTap: _pushSignalAnalyzer,
             onHistoryTap: () => setState(() => _current = AppTab.history),
             onUpgradeTap: () => _pushPaywall('upgrade'),
+            onRestoreTap: () => ProStatusService.instance.restore(),
             onSetlistTap: _pushSetlist,
           ),
         ],

@@ -6,6 +6,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../features/genre_preset/genre_preset.dart';
+
 enum BpmSmoothing { none, light, moderate, heavy }
 
 extension BpmSmoothingLabel on BpmSmoothing {
@@ -40,12 +42,14 @@ class AppSettings extends ChangeNotifier {
   static const _kKeepScreenOn     = 'keepScreenOn';
   static const _kInputSensitivity = 'inputSensitivity';
   static const _kBpmSmoothing     = 'bpmSmoothing';
+  static const _kSelectedGenre    = 'selectedGenre';
 
   bool showWaveform    = true;
   bool showSpectrum    = true;
   bool keepScreenOn    = true;
   double inputSensitivity = 0.0;          // dB, range –6..+6
   BpmSmoothing bpmSmoothing = BpmSmoothing.moderate;
+  GenrePreset selectedGenre = GenrePreset.hitechPsy;
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -55,6 +59,8 @@ class AppSettings extends ChangeNotifier {
     inputSensitivity   = prefs.getDouble(_kInputSensitivity) ?? 0.0;
     final si           = prefs.getInt(_kBpmSmoothing) ?? 2;
     bpmSmoothing       = BpmSmoothing.values[si.clamp(0, BpmSmoothing.values.length - 1)];
+    final gi           = prefs.getInt(_kSelectedGenre) ?? 0;
+    selectedGenre      = GenrePreset.values[gi.clamp(0, GenrePreset.values.length - 1)];
     notifyListeners();
   }
 
@@ -88,6 +94,12 @@ class AppSettings extends ChangeNotifier {
     await prefs.setInt(_kBpmSmoothing, v.index);
   }
 
+  Future<void> setSelectedGenre(GenrePreset v) async {
+    selectedGenre = v; notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kSelectedGenre, v.index);
+  }
+
   Future<void> resetAll() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -96,6 +108,7 @@ class AppSettings extends ChangeNotifier {
     keepScreenOn     = true;
     inputSensitivity = 0.0;
     bpmSmoothing     = BpmSmoothing.moderate;
+    selectedGenre    = GenrePreset.hitechPsy;
     notifyListeners();
   }
 }
