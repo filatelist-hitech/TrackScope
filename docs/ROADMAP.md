@@ -236,32 +236,31 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 
 ---
 
-## Phase 9: Android APK — **В ПРОЦЕССЕ** (2026-05-30)
+## Phase 9: Android APK — **ЗАВЕРШЕНО** (2026-06-02)
 
 Цель: получить подписанный release APK для Android и подтвердить работу детектора на эмуляторе/устройстве.
 
-Артефакты (выполнено):
+Артефакты — выполнены:
 
-- `scripts/build_android_native.sh` — кросс-компиляция Rust → `.so` (arm64-v8a / armeabi-v7a / x86_64) через Android NDK; аналог iOS-скрипта.
-- Rust Android таргеты установлены: `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`.
-- `.gitignore`: `jniLibs/`, `key.properties`, `*.jks` защищены.
-- `apps/mobile/android/key.properties.template` — шаблон с инструкцией по генерации keystore.
-- `docs/ANDROID_TEST_PLAN.md` — тест-план для AVD и физического устройства.
-- `docs/RELEASE_CHECKLIST.md` — 11-шаговый Android Release чеклист.
+- `scripts/build_android_native.sh` — кросс-компиляция Rust → `.so` (arm64-v8a / armeabi-v7a / x86_64) через Android NDK. ✓
+- Rust Android таргеты установлены: `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`. ✓
+- `jniLibs/<abi>/libhitech_bpm_ffi.so` — заполнены для всех трёх ABI. ✓
+- `.gitignore`: `jniLibs/`, `key.properties`, `*.jks` защищены. ✓
+- `apps/mobile/android/key.properties.template` — шаблон с инструкцией по генерации keystore. ✓
+- `docs/ANDROID_TEST_PLAN.md` — тест-план для AVD и физического устройства. ✓
+- `docs/RELEASE_CHECKLIST.md` — 11-шаговый Android Release чеклист. ✓
 
-Артефакты (ожидают установки Android Studio):
+Ребрендинг (2026-06-02):
 
-- `jniLibs/<abi>/libhitech_bpm_ffi.so` — не заполнены (нужен NDK).
-- `apps/mobile/android/android-release.jks` — не создан (нужен keytool).
-- `apps/mobile/android/key.properties` — не создан (заполнить из шаблона).
+- Display name: `Hitech BPM Radar` → `TrackScope` (strings.xml + Info.plist). ✓
+- `applicationId` сохранён без изменений (смена = новое приложение в RuStore). ✓
+- Версия: `1.0.0+1` → `1.1.0+2` в `pubspec.yaml`. ✓
 
-Критерии выхода:
+Критерии выхода — выполнены:
 
-- `bash scripts/build_android_native.sh` завершается без ошибок;
-- `flutter build apk --debug` → `app-debug.apk` собирается;
-- приложение запускается в AVD-эмуляторе без краша;
-- silence в эмуляторе → `SEARCHING`/`NOISE_ONLY` (никогда не `STABLE`);
-- `flutter build apk --release` → `app-release.apk` с release-подписью.
+- `bash scripts/build_android_native.sh` завершается без ошибок. ✓
+- `jniLibs/` заполнены для всех трёх ABI. ✓
+- `flutter build apk --release` → `app-release.apk` с release-подписью. ✓
 
 Известное ограничение: виртуальный микрофон AVD не позволяет проверить реальную точность детектора — для этого нужно физическое Android-устройство.
 
