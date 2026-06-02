@@ -6,6 +6,48 @@
 
 ## [Unreleased]
 
+### Added — Design System v2 (Phase 11)
+
+- **Tab Bar навигация** (`lib/navigation/app_navigator.dart`): три вкладки
+  Радар / История / Настройки через `IndexedStack`. `CaptureBridge` не
+  пересоздаётся при смене вкладок — живёт в `_CapturePipeline`.
+- **BPM Hero Display** (`lib/widgets/bpm_hero_display.dart`): 72 px IBM Plex
+  Mono, три режима (idle/detecting/unstable). Null → «— — —» dim #1E3530.
+- **ConfidenceBar** (`lib/widgets/confidence_bar.dart`): 7 px, red < 30 %,
+  yellow 30–70 %, teal > 70 %. Анимация 400 мс.
+- **BreakButton** (`lib/widgets/break_button.dart`): иконка паузы + «Зафиксировать брейк».
+- **ListeningIndicator** (`lib/widgets/listening_indicator.dart`): анимированная
+  точка accent + «слушаю».
+- **AppTabBar** (`lib/widgets/app_tab_bar.dart`): кастомный таб-бар с
+  accent/textMuted цветами, подписи «РАДАР / ИСТОРИЯ / НАСТРОЙКИ».
+- **SignalAnalyzerScreen** (`lib/screens/signal_analyzer_screen.dart`): Pro-only,
+  показывает BPM-кандидатов со score bar + качество сигнала + тайминги.
+  Секция «Метрики алгоритма» — реальные DspDebug-данные (onset rate, onset strength,
+  peak prominence, harmonic ambiguity, stability score, SNR, warnings).
+- **SettingsScreen** (`lib/screens/settings_screen.dart`): 5 секций, backed
+  by `AppSettings` (SharedPreferences). Keep Screen On → WakelockPlus.
+- **AppSettings** (`lib/settings/app_settings.dart`): ChangeNotifier singleton,
+  персист через SharedPreferences (showWaveform, showSpectrum, keepScreenOn, inputSensitivity).
+- **Design tokens v2** (`lib/theme/app_colors.dart`, `lib/theme/app_text_styles.dart`):
+  IBM Plex Mono, #050807 bg, #00DFB0 accent, confidence thresholds.
+- Зависимости: `shared_preferences ^2.3.0`, `wakelock_plus ^1.2.0`.
+
+### Added — DspDebug contract (Phase 11)
+
+- **DspDebug struct** в Rust `DspResult`: `onset_rate_hz`, `onset_strength`,
+  `tempo_peak_prominence`, `harmonic_ambiguity`, `stability_score`, `warnings[]`.
+  Populated в `analyze_from_envelope` без доп. CPU-стоимости — из уже вычисленных значений.
+  `empty_result()` и пути silence эмитят нулевой `DspDebug` (не `null`).
+- **DspDebug class** в Dart `dsp_result.dart`: `fromJson` с graceful defaults
+  (missing key → zero DspDebug). Backward-compatible с FFI без `debug`-ключа.
+- **Signal Analyzer** (`lib/screens/signal_analyzer_screen.dart`) показывает
+  реальные метрики алгоритма: onset rate, onset strength, peak prominence,
+  harmonic ambiguity, stability score, SNR, warnings. Placeholder «В разработке» удалён.
+- Тесты Rust: `debug_field_populated_on_stable_signal`,
+  `debug_serializes_to_json_with_debug_key`, `debug_empty_on_silence`
+  (в `core/dsp/tests/stability.rs`).
+- Тесты Dart: `test/dsp_debug_test.dart` (6 тестов: `fromJson`-парсинг, `DspResult.parse`).
+
 ### Added — v2 Roadmap Scaffolding (2026-06-01)
 
 - **`docs/ROADMAP_V2.md`** — полный v2 roadmap: Vision, Competitive Positioning (table vs liveBPM/MixedInKey/Tunebat/KeyMatch), Phase 1 (Quick Wins), Phase 2 (Harmonic Analysis), Phase 3 (Intelligence), Metrics & Success Criteria, What We Are NOT Building.
@@ -16,18 +58,28 @@
 - **`core/dsp/src/genre_preset.rs`** — `GenrePreset` enum: 7 пресетов (HitechPsy 155–230, Psytrance 130–160, Darkpsy 145–180, DrumAndBass 160–185, Techno 125–145, Hardstyle 138–160, Hardcore 155–185, Custom [Pro]). Нормализационные пороги per-genre. 7 Rust-тестов PASS.
 - **`core/dsp/src/key_analyzer.rs`** — Phase 2 skeleton: `KeyAnalyzer`, `MusicalKey` (12 нот), `KeyMode`, `CamelotKey`, `KeyResult`. `todo!("Phase 2")` на всех методах. 3 Rust-теста (camelot label, default, serialization) PASS.
 - **`core/dsp/src/energy_analyzer.rs`** — Phase 2 skeleton: `EnergyAnalyzer`, `EnergyResult { level: u8, rms_dbfs, spectral_flux, onset_density_hz }`. 2 Rust-теста PASS.
-- **`DspResult`** расширен: `genre_preset: GenrePreset` (сериализуется в JSON), `key_result: Option<KeyResult>` (None в Phase 1, skip_serializing_if = None), `energy_result: Option<EnergyResult>` (None в Phase 1). Обратно совместимо — все 84 Rust-теста PASS.
+- **`DspResult`** расширен: `genre_preset: GenrePreset` (сериализуется в JSON), `key_result: Option<KeyResult>` (None в Phase 1, skip_serializing_if = None), `energy_result: Option<EnergyResult>` (None в Phase 1). `debug: DspDebug` (Phase 11). Обратно совместимо.
 - **`apps/mobile/lib/features/tap_tempo/tap_tempo_controller.dart`** — `TapTempoController` (ChangeNotifier): последние 8 тапов, окно 3 сек, BPM = 60000/avg. Free tier.
 - **`apps/mobile/lib/features/setlist/setlist_entry.dart`** — `SetlistEntry`: timestamp + BPM + lockState + confidence + inputLevelDbfs. `toJson()` + `toCsvRow()`.
 - **`apps/mobile/lib/features/setlist/setlist_service.dart`** — `SetlistService` (ChangeNotifier): запись только STABLE + ненулевой BPM, дедупликация (delta < 0.5 BPM AND < 5 сек), `exportJson()` / `exportCsv()`. Pro-only (gate на уровне UI).
 - **`apps/mobile/test/features/tap_tempo/tap_tempo_controller_test.dart`** — 6 unit-тестов: single tap null, 4 taps ~200 BPM, пауза > 3 сек сброс, > 8 тапов trim, reset, two taps. PASS.
 - **`apps/mobile/test/features/setlist/setlist_service_test.dart`** — 9 unit-тестов: recording gate, STABLE gate, null BPM gate, дедупликация, delta > 0.5 pass, stopRecording, exportJson/Csv структура, clear, averageBpm. PASS.
 
+### Changed — Design System v2 (Phase 11)
+
+- **Paywall** редизайн: value headline «Читай любой трек. Без ограничений.» +
+  column headers ФУНКЦИЯ/FREE/PRO + CTA-иерархия (filled+badge / outline) +
+  Roadmap card (Key+Camelot, Energy, Lock-screen Widget). «Debug Screen» → «Signal Analyzer».
+- **Waveform** высота: flex-proportional → fixed 120 px.
+- **BPM number**: 52 px JetBrains Mono → 72 px IBM Plex Mono hero (в `_AnimatedBpmDisplay`).
+- **Confidence bar**: 2 px одноцветный → 7 px с цветовыми порогами (Design v2 ConfidenceBar).
+- **main.dart**: `MainScreen` → `AppNavigator`; `AppSettings.instance.load()` при старте.
+- **ARCHITECTURE.md**: обновлена навигационная структура и слои приложения.
+
 ### Changed — v2 Paywall 2.0 (2026-06-01)
 
-- **`apps/mobile/lib/monetization/paywall_screen.dart`** — Таблица сравнения расширена с 5 до 10 строк: добавлены Multi-Genre (3 жанра Free / 7+Custom Pro), Setlist Tracker, Key + Camelot (Скоро), Energy Level (Скоро), Apple Watch (Скоро). `_buildWidgetTile()` удалён (заменён строкой в таблице). Annual-кнопка переработана: `Column` с лейблом + «14 дней бесплатно» badge. Lock-screen Widget теперь строка таблицы (Скоро).
-- **`apps/mobile/lib/monetization/feature_flags.dart`** — без изменений (P1.2 genre picker — бэклог Phase 1 UI).
-- **`apps/mobile/test/monetization/paywall_screen_test.dart`** — обновлён: проверяет все 10 строк, 4× «Скоро», «14 дней бесплатно» badge, Multi-Genre и Setlist строки.
+- **`apps/mobile/lib/monetization/paywall_screen.dart`** — Таблица сравнения расширена с 5 до 10 строк: добавлены Multi-Genre (3 жанра Free / 7+Custom Pro), Setlist Tracker, Key + Camelot (Скоро), Energy Level (Скоро), Apple Watch (Скоро). Annual-кнопка: «14 дней бесплатно» badge.
+- **`apps/mobile/test/monetization/paywall_screen_test.dart`** — обновлён: проверяет все строки, «14 дней бесплатно» badge, Multi-Genre и Setlist строки.
 - **`docs/ARCHITECTURE.md`** — добавлена секция «v2 компоненты (Phase 1 scaffolding)».
 
 ### Changed

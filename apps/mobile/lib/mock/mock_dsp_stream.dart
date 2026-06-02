@@ -96,6 +96,14 @@ class MockDspStream {
           hopTimeSec: 0.0025,
           firstLockTimeSec: firstLockSec,
         ),
+        debug: DspDebug(
+          onsetRateHz: locked ? 3.3 : 0.0,
+          onsetStrength: locked ? 0.025 : 0.0,
+          tempoPeakProminence: locked ? confidence * 0.6 : 0.0,
+          harmonicAmbiguity: 0.1,
+          stabilityScore: confidence * 0.9,
+          warnings: const [],
+        ),
       );
     }
   }

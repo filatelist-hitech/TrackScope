@@ -265,6 +265,84 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 
 Известное ограничение: виртуальный микрофон AVD не позволяет проверить реальную точность детектора — для этого нужно физическое Android-устройство.
 
+## Phase 11.1: UI HTML-прототип аудит и фиксы — **ЗАВЕРШЕНО** (2026-06-01)
+
+Цель: привести все Flutter-экраны в соответствие с HTML дизайн-референсами
+(`BPM Radar Prototype.html`, `BPM Radar Redesign.html`, `CLAUDE_CODE_HANDOFF.md`).
+
+Артефакты:
+
+- **Zone labels + ListeningIndicator** (`main_screen.dart`): добавлены zone labels
+  "WAVEFORM"/"LIVE SPECTRUM" над viz-панелями; "● слушаю" (accent цвет) при isCapturing.
+- **Signal Analyzer редизайн** (`signal_analyzer_screen.dart`): uppercase title +
+  PRO badge; top-4 кандидаты без relation-текста; 4px BPM bars; метрики с bars;
+  добавлены Harmonic Ambiguity и Stability Score.
+- **History Screen редизайн** (`history_screen.dart`): summary header (18px teal цифры),
+  группировка по дням (СЕГОДНЯ/ВЧЕРА/РАНЕЕ), group-карточки `#0d1712` r=13,
+  строки: BPM 20px teal/amber + 3px confidence bar. Устранена зависимость от AppTheme.
+- **BpmSample.confidence** (`bpm_history.dart`): добавлено поле; контроллер передаёт
+  `result.confidence`.
+- **Settings sa-grp редизайн** (`settings_screen.dart`): group-карточки под прototip,
+  font-size 12→9px, BPM Smoothing picker (None/Light/Moderate/Heavy).
+- **BpmSmoothing enum** (`app_settings.dart`): SharedPreferences-backed.
+- **Radar ×½/×2 ячейка** (`main_screen.dart`): возвращена; half_time и double_time
+  кандидаты всегда видимы (anti-fake).
+- **Paywall legal text** (`paywall_screen.dart`): юридический текст о подписке.
+- **Tab labels** (`app_tab_bar.dart`): 8px → 7px.
+- **Painter zone labels удалены** (`waveform_painter.dart`, `live_spectrum_painter.dart`):
+  canvas-подписи заменены Flutter-виджетами.
+
+Тесты: 139/139 Flutter pass (dsp_engine_test — pre-existing, нет .dylib).
+
+Критерии выхода — выполнены:
+
+- `flutter test` → 139/139 ✓
+- `flutter analyze` → 0 errors ✓
+- Все 🔴 критичные расхождения с HTML-прototипом устранены ✓
+- half/double кандидаты никогда не скрыты ✓
+- Нет фейкового BPM ✓
+
+Известные ограничения (останутся до Phase 12):
+
+- FFT Spectrum в Signal Analyzer — требует rawPcm стрима (Phase 3 mobile audio).
+- Break button — UI-only, действие не реализовано.
+- `AppTheme` в `design_tokens.dart` — legacy Phase 7 токены, используются в
+  `main_screen.dart`; требует отдельного рефакторинга.
+
+---
+
+## Phase 11: Design System v2 + DspDebug — **ЗАВЕРШЕНО** (2026-06-01)
+
+Цель: полный редизайн Flutter UI по дизайн-системе + экспозиция диагностики DspDebug в Signal Analyzer.
+
+Артефакты:
+
+- Tab Bar навигация (`AppNavigator`, `IndexedStack`): Радар / История / Настройки. `CaptureBridge` не пересоздаётся при смене вкладок.
+- `BpmHeroDisplay` (72 px IBM Plex Mono, 3 режима: idle / detecting / unstable).
+- `ConfidenceBar` (7 px, red < 30 % / yellow 30–70 % / teal > 70 %, анимация 400 мс).
+- `SignalAnalyzerScreen` (Pro-only, push из Radar и Settings): показывает BPM-кандидатов со score bar, качество сигнала, тайминги и реальные DspDebug-метрики алгоритма.
+- `SettingsScreen` (5 секций, SharedPreferences, WakelockPlus).
+- `AppSettings` (ChangeNotifier singleton, SharedPreferences-persistence).
+- Design tokens v2: `lib/theme/app_colors.dart` (#050807 bg, #00DFB0 accent) + `lib/theme/app_text_styles.dart` (IBM Plex Mono, роли).
+- `PaywallScreen` v2: value headline, column headers FREE/PRO, CTA-иерархия, Roadmap card.
+- **DspDebug в Rust `DspResult`**: `onset_rate_hz`, `onset_strength`, `tempo_peak_prominence`, `harmonic_ambiguity`, `stability_score`, `warnings`. Populated в `analyze_from_envelope` без дополнительной CPU-стоимости.
+- **DspDebug класс в Dart** (`dsp_result.dart`): `fromJson` с graceful defaults (missing key → zero). Backward-compatible.
+- `Signal Analyzer` показывает реальные метрики алгоритма (секция «Метрики алгоритма» — не placeholder).
+- Зависимости: `shared_preferences ^2.3.0`, `wakelock_plus ^1.2.0`.
+- Тесты: +3 Rust (`debug_field_populated_on_stable_signal`, `debug_serializes_to_json_with_debug_key`, `debug_empty_on_silence`), +6 Dart (`test/dsp_debug_test.dart`).
+
+Критерии выхода — выполнены:
+
+- `flutter analyze` → 0 errors ✓
+- `flutter test` → 132/132 ✓
+- `cargo test --workspace` → 75/75 ✓
+- BPM null → «— — —» dim #1E3530 ✓
+- ConfidenceBar 7 px + red/yellow/teal ✓
+- Tab Bar: 3 вкладки, CaptureBridge не пересоздаётся ✓
+- Signal Analyzer показывает реальные DspDebug-метрики ✓
+
+---
+
 ## Phase 10: Freemium monetization (Free / Pro) — **ЗАВЕРШЕНО** (2026-05-31)
 
 Цель: двухуровневая монетизация (Free / Pro) с RevenueCat IAP, paywall, гейтинг BPM-диапазона, debug-экрана, истории и экспорта.
@@ -288,3 +366,27 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - History: 30 сек (Free) / 24 ч (Pro) на выделенном экране.
 - Restore работает. Widget показывает «Скоро».
 - `config.dart` gitignored; Free работает keyless/offline.
+
+---
+
+## Phase 12: UI polish — **ЗАВЕРШЕНО** (2026-06-02)
+
+Цель: читаемость текста, waveform glow, унификация дизайн-системы, FFT в Signal Analyzer, Break button.
+
+Артефакты:
+
+- **Type scale v2.2** (`app_text_styles.dart`): micro 9→11, caption 10→12, title 11→13, body 12→14, subhead 13→15, value 15→18 — все роли без изменения hero/heroEmpty.
+- **Waveform ambient glow** (`waveform_painter.dart`): добавлен всегда-активный слой ambient glow (alpha=38, blur=4.0) поверх beat-reactive pulse — аналог spectrum.
+- **Design System v2 migration** (`design_tokens.dart`): AppTheme теперь thin-proxy → AppColors/AppTextStyles. Шрифт JetBrains Mono → IBM Plex Mono. Добавлены цвета в `app_colors.dart`: `surfaceHigh`, `dangerDim`, `warning`, `warningDim`, `success`, `successDim`, `noisePurple`, `noiseDim`.
+- **FFT Spectrum в Signal Analyzer** (`signal_analyzer_screen.dart`): StatelessWidget → StatefulWidget + VizController + `rawPcm` param + LiveSpectrumPainter panel сверху (90px). `app_navigator.dart` передаёт `rawPcm` в обоих местах создания SignalAnalyzerScreen.
+- **Break button** (`capture_bridge.dart`): `resetEngine()` — сбрасывает DSP-движок и smoother без остановки захвата. Wiring: main.dart → AppNavigator.onBreak → MainScreen.onBreak → _GlassmorphismCard → _InfoTableContent → _BreakButtonInline.
+
+Критерии выхода — выполнены:
+
+- `flutter analyze` → 0 errors ✓
+- `flutter test` → 148/149 pass (1 pre-existing dsp_engine_test — нет .dylib) ✓
+- Шрифты читаемы (+2px по всем ролям) ✓
+- Waveform glow всегда активен (ambient + beat-reactive) ✓
+- AppTheme → AppColors/AppTextStyles, no duplicate tokens ✓
+- FFT Spectrum в Signal Analyzer при наличии rawPcm ✓
+- Break button вызывает реальный reset DSP ✓

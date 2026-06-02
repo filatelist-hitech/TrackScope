@@ -1,9 +1,8 @@
-// Экран Paywall — Free vs Pro сравнение и покупка.
+// Экран Paywall — Design System v2.
 //
-// Показывает таблицу сравнения Free/Pro, кнопки покупки (Lifetime $4.99,
-// Annual $3.99/yr + 14 дней бесплатно), кнопку Restore.
-// v2: добавлены строки coming-soon (Key+Camelot, Energy, Watch, Widget).
-// Стилизован через AppTheme (accent #00E5CC, bg #07070F, mono).
+// Value headline + column headers + CTA-иерархия (primary filled / secondary outline).
+// "Debug Screen" переименован в "Signal Analyzer". Roadmap card для coming-soon.
+// v2: Multi-Genre и Setlist Tracker строки добавлены в таблицу сравнения.
 
 import 'package:flutter/material.dart';
 
@@ -14,178 +13,105 @@ import 'purchases_gateway.dart';
 class PaywallScreen extends StatelessWidget {
   const PaywallScreen({super.key, required this.feature});
 
-  /// Название фичи, которая привела пользователя на paywall
-  /// (для контекста: "debug_screen", "history", "export").
+  /// Название фичи, которая привела пользователя на paywall.
   final String feature;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppTheme.surface,
-        title: Text('Upgrade to Pro', style: AppTheme.mono(fontSize: 16)),
+        backgroundColor: AppColors.surface,
+        title: Text(
+          'Upgrade to Pro',
+          style: AppTextStyles.mono(16, FontWeight.w500, AppColors.textPrimary),
+        ),
         centerTitle: true,
+        iconTheme: const IconThemeData(color: AppColors.textSecondary),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Comparison table
-              _buildComparisonTable(),
-              const SizedBox(height: 32),
+              // ── Value headline ────────────────────────────────────────────────
+              Text(
+                'Читай любой трек.\nБез ограничений.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.mono(
+                  15, FontWeight.w500, const Color(0xFFC0DCD6),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Разблокируй полный потенциал детектора',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.mono(
+                  8.5, FontWeight.w400, AppColors.textMuted,
+                ),
+              ),
+              const SizedBox(height: 20),
 
-              // Purchase buttons
-              _buildPurchaseButton(
-                context,
+              // ── Comparison table ──────────────────────────────────────────────
+              _ComparisonTable(),
+              const SizedBox(height: 28),
+
+              // ── CTA — Primary (Lifetime) ──────────────────────────────────────
+              _PrimaryCtaButton(
                 label: 'Lifetime — \$4.99',
+                badgeLabel: 'Best value',
                 onTap: () => _purchaseLifetime(context),
               ),
               const SizedBox(height: 12),
-              _buildAnnualButton(context),
-              const SizedBox(height: 24),
 
-              // Restore button
-              TextButton(
-                onPressed: () => _restore(context),
-                child: Text(
-                  'Restore purchases',
-                  style: AppTheme.mono(fontSize: 13, color: AppTheme.textSecondary),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildComparisonTable() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          _buildComparisonRow('BPM Range', '170–230', '155–230'),
-          const Divider(color: AppTheme.surfaceHigh, height: 24),
-          _buildComparisonRow('Multi-Genre', '3 жанра', '7 + Custom'),
-          const Divider(color: AppTheme.surfaceHigh, height: 24),
-          _buildComparisonRow('Debug Screen', '—', '✓'),
-          const Divider(color: AppTheme.surfaceHigh, height: 24),
-          _buildComparisonRow('History', '30 сек', 'Unlimited'),
-          const Divider(color: AppTheme.surfaceHigh, height: 24),
-          _buildComparisonRow('Setlist Tracker', '—', '✓'),
-          const Divider(color: AppTheme.surfaceHigh, height: 24),
-          _buildComparisonRow('Export CSV/JSON', '—', '✓'),
-          const Divider(color: AppTheme.surfaceHigh, height: 24),
-          _buildComparisonRow('Key + Camelot', '—', 'Скоро'),
-          const Divider(color: AppTheme.surfaceHigh, height: 24),
-          _buildComparisonRow('Energy Level', '—', 'Скоро'),
-          const Divider(color: AppTheme.surfaceHigh, height: 24),
-          _buildComparisonRow('Apple Watch', '—', 'Скоро'),
-          const Divider(color: AppTheme.surfaceHigh, height: 24),
-          _buildComparisonRow('Lock-screen Widget', '—', 'Скоро'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildComparisonRow(String feature, String free, String pro) {
-    return Row(
-      children: [
-        Expanded(
-          flex: 2,
-          child: Text(
-            feature,
-            style: AppTheme.mono(fontSize: 13, color: AppTheme.textPrimary),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            free,
-            textAlign: TextAlign.center,
-            style: AppTheme.mono(fontSize: 13, color: AppTheme.textSecondary),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            pro,
-            textAlign: TextAlign.center,
-            style: AppTheme.mono(fontSize: 13, color: AppTheme.accent),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPurchaseButton(
-    BuildContext context, {
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: AppTheme.accent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: AppTheme.mono(
-              fontSize: 15,
-              color: AppTheme.background,
-              weight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAnnualButton(BuildContext context) {
-    return Material(
-      color: AppTheme.accent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: () => _purchaseAnnual(context),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          alignment: Alignment.center,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Annual — \$3.99/yr',
-                style: AppTheme.mono(
-                  fontSize: 15,
-                  color: AppTheme.background,
-                  weight: FontWeight.w600,
-                ),
+              // ── CTA — Secondary (Annual) ──────────────────────────────────────
+              _SecondaryCtaButton(
+                label: 'Annual — \$3.99/yr',
+                onTap: () => _purchaseAnnual(context),
               ),
               const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTheme.background.withAlpha(40),
-                  borderRadius: BorderRadius.circular(4),
-                ),
+              Center(
                 child: Text(
                   '14 дней бесплатно',
-                  style: AppTheme.mono(
-                    fontSize: 11,
-                    color: AppTheme.background,
+                  style: AppTextStyles.mono(
+                    9, FontWeight.w400, AppColors.accent,
                   ),
                 ),
               ),
+              const SizedBox(height: 8),
+
+              // ── Restore ───────────────────────────────────────────────────────
+              TextButton(
+                onPressed: () => _restore(context),
+                child: Text(
+                  'Восстановить покупки',
+                  style: AppTextStyles.mono(
+                    11, FontWeight.w400, AppColors.textMuted,
+                  ),
+                ),
+              ),
+
+              // ── Legal text ────────────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 4),
+                child: Text(
+                  'Оплата взимается с аккаунта App Store при подтверждении покупки. '
+                  'Подписка автоматически возобновляется, если не отменена '
+                  'минимум за 24 часа до окончания текущего периода. '
+                  'Управление: Настройки — Apple ID — Подписки.',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.mono(
+                    6.5, FontWeight.w400, AppColors.textMuted,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // ── Roadmap card ──────────────────────────────────────────────────
+              const _RoadmapCard(),
             ],
           ),
         ),
@@ -215,30 +141,283 @@ class PaywallScreen extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     switch (result) {
       case PurchaseResult.success:
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Success! Welcome to Pro.', style: AppTheme.mono(fontSize: 13)),
-            backgroundColor: AppTheme.success,
-          ),
-        );
+        messenger.showSnackBar(SnackBar(
+          content: Text('Success! Welcome to Pro.',
+              style: AppTheme.mono(fontSize: 13)),
+          backgroundColor: AppTheme.success,
+        ));
         Navigator.of(context).pop();
         break;
       case PurchaseResult.cancelled:
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Purchase cancelled.', style: AppTheme.mono(fontSize: 13)),
-            backgroundColor: AppTheme.textSecondary,
-          ),
-        );
+        messenger.showSnackBar(SnackBar(
+          content: Text('Purchase cancelled.',
+              style: AppTheme.mono(fontSize: 13)),
+          backgroundColor: AppTheme.textSecondary,
+        ));
         break;
       case PurchaseResult.error:
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Purchase failed. Try again.', style: AppTheme.mono(fontSize: 13)),
-            backgroundColor: AppTheme.danger,
-          ),
-        );
+        messenger.showSnackBar(SnackBar(
+          content: Text('Purchase failed. Try again.',
+              style: AppTheme.mono(fontSize: 13)),
+          backgroundColor: AppTheme.danger,
+        ));
         break;
     }
+  }
+}
+
+// ── Comparison table ──────────────────────────────────────────────────────────
+
+class _ComparisonTable extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: Column(
+        children: [
+          // Column headers
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'ФУНКЦИЯ',
+                  style: AppTextStyles.mono(
+                    7.5, FontWeight.w400, AppColors.textMuted,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 54,
+                child: Text(
+                  'FREE',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.mono(
+                    7.5, FontWeight.w400, AppColors.textMuted,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 60,
+                child: Text(
+                  'PRO',
+                  textAlign: TextAlign.right,
+                  style: AppTextStyles.mono(
+                    7.5, FontWeight.w400, AppColors.accent,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Divider(color: AppColors.borderFaint, height: 16),
+          const _TableRow('BPM Range', '170–230', '155–230'),
+          const Divider(color: AppColors.borderFaint, height: 16),
+          const _TableRow('Multi-Genre', '3 жанра', '7 + Custom'),
+          const Divider(color: AppColors.borderFaint, height: 16),
+          const _TableRow('Анализатор сигнала', '—', '✓'),
+          const Divider(color: AppColors.borderFaint, height: 16),
+          const _TableRow('История', '30 сек', '24 ч'),
+          const Divider(color: AppColors.borderFaint, height: 16),
+          const _TableRow('Setlist Tracker', '—', '✓'),
+          const Divider(color: AppColors.borderFaint, height: 16),
+          const _TableRow('Export CSV/JSON', '—', '✓'),
+        ],
+      ),
+    );
+  }
+}
+
+class _TableRow extends StatelessWidget {
+  const _TableRow(this.feature, this.free, this.pro);
+  final String feature;
+  final String free;
+  final String pro;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            feature,
+            style: AppTextStyles.mono(
+              11, FontWeight.w400, AppColors.textPrimary,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 54,
+          child: Text(
+            free,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.mono(
+              11, FontWeight.w400, AppColors.textSecondary,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 60,
+          child: Text(
+            pro,
+            textAlign: TextAlign.right,
+            style: AppTextStyles.mono(
+              11, FontWeight.w400, AppColors.accent,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Primary CTA — filled + "Best value" badge ─────────────────────────────────
+
+class _PrimaryCtaButton extends StatelessWidget {
+  const _PrimaryCtaButton({
+    required this.label,
+    required this.badgeLabel,
+    required this.onTap,
+  });
+
+  final String label;
+  final String badgeLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            decoration: BoxDecoration(
+              color: AppColors.accent,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.ctaButton,
+            ),
+          ),
+        ),
+        Positioned(
+          top: -10,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE0822A),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                badgeLabel,
+                style: AppTextStyles.mono(
+                  7.5, FontWeight.w600, Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Secondary CTA — outline ───────────────────────────────────────────────────
+
+class _SecondaryCtaButton extends StatelessWidget {
+  const _SecondaryCtaButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.bpmEmpty),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: AppTextStyles.mono(
+            10, FontWeight.w400, AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Roadmap card ──────────────────────────────────────────────────────────────
+
+class _RoadmapCard extends StatelessWidget {
+  const _RoadmapCard();
+
+  static const _items = [
+    'Key + Camelot Wheel',
+    'Energy Level 1–10',
+    'Lock-screen Widget · iOS 16+',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A1009),
+        border: Border.all(color: const Color(0xFF1A2E25)),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('COMING TO PRO', style: AppTextStyles.sectionLabel),
+          const SizedBox(height: 8),
+          for (final item in _items)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: const BoxDecoration(
+                      color: AppColors.bpmEmpty,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    item,
+                    style: AppTextStyles.mono(
+                      8.5, FontWeight.w400, AppColors.bpmEmpty,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }

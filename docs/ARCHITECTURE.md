@@ -72,15 +72,34 @@ docs/ ----------------------------> контракты репозитория
 
 Граница живого Flutter-приложения. Владеет разрешениями микрофона, поведением нативного аудио-моста, рендером результата, отладочным экраном и историей сессий. Не должен содержать независимую BPM-логику.
 
-Слои (Phase 3 шаг 2 — в эфире):
+Слои (Design System v2 — Phase 11):
 
 - `lib/dsp/` — типизированная Dart-обёртка над Rust FFI: `bindings.dart` (сырой C ABI), `dsp_result.dart` (типизированный взгляд на JSON-контракт), `engine.dart` (хэндл + stream/poll). Никакой BPM-математики на этой стороне.
 - `lib/capture/` — `MicrophoneSource` (тонкая обёртка над `package:record`), `CaptureBridge` (запускает изолят DSP-воркера, прокидывает байтовые PCM-чанки через `SendPort`, переэмитит распарсенный `DspResult` и `CaptureError` в broadcast-стримах), `dsp_worker.dart` (точка входа изолята, владеет FFI-хэндлом, делает конверсию PCM16 → f32, поллит `analyzeJson` на UI-частоте).
 - `lib/permissions/` — `PermissionGate` оборачивает `package:permission_handler`, перепроверяет на resume.
-- `lib/ui/` — `MainScreen`, `DebugScreen`, `PermissionDeniedScreen`. Оба экрана с данными принимают `Stream<DspResult>` напрямую, поэтому тестируемы изолированно; продакшен-проводка живёт в `main.dart`.
-- `lib/monetization/` — фримиум-монетизация (Free / Pro): `PurchasesGateway` (абстракция), `RevenueCatGateway` (единственный импорт `purchases_flutter`), `ProStatusService` (ChangeNotifier singleton), `FeatureFlags` (BPM-диапазон, доступ к debug/history/export), `PaywallScreen`. `config.dart` gitignored; ключи передаются через `--dart-define`.
-- `lib/history/` — BPM-история сессии: `BpmHistory` ( capped по длительности/количеству), `SessionHistoryController` (ChangeNotifier, даунсэмплер ~1 Hz), `HistoryScreen`.
+- `lib/theme/` — Design System v2 токены: `AppColors` (#050807 bg, #00DFB0 accent) + `AppTextStyles` (IBM Plex Mono, роли bpmHero/sectionLabel/ctaButton). Единственный источник цветов в UI.
+- `lib/widgets/` — переиспользуемые компоненты: `BpmHeroDisplay` (72px hero, 3 режима), `ConfidenceBar` (7px, red/yellow/teal), `BreakButton`, `ListeningIndicator`, `AppTabBar`.
+- `lib/navigation/` — `AppNavigator` (Tab Bar через `IndexedStack`): три вкладки Radar / History / Settings. `CaptureBridge` создаётся один раз в `_CapturePipeline` и передаётся в `AppNavigator` — не пересоздаётся при смене вкладок. Pro-gate на History навешан на уровне таб-навигации.
+- `lib/ui/` — `MainScreen` (визуализации + info card), `DebugScreen` (legacy, доступ через SignalAnalyzerScreen), `PermissionDeniedScreen`.
+- `lib/screens/` — `SignalAnalyzerScreen` (Pro-only, push из Radar и Settings; показывает BPM-кандидатов со score bar, качество сигнала, тайминги и DspDebug-метрики алгоритма: onset rate, peak prominence, harmonic ambiguity, stability score, warnings), `SettingsScreen` (SharedPreferences-backed, WakelockPlus).
+- `lib/settings/` — `AppSettings` (ChangeNotifier singleton, SharedPreferences persistence): showWaveform, showSpectrum, keepScreenOn, inputSensitivity.
+- `lib/monetization/` — фримиум-монетизация (Free / Pro): `PurchasesGateway` (абстракция), `RevenueCatGateway` (единственный импорт `purchases_flutter`), `ProStatusService` (ChangeNotifier singleton), `FeatureFlags` (BPM-диапазон, доступ к debug/history/export), `PaywallScreen` (Design v2: column headers, value headline, CTA-иерархия, Roadmap card). `config.dart` gitignored; ключи передаются через `--dart-define`.
+- `lib/history/` — BPM-история сессии: `BpmHistory` (capped по длительности/количеству), `SessionHistoryController` (ChangeNotifier, даунсэмплер ~1 Hz), `HistoryScreen`.
 - `lib/export/` — экспорт CSV/JSON: чистые билдеры `buildCsv`/`buildJson` + IO `exportCsv`/`exportJson` через `share_plus`.
+
+### Навигационная структура (Design System v2)
+
+```
+_CapturePipeline (owns CaptureBridge + MicrophoneSource + SessionHistoryController)
+  └── AppNavigator (IndexedStack — CaptureBridge НЕ пересоздаётся)
+        ├── [0] MainScreen (Radar tab)
+        │     └── push → SignalAnalyzerScreen [Pro-gate]
+        │     └── push → PaywallScreen
+        ├── [1] HistoryScreen (History tab) [Pro-gate at tab level]
+        └── [2] SettingsScreen (Settings tab)
+              └── push → SignalAnalyzerScreen [Pro-gate]
+              └── push → PaywallScreen
+```
 
 Пайплайн захвата задокументирован в `docs/MOBILE_AUDIO.md`. UI подписан только на `CaptureBridge.results` — параллельного состояния нет.
 

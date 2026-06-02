@@ -165,3 +165,86 @@ fn bpm_history_clears_on_state_change() {
         );
     }
 }
+
+// ── DspDebug field tests ───────────────────────────────────────────────────
+
+#[test]
+fn debug_field_populated_on_stable_signal() {
+    // На чистом 200 BPM пульсе DspDebug должен содержать ненулевые значения.
+    let samples = pulse_track(200.0, 14.0, 0.9);
+    let result = analyze_pcm(&samples, SAMPLE_RATE, DspConfig::default());
+
+    // Основные поля — присутствуют и разумные
+    assert!(
+        result.debug.onset_strength > 0.0,
+        "onset_strength should be > 0 on signal with onsets, got {}",
+        result.debug.onset_strength
+    );
+    assert!(
+        result.debug.tempo_peak_prominence >= 0.0,
+        "tempo_peak_prominence must be non-negative"
+    );
+    assert!(
+        result.debug.harmonic_ambiguity >= 0.0,
+        "harmonic_ambiguity must be non-negative"
+    );
+    assert!(
+        result.debug.stability_score >= 0.0 && result.debug.stability_score <= 1.0,
+        "stability_score must be in [0,1], got {}",
+        result.debug.stability_score
+    );
+    // onset_rate_hz > 0 если есть хоть один пик
+    if result.debug.onset_rate_hz > 0.0 {
+        assert!(
+            result.debug.onset_rate_hz < 100.0,
+            "onset_rate_hz unreasonably high: {}",
+            result.debug.onset_rate_hz
+        );
+    }
+}
+
+#[test]
+fn debug_serializes_to_json_with_debug_key() {
+    // DspResult должен сериализоваться в JSON с ключом "debug".
+    let samples = pulse_track(180.0, 14.0, 0.9);
+    let result = analyze_pcm(&samples, SAMPLE_RATE, DspConfig::default());
+    let json = serde_json::to_string(&result).expect("serialize DspResult");
+
+    assert!(
+        json.contains("\"debug\""),
+        "JSON output must contain 'debug' key, got: {}",
+        &json[..json.len().min(200)]
+    );
+    assert!(
+        json.contains("\"onset_strength\""),
+        "JSON debug must contain onset_strength"
+    );
+    assert!(
+        json.contains("\"tempo_peak_prominence\""),
+        "JSON debug must contain tempo_peak_prominence"
+    );
+    assert!(
+        json.contains("\"harmonic_ambiguity\""),
+        "JSON debug must contain harmonic_ambiguity"
+    );
+    assert!(
+        json.contains("\"stability_score\""),
+        "JSON debug must contain stability_score"
+    );
+    assert!(
+        json.contains("\"warnings\""),
+        "JSON debug must contain warnings array"
+    );
+}
+
+#[test]
+fn debug_empty_on_silence() {
+    // На тишине debug должен содержать нулевые значения и пустые warnings.
+    use common::silence;
+    let samples = silence(12.0);
+    let result = analyze_pcm(&samples, SAMPLE_RATE, DspConfig::default());
+
+    assert_eq!(result.debug.onset_rate_hz, 0.0);
+    assert_eq!(result.debug.onset_strength, 0.0);
+    assert_eq!(result.debug.warnings, Vec::<String>::new());
+}

@@ -143,6 +143,52 @@ class DspTiming {
       );
 }
 
+/// Диагностические поля, эмитируемые Rust-DSP вместе с каждым DspResult.
+///
+/// Все значения вычисляются как побочный продукт обычного анализа —
+/// без дополнительных CPU-затрат. Никакой BPM-математики здесь нет.
+class DspDebug {
+  const DspDebug({
+    required this.onsetRateHz,
+    required this.onsetStrength,
+    required this.tempoPeakProminence,
+    required this.harmonicAmbiguity,
+    required this.stabilityScore,
+    required this.warnings,
+  });
+
+  /// Число значимых темповых пиков в секунду в текущем окне.
+  final double onsetRateHz;
+
+  /// Средняя амплитуда огибающей онсетов (spectral flux) по окну.
+  final double onsetStrength;
+
+  /// Prominence главного темпового пика нормализованной автокорреляции.
+  final double tempoPeakProminence;
+
+  /// Мера конкурирующих кандидатов за темповое пространство. 0 = нет конкуренции.
+  final double harmonicAmbiguity;
+
+  /// stability_score основного кандидата на момент снапшота.
+  final double stabilityScore;
+
+  /// Текстовые предупреждения (clipping, breakdown_likely, harmonic_ambiguity).
+  final List<String> warnings;
+
+  factory DspDebug.fromJson(Map<String, dynamic> json) => DspDebug(
+        onsetRateHz: _asDoubleOrNull(json['onset_rate_hz']) ?? 0.0,
+        onsetStrength: _asDoubleOrNull(json['onset_strength']) ?? 0.0,
+        tempoPeakProminence:
+            _asDoubleOrNull(json['tempo_peak_prominence']) ?? 0.0,
+        harmonicAmbiguity:
+            _asDoubleOrNull(json['harmonic_ambiguity']) ?? 0.0,
+        stabilityScore: _asDoubleOrNull(json['stability_score']) ?? 0.0,
+        warnings: ((json['warnings'] as List?) ?? const [])
+            .whereType<String>()
+            .toList(growable: false),
+      );
+}
+
 class DspResult {
   const DspResult({
     required this.primaryBpm,
@@ -151,6 +197,7 @@ class DspResult {
     required this.signalQuality,
     required this.candidates,
     required this.timing,
+    required this.debug,
   });
 
   /// `null`, когда DSP не перешагнул порог захвата. UI ОБЯЗАН отрисовать
@@ -162,18 +209,24 @@ class DspResult {
   final List<TempoCandidate> candidates;
   final DspTiming timing;
 
+  /// Диагностика алгоритма. Содержит реальные значения из Rust DSP.
+  final DspDebug debug;
+
   factory DspResult.fromJson(Map<String, dynamic> json) => DspResult(
         primaryBpm: _asDoubleOrNull(json['primary_bpm']),
         confidence: _asDoubleOrNull(json['confidence']) ?? 0.0,
         lockState: LockState.parse(json['lock_state'] as String?),
         signalQuality: SignalQuality.fromJson(
-            (json['signal_quality'] as Map?)?.cast<String, dynamic>() ?? const {}),
+            (json['signal_quality'] as Map?)?.cast<String, dynamic>() ??
+                const {}),
         candidates: ((json['candidates'] as List?) ?? const [])
             .whereType<Map>()
             .map((m) => TempoCandidate.fromJson(m.cast<String, dynamic>()))
             .toList(growable: false),
         timing: DspTiming.fromJson(
             (json['timing'] as Map?)?.cast<String, dynamic>() ?? const {}),
+        debug: DspDebug.fromJson(
+            (json['debug'] as Map?)?.cast<String, dynamic>() ?? const {}),
       );
 
   static DspResult parse(String json) =>

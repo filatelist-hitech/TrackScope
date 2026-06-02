@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BPM Radar — Prototype v2</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:#07090a;font-family:'IBM Plex Mono',monospace;height:100%;overflow:hidden;}
+  /* Stage */
+  #stage{display:flex;width:100%;height:100vh;align-items:center;justify-content:center;background:#07090a;}
+  .label{position:absolute;top:24px;left:50%;transform:translateX(-50%);font-size:9px;letter-spacing:.2em;color:#1a3028;text-transform:uppercase;white-space:nowrap;}
+  .hint{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);font-size:9px;letter-spacing:.06em;color:#1a3028;white-space:nowrap;text-align:center;line-height:1.7;}
+  /* Phone */
+  .phone{width:375px;height:812px;max-height:100vh;background:#050807;border-radius:50px;border:1.5px solid #1a2d24;box-shadow:0 0 0 6px #030504,0 40px 100px rgba(0,0,0,.9);overflow:hidden;position:relative;display:flex;flex-direction:column;}
+  @media(max-width:420px){
+    #stage{align-items:flex-start;}
+    .phone{width:100vw;height:100vh;border-radius:0;border:none;box-shadow:none;}
+    .label,.hint{display:none;}
+  }
+  /* Screen system */
+  .screens{flex:1;position:relative;overflow:hidden;min-height:0;}
+  .screen{position:absolute;inset:0;display:flex;flex-direction:column;background:#050807;transition:transform .3s cubic-bezier(.4,0,.2,1),opacity .3s ease-out;overflow:hidden;opacity:1;}
+  .screen.hidden-right{transform:translateX(100%);opacity:0;}
+  .screen.hidden-left{transform:translateX(-100%);opacity:0;}
+  .screen.active{transform:translateX(0);opacity:1;z-index:10;}
+  /* Status bar */
+  .sb{display:flex;justify-content:space-between;align-items:center;padding:14px 22px 4px;font-size:10px;color:#7ab8aa;flex-shrink:0;}
+  .sb-r{display:flex;align-items:center;gap:5px;}
+  .batt{background:#1a2d24;border-radius:3px;padding:2px 6px;font-size:9px;}
+  /* Nav */
+  .nav{display:flex;align-items:center;padding:8px 22px 12px;gap:16px;flex-shrink:0;height:auto;justify-content:space-between;}
+  .nav-title{font-size:11px;letter-spacing:.2em;color:#7ab8aa;flex:1;text-align:center;font-weight:500;}
+  .nav-btn{width:36px;height:36px;background:#0d1712;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;flex-shrink:0;transition:all .15s;}
+  .nav-btn:active{background:#1a2d24;opacity:.8;}
+  .nav-left{display:flex;gap:8px;align-items:center;width:60px;}
+  .nav-right{display:flex;gap:8px;align-items:center;width:60px;justify-content:flex-end;}
+  .pro{background:#00dfb0;color:#000;font-size:10px;font-weight:600;padding:5px 11px;border-radius:6px;cursor:pointer;border:none;font-family:'IBM Plex Mono',monospace;transition:opacity .15s;}
+  .pro:active{opacity:.7;}
+  .rec-badge{background:#e04040;color:#fff;font-size:9px;font-weight:600;padding:4px 11px;border-radius:16px;display:flex;align-items:center;gap:5px;flex-shrink:0;}
+  .rdot{width:7px;height:7px;border-radius:50%;background:#fff;animation:blink 1.2s ease-in-out infinite;}
+  .idle-badge{background:#1a3028;color:#3a6858;font-size:9px;font-weight:600;padding:4px 11px;border-radius:16px;display:flex;align-items:center;gap:5px;flex-shrink:0;}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+  /* Zone label */
+  .zlbl{font-size:9px;letter-spacing:.18em;color:#7ab8aa;padding:8px 22px 5px;flex-shrink:0;display:flex;justify-content:space-between;align-items:center;font-weight:500;}
+  /* Freq axis */
+  .faxis{display:flex;justify-content:space-between;padding:5px 22px 7px;font-size:8px;color:#3a6858;border-top:1px solid rgba(0,223,176,.18);background:#040705;flex-shrink:0;}
+  /* Card */
+  .card{background:#0c1410;border-radius:22px 22px 0 0;padding:22px 24px 18px;flex:1;display:flex;flex-direction:column;overflow:hidden;}
+  /* BPM hero */
+  .bpm-n{font-size:72px;font-weight:600;line-height:1;letter-spacing:-.04em;text-align:center;}
+  .bpm-n.green{color:#00dfb0;}
+  .bpm-n.amber{color:#ffe090;}
+  .bpm-n.dim{color:#1e3530;font-size:58px;}
+  .bpm-meta{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:8px;flex-wrap:wrap;}
+  .bpm-unit{font-size:13px;color:#00dfb0;letter-spacing:.2em;font-weight:500;}
+  .bpm-range{font-size:9px;color:#3a6858;}
+  .pill{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:4px 12px;font-size:9px;font-weight:500;}
+  .pill-amber{background:rgba(200,138,24,.18);color:#ffe090;border:1px solid rgba(200,138,24,.3);}
+  .pill-teal{background:rgba(0,223,176,.1);color:#00dfb0;border:1px solid rgba(0,223,176,.3);}
+  .pdot{width:5px;height:5px;border-radius:50%;background:currentColor;}
+  /* Confidence */
+  .conf{display:flex;align-items:center;gap:11px;margin:14px 0 12px;}
+  .ctrack{flex:1;height:8px;background:#111916;border-radius:4px;overflow:hidden;}
+  .cfill{height:100%;border-radius:4px;transition:width .4s;}
+  .cval{font-size:11px;flex-shrink:0;font-weight:500;}
+  /* Break btn */
+  .brk{background:#0c1410;border:1px solid #1e3530;border-radius:9px;padding:10px 20px;font-size:10px;color:#3a6858;display:flex;align-items:center;gap:6px;cursor:pointer;font-family:'IBM Plex Mono',monospace;transition:border-color .15s,color .15s;align-self:center;}
+  .brk:active{border-color:#00dfb0;color:#00dfb0;}
+  /* Stats */
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;margin-top:16px;}
+  .sc{display:flex;flex-direction:column;gap:3px;}
+  .sl{font-size:8px;letter-spacing:.12em;color:#1a3028;text-transform:uppercase;font-weight:500;}
+  .sv{font-size:12px;color:#5a8878;font-weight:400;}
+  .sv.g{color:#00dfb0;}
+  .sv.link{color:#00dfb0;cursor:pointer;display:flex;align-items:center;gap:3px;transition:opacity .15s;}
+  .sv.link:active{opacity:.6;}
+  /* Mode switcher */
+  .modes{display:flex;gap:7px;justify-content:center;margin-top:auto;padding-top:16px;}
+  .mode-opt{border:1px solid #1a2d24;border-radius:7px;padding:5px 11px;font-size:8px;color:#1a3028;cursor:pointer;font-family:'IBM Plex Mono',monospace;transition:all .15s;letter-spacing:.06em;text-transform:uppercase;font-weight:500;}
+  .mode-opt.on{border-color:#00dfb0;color:#00dfb0;background:rgba(0,223,176,.06);}
+  /* Signal Analyzer */
+  .sa-grp{margin:0 18px 10px;background:#0d1712;border-radius:13px;overflow:hidden;flex-shrink:0;}
+  .sa-hdr{font-size:9px;letter-spacing:.14em;color:#7ab8aa;text-transform:uppercase;padding:10px 18px 6px;flex-shrink:0;font-weight:500;}
+  .sa-row{display:flex;align-items:center;padding:11px 16px;border-bottom:1px solid #080c09;gap:12px;}
+  .sa-row:last-child{border-bottom:none;}
+  .sa-lbl{flex:1;font-size:11px;color:#5a8878;font-weight:400;}
+  .sa-val{font-size:11px;color:#c8dcd8;font-weight:500;}
+  .sa-bw{width:80px;height:6px;background:#111916;border-radius:3px;overflow:hidden;}
+  .sa-bf{height:100%;border-radius:3px;}
+  .cand-row{display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #080c09;gap:12px;}
+  .cand-row:last-child{border-bottom:none;}
+  .cand-bpm{font-size:20px;font-weight:600;width:70px;flex-shrink:0;}
+  .cand-bpm.top{color:#00dfb0;}
+  .cand-bpm.dim{color:#3a6858;}
+  .cbw{flex:1;height:5px;background:#111916;border-radius:2px;overflow:hidden;}
+  .cbf{height:100%;border-radius:2px;}
+  .cpct{font-size:10px;color:#3a6858;width:36px;text-align:right;flex-shrink:0;}
+  /* History */
+  .hist-top{display:flex;align-items:center;justify-content:space-between;padding:12px 22px 10px;flex-shrink:0;}
+  .hstats{display:flex;gap:26px;}
+  .hst{display:flex;flex-direction:column;gap:2px;}
+  .hst-v{font-size:20px;font-weight:600;color:#00dfb0;line-height:1;}
+  .hst-l{font-size:8px;letter-spacing:.12em;color:#1a3028;text-transform:uppercase;font-weight:500;}
+  .exp-btn{background:#0d1712;border:1px solid #1e3530;border-radius:8px;padding:7px 13px;font-size:9px;color:#3a6858;font-family:'IBM Plex Mono',monospace;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .15s;}
+  .datelbl{font-size:8px;letter-spacing:.14em;color:#1a3028;text-transform:uppercase;padding:7px 22px 4px;flex-shrink:0;font-weight:500;}
+  .hist-grp{margin:0 16px 5px;background:#0d1712;border-radius:13px;overflow:hidden;flex-shrink:0;}
+  .hist-item{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #080c09;gap:14px;cursor:pointer;transition:background .15s;}
+  .hist-item:last-child{border-bottom:none;}
+  .hist-item:active{background:rgba(0,223,176,.04);}
+  .hbpm{font-size:22px;font-weight:600;width:65px;flex-shrink:0;}
+  .hbpm.g{color:#00dfb0;}
+  .hbpm.a{color:#ffe090;}
+  .hmeta{flex:1;display:flex;flex-direction:column;gap:5px;}
+  .htime{font-size:9px;color:#3a6858;font-weight:400;}
+  .hcbar{height:4px;background:#111916;border-radius:2px;overflow:hidden;}
+  .hcfill{height:100%;border-radius:2px;}
+  /* Settings */
+  .sscroll{flex:1;overflow-y:auto;overflow-x:hidden;}
+  .sscroll::-webkit-scrollbar{display:none;}
+  .s-hdr{font-size:9px;letter-spacing:.14em;color:#7ab8aa;text-transform:uppercase;padding:12px 22px 6px;font-weight:500;}
+  .s-grp{margin:0 16px 5px;background:#0d1712;border-radius:13px;overflow:hidden;}
+  .s-row{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #080c09;gap:12px;cursor:pointer;transition:background .15s;}
+  .s-row:last-child{border-bottom:none;}
+  .s-row:active{background:rgba(255,255,255,.02);}
+  .s-lbl{flex:1;font-size:11px;color:#5a8878;font-weight:400;}
+  .s-val{font-size:10px;color:#1a3028;font-weight:400;}
+  .s-chev{color:#1a3028;font-size:14px;}
+  .s-badge{background:#00dfb0;color:#000;font-size:8px;font-weight:600;padding:3px 8px;border-radius:5px;}
+  .tog{width:34px;height:20px;border-radius:10px;position:relative;flex-shrink:0;cursor:pointer;transition:background .2s;}
+  .tog::after{content:'';position:absolute;width:16px;height:16px;background:#fff;border-radius:50%;top:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.5);}
+  .tog.on{background:#00dfb0;}
+  .tog.on::after{left:16px;}
+  .tog.off{background:#1e3530;}
+  .tog.off::after{left:2px;}
+  .range-row{display:flex;gap:6px;}
+  .ropt{border:1px solid #1e3530;border-radius:7px;padding:4px 10px;font-size:8px;color:#1e3530;font-family:'IBM Plex Mono',monospace;cursor:pointer;transition:all .15s;}
+  .ropt.on{border-color:#00dfb0;color:#00dfb0;}
+  .slider-wrap{display:flex;flex-direction:column;gap:8px;padding:12px 16px;border-bottom:1px solid #080c09;}
+  .slider-lbl{display:flex;justify-content:space-between;font-size:9px;}
+  .slider-lbl span:first-child{color:#3a6858;font-weight:400;}
+  .slider-lbl span:last-child{color:#00dfb0;font-weight:500;}
+  .slider{height:5px;background:#111916;border-radius:2px;position:relative;}
+  .slider-fill{height:100%;background:#00dfb0;border-radius:2px;}
+  .slider-thumb{position:absolute;width:14px;height:14px;background:#00dfb0;border-radius:50%;top:50%;transform:translateY(-50%);box-shadow:0 0 0 2px #0d1712;}
+  /* Paywall */
+  .pw-hero{text-align:center;padding:18px 26px 14px;flex-shrink:0;}
+  .pw-h{font-size:16px;color:#c0dcd6;font-weight:500;line-height:1.5;}
+  .pw-sub{font-size:9px;color:#1a3028;margin-top:6px;font-weight:400;}
+  .feat-tbl{margin:0 16px;background:#0d1712;border-radius:13px;overflow:hidden;flex-shrink:0;}
+  .feat-hdr{display:flex;align-items:center;padding:9px 16px 6px;border-bottom:1px solid #080c09;}
+  .fhn{flex:1;font-size:8px;letter-spacing:.1em;color:#1a3028;text-transform:uppercase;font-weight:500;}
+  .fhf{width:54px;text-align:center;font-size:8px;color:#1a3028;text-transform:uppercase;letter-spacing:.1em;font-weight:500;}
+  .fhp{width:60px;text-align:right;font-size:8px;color:#00dfb0;text-transform:uppercase;letter-spacing:.1em;font-weight:500;}
+  .feat-row{display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #080c09;}
+  .feat-row:last-child{border-bottom:none;}
+  .fn{flex:1;font-size:10px;color:#3a6858;font-weight:400;}
+  .ff{width:54px;text-align:center;font-size:10px;color:#1a3028;font-weight:400;}
+  .fp{width:60px;text-align:right;font-size:10px;color:#00dfb0;font-weight:500;}
+  .cta-wrap{padding:16px 16px 8px;display:flex;flex-direction:column;gap:9px;flex-shrink:0;}
+  .cta-p{background:#00dfb0;border-radius:16px;padding:16px;text-align:center;font-size:11px;font-weight:600;color:#000;font-family:'IBM Plex Mono',monospace;cursor:pointer;position:relative;transition:opacity .15s;}
+  .cta-p:active{opacity:.8;}
+  .best{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:#e0822a;color:#fff;font-size:8px;font-weight:600;padding:3px 11px;border-radius:8px;white-space:nowrap;}
+  .cta-s{background:transparent;border:1px solid #1e3530;border-radius:16px;padding:15px;text-align:center;font-size:11px;color:#3a6858;font-family:'IBM Plex Mono',monospace;cursor:pointer;transition:border-color .15s;}
+  .cta-s:active{border-color:#00dfb0;}
+  .restore{text-align:center;font-size:9px;color:#1a3028;padding:8px;flex-shrink:0;font-weight:400;}
+  .rdmap{margin:5px 16px 12px;background:#0a1009;border:1px dashed #1a2e25;border-radius:11px;padding:12px 16px;flex-shrink:0;}
+  .rdmap-t{font-size:8px;letter-spacing:.12em;color:#1a3028;text-transform:uppercase;margin-bottom:9px;font-weight:500;}
+  .rdmap-i{display:flex;align-items:center;gap:8px;font-size:9px;color:#1e3530;padding:4px 0;font-weight:400;}
+  .rdi-dot{width:5px;height:5px;border-radius:50%;background:#2a4a3e;flex-shrink:0;}
+  /* Tab bar */
+  .tabbar{display:flex;border-top:1px solid #0f1712;padding:14px 0 20px;flex-shrink:0;background:#050807;gap:0;}
+  .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;transition:opacity .15s;min-height:50px;justify-content:center;}
+  .tab:active{opacity:.6;}
+  .tab-lbl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:500;}
+  .tab-ico{display:flex;align-items:center;justify-content:center;}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="label">BPM Radar · Interactive Prototype v2</div>
+  <div id="root"></div>
+  <div class="hint">Tap «Лучший кандидат» → Signal Analyzer &nbsp;·&nbsp; PRO → Paywall &nbsp;·&nbsp; Свайп или tap tab bar</div>
+</div>
+
+<script type="text/babel">
+const {useState, useEffect, useRef, useCallback} = React;
+
+/* ────────────────────────────────────────────
+   WAVEFORM (canvas, animated bars)
+──────────────────────────────────────────── */
+function seededRand(seed) {
+  let s = (seed | 0) || 1;
+  return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+}
+
+function Waveform({ mode='active', seed=1, height=120 }) {
+  const ref = useRef(null);
+  const raf = useRef(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const init = () => {
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      const w = parent.offsetWidth || 375;
+      const h = height;
+      canvas.width  = w * 2;
+      canvas.height = h * 2;
+      canvas.style.width  = w + 'px';
+      canvas.style.height = h + 'px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(2, 2);
+      const cfgs = {
+        idle:   { amp: h * 0.06, speed: 0.5 },
+        low:    { amp: h * 0.12, speed: 0.8 },
+        active: { amp: h * 0.43, speed: 2.4, color: '#00dfb0' },
+        amber:  { amp: h * 0.40, speed: 2.2, color: '#c8a020' },
+      };
+      const c = cfgs[mode] || cfgs.active;
+      const color = c.color || '#00dfb0';
+      const rng = seededRand(seed);
+      const COUNT = 52;
+      const base = Array.from({length:COUNT}, (_,i) =>
+        Math.abs(Math.sin(i*0.19+0.4))*0.5 +
+        Math.abs(Math.sin(i*0.08+1.1))*0.3 +
+        Math.abs(Math.sin(i*0.41+0.9))*0.15 +
+        rng()*0.05
+      );
+      let t = 0;
+      const gap = 2, barW = Math.max(2, (w - (COUNT+1)*gap) / COUNT);
+      const step = barW + gap;
+      function frame() {
+        ctx.clearRect(0,0,w,h);
+        const mid = h/2;
+        ctx.strokeStyle = 'rgba(0,223,176,0.05)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(w,mid); ctx.stroke();
+        base.forEach((v, i) => {
+          const flicker = Math.sin(t*c.speed + i*0.6)*0.12 + Math.sin(t*c.speed*1.8+i*1.2)*0.07;
+          const amp = Math.max(0.01, Math.min(1, v+flicker)) * c.amp;
+          const x = gap + i*step, bh = Math.max(2, amp);
+          const gr = ctx.createLinearGradient(x, mid-bh, x, mid+bh);
+          gr.addColorStop(0,   color + 'ff');
+          gr.addColorStop(0.5, color + 'aa');
+          gr.addColorStop(1,   color + '33');
+          ctx.fillStyle = gr;
+          ctx.beginPath(); ctx.roundRect(x, mid-bh, barW, bh*2, 1); ctx.fill();
+        });
+        t += 0.035;
+        raf.current = requestAnimationFrame(frame);
+      }
+      frame();
+    };
+    const tid = setTimeout(init, 30);
+    return () => { clearTimeout(tid); cancelAnimationFrame(raf.current); };
+  }, [mode, seed, height]);
+  return <canvas ref={ref} style={{display:'block',background:'#040705'}} />;
+}
+
+function Spectrum({ active=true, seed=1, height=70 }) {
+  const ref = useRef(null);
+  const BASE = [78,72,68,60,54,48,44,38,32,26,22,17,13,10,8,6,5,4,3,3];
+  const rng = seededRand(seed);
+  const init = BASE.map(v => Math.max(3, v + (rng()-0.5)*8));
+  useEffect(() => {
+    if (!active) return;
+    const el = ref.current; if (!el) return;
+    const t = setInterval(() => {
+      el.querySelectorAll('.sbar').forEach((b,i) => {
+        b.style.height = Math.max(3, (BASE[i]||5) + (Math.random()-.5)*24) + '%';
+      });
+    }, 140);
+    return () => clearInterval(t);
+  }, [active]);
+  return (
+    <div ref={ref} style={{display:'flex',alignItems:'flex-end',height,padding:'0 24px',gap:3,background:'#040705',flexShrink:0}}>
+      {init.map((h,i) => <div key={i} className="sbar" style={{flex:1,height:h+'%',background:'#00dfb0',borderRadius:'1px 1px 0 0',opacity:.65,transition:'height .14s'}} />)}
+    </div>
+  );
+}
+
+function MiniWave({ seed=1, color='#00dfb0' }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const c = ref.current; if (!c) return;
+    const W=48, H=24, ctx = c.getContext('2d');
+    const rng = seededRand(seed);
+    const N=18, gap=1, bw=Math.max(1,(W-(N+1)*gap)/N), step=bw+gap, mid=H/2;
+    Array.from({length:N}).forEach((_,i) => {
+      const v=(Math.abs(Math.sin(i*.33+.5))*.55+Math.abs(Math.sin(i*.14+1.2))*.3+rng()*.15);
+      const amp=Math.max(1,Math.min(1,v)*(H*.44));
+      const x=gap+i*step;
+      const gr=ctx.createLinearGradient(x,mid-amp,x,mid+amp);
+      gr.addColorStop(0,color+'cc'); gr.addColorStop(.5,color+'88'); gr.addColorStop(1,color+'cc');
+      ctx.fillStyle=gr; ctx.beginPath(); ctx.roundRect(x,mid-amp,bw,amp*2,1); ctx.fill();
+    });
+  }, [seed, color]);
+  return <canvas ref={ref} width={48} height={24} style={{display:'block',flexShrink:0}} />;
+}
+
+/* FFT for Signal Analyzer */
+function FFT({ height=150 }) {
+  const ref = useRef(null);
+  const raf = useRef(null);
+  useEffect(() => {
+    const c = ref.current; if (!c) return;
+    const init = () => {
+      const w = (c.parentElement?.offsetWidth || 375);
+      c.width = w*2; c.height = height*2;
+      c.style.width = w+'px'; c.style.height = height+'px';
+      const ctx = c.getContext('2d'); ctx.scale(2,2);
+      let t = 0;
+      function frame() {
+        ctx.clearRect(0,0,w,height);
+        const pts = Array.from({length:w}, (_,x) => {
+          const n = x/w;
+          const y = Math.pow(1-n,1.7)*0.88
+            + Math.exp(-Math.pow((n-.06)*12,2))*.3
+            + Math.exp(-Math.pow((n-.22)*18,2))*.14
+            + Math.sin(t*1.2+n*20)*.04*(1-n)
+            + Math.sin(t*2.5+n*40)*.025*Math.pow(1-n,2);
+          return {x, y: height - Math.max(0,Math.min(1,y))*(height*.88)};
+        });
+        const gr = ctx.createLinearGradient(0,0,0,height);
+        gr.addColorStop(0,'rgba(0,223,176,.5)'); gr.addColorStop(.6,'rgba(0,223,176,.12)'); gr.addColorStop(1,'rgba(0,223,176,0)');
+        ctx.beginPath(); ctx.moveTo(0,height);
+        pts.forEach(p => ctx.lineTo(p.x,p.y));
+        ctx.lineTo(w,height); ctx.closePath(); ctx.fillStyle=gr; ctx.fill();
+        ctx.beginPath(); ctx.strokeStyle='rgba(0,223,176,.9)'; ctx.lineWidth=1.5;
+        pts.forEach((p,i) => i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke();
+        [.03,.14,.40,.65,.96].forEach(n => {
+          ctx.strokeStyle='rgba(0,223,176,.08)'; ctx.lineWidth=.5;
+          ctx.beginPath(); ctx.moveTo(n*w,0); ctx.lineTo(n*w,height); ctx.stroke();
+        });
+        t+=.025; raf.current=requestAnimationFrame(frame);
+      }
+      frame();
+    };
+    const tid = setTimeout(init, 30);
+    return () => { clearTimeout(tid); cancelAnimationFrame(raf.current); };
+  }, []);
+  return <canvas ref={ref} style={{display:'block',width:'100%',background:'#040705'}} />;
+}
+
+/* ────────────────────────────────────────────
+   SVG ICONS
+──────────────────────────────────────────── */
+const IcoRadar = ({c}) => <svg width={20} height={20} viewBox="0 0 16 16" fill="none"><circle cx={8} cy={8} r={6} stroke={c} strokeWidth={1.3}/><circle cx={8} cy={8} r={2} stroke={c} strokeWidth={1.3}/><line x1={8} y1={2} x2={8} y2={4.5} stroke={c} strokeWidth={1.3} strokeLinecap="round"/><line x1={8} y1={11.5} x2={8} y2={14} stroke={c} strokeWidth={1.3} strokeLinecap="round"/><line x1={2} y1={8} x2={4.5} y2={8} stroke={c} strokeWidth={1.3} strokeLinecap="round"/><line x1={11.5} y1={8} x2={14} y2={8} stroke={c} strokeWidth={1.3} strokeLinecap="round"/></svg>;
+const IcoHistory = ({c}) => <svg width={20} height={20} viewBox="0 0 16 16" fill="none"><path d="M3 13V6l5-3.5L13 6v7" stroke={c} strokeWidth={1.3} strokeLinecap="round"/><rect x={6} y={9.5} width={4} height={3.5} rx={.8} stroke={c} strokeWidth={1.3}/></svg>;
+const IcoSettings = ({c}) => <svg width={20} height={20} viewBox="0 0 16 16" fill="none"><circle cx={8} cy={8} r={2.5} stroke={c} strokeWidth={1.3}/><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1" stroke={c} strokeWidth={1.3} strokeLinecap="round"/></svg>;
+const IcoBack = () => <svg width={9} height={15} viewBox="0 0 9 15" fill="none"><path d="M7.5 1.5L2 7.5l5.5 6" stroke="#3a6858" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"/></svg>;
+const IcoClock = ({c='#3a6858'}) => <svg width={13} height={13} viewBox="0 0 13 13" fill="none"><circle cx={6.5} cy={6.5} r={5} stroke={c} strokeWidth={1.2}/><path d="M6.5 4v3l2 1.2" stroke={c} strokeWidth={1.2} strokeLinecap="round"/></svg>;
+const IcoPulse = ({c='#3a6858'}) => <svg width={13} height={13} viewBox="0 0 13 13" fill="none"><path d="M1 6.5h2.5l2-4 2.5 8 2-4H12" stroke={c} strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round"/></svg>;
+
+/* ────────────────────────────────────────────
+   SCREENS
+──────────────────────────────────────────── */
+function StatusBar({time='04:05', batt='69'}) {
+  return <div className="sb"><span>{time}</span><div className="sb-r"><span>▲▲</span><span>▲</span><div className="batt">{batt}</div></div></div>;
+}
+
+function TabBar({active, onChange}) {
+  const tabs = [{id:'radar',lbl:'Радар',Icon:IcoRadar},{id:'history',lbl:'История',Icon:IcoHistory},{id:'settings',lbl:'Настройки',Icon:IcoSettings}];
+  return (
+    <div className="tabbar">
+      {tabs.map(({id,lbl,Icon}) => {
+        const c = active===id ? '#00dfb0' : '#1a3028';
+        return (
+          <div key={id} className="tab" onClick={() => onChange(id)}>
+            <div className="tab-ico"><Icon c={c} /></div>
+            <span className="tab-lbl" style={{color:c}}>{lbl}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Screen: Radar ── */
+function RadarScreen({onPush}) {
+  const [mode, setMode] = useState('active');
+  const [isRecording, setIsRecording] = useState(true);
+  const bpms = {idle:'— — —', active:'174.4', unstable:'188.0'};
+  const confs = {idle:8, active:77, unstable:44};
+  const conf = confs[mode];
+  const confColor = conf<30?'#e04040':conf<70?'#e0b020':'#00dfb0';
+  const wfMode = {idle:'idle', active:'active', unstable:'amber'}[mode];
+  const bpmCls = mode==='idle'?'dim':mode==='active'?'green':'amber';
+  
+  return (
+    <>
+      <StatusBar time="04:05" batt="69" />
+      <div className="nav">
+        <div className="nav-left">
+          {isRecording
+            ? <div className="rec-badge"><div className="rdot"/><span>REC</span></div>
+            : <div className="idle-badge">IDLE</div>}
+        </div>
+        <span className="nav-title">HITECH BPM RADAR</span>
+        <div className="nav-right">
+          <button className="pro" onClick={()=>onPush('paywall')}>PRO</button>
+          <button className="nav-btn" onClick={()=>onPush('settings')}><IcoClock /></button>
+        </div>
+      </div>
+
+      <div className="zlbl">
+        <span>WAVEFORM</span>
+      </div>
+      <Waveform mode={wfMode} seed={mode==='unstable'?44:22} height={120} />
+
+      <div className="zlbl">LIVE SPECTRUM</div>
+      <Spectrum active={mode!=='idle'} seed={7} height={70} />
+      <div className="faxis"><span>50</span><span>200</span><span>1k</span><span>4k</span><span>16k</span></div>
+
+      <div className="card">
+        <div style={{textAlign:'center',paddingTop:10}}>
+          <div className={`bpm-n ${bpmCls}`}>{bpms[mode]}</div>
+          <div className="bpm-meta">
+            <span className="bpm-unit">BPM</span>
+            {mode==='unstable' && <span className="pill pill-amber"><span className="pdot"/>нестабильно</span>}
+            <span className="bpm-range">155–230 · Hitech</span>
+          </div>
+        </div>
+        <div className="conf">
+          <div className="ctrack"><div className="cfill" style={{width:conf+'%',background:confColor}}/></div>
+          <span className="cval" style={{color:confColor}}>{conf}%</span>
+        </div>
+        <div style={{display:'flex',justifyContent:'center',marginBottom:12}}>
+          <button className="brk" onClick={() => setIsRecording(!isRecording)}>
+            <svg width={11} height={11} viewBox="0 0 11 11" fill="none"><path d="M1 5.5h4m5 0H6m-3-2v4m5-4v4" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round"/></svg>
+            {isRecording ? 'Остановить' : 'Начать запись'}
+          </button>
+        </div>
+        <div className="stats">
+          <div className="sc"><span className="sl">Уровень входа</span><span className="sv">{mode==='idle'?'–42.9':'–21.3'} dBFS</span></div>
+          <div className="sc"><span className="sl">Лучший кандидат</span>
+            <span className="sv link" onClick={()=>onPush('analyzer')}>
+              {mode==='idle'?'174.4':bpms[mode]} BPM <span style={{fontSize:11}}>›</span>
+            </span>
+          </div>
+          <div className="sc"><span className="sl">Клиппинг</span><span className="sv g">нет</span></div>
+          <div className="sc"><span className="sl">Шум</span><span className={`sv${mode==='idle'?' g':''}`}>{mode==='idle'?'низкий':'средний'}</span></div>
+        </div>
+        <div className="modes">
+          {['idle','active','unstable'].map(m =>
+            <div key={m} className={`mode-opt${mode===m?' on':''}`} onClick={()=>setMode(m)}>{m}</div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── Screen: Signal Analyzer ── */
+function AnalyzerScreen() {
+  const cands = [{bpm:'188.0',conf:78,top:true},{bpm:'94.0',conf:42},{bpm:'376.0',conf:28},{bpm:'62.7',conf:14}];
+  return (
+    <>
+      <StatusBar time="04:06" batt="69"/>
+      <div className="nav">
+        <span style={{width:60}}/>
+        <span className="nav-title" style={{fontSize:11,letterSpacing:'.18em',color:'#7ab8aa',fontWeight:500}}>АНАЛИЗАТОР СИГНАЛА</span>
+        <span className="pro" style={{cursor:'default',pointerEvents:'none'}}>PRO</span>
+      </div>
+
+      <div className="sa-hdr">СПЕКТР FFT</div>
+      <FFT height={150} />
+      <div className="faxis"><span>50</span><span>200</span><span>1k</span><span>4k</span><span>16k</span></div>
+
+      <div className="sa-hdr">КАНДИДАТЫ BPM</div>
+      <div className="sa-grp">
+        {cands.map((c,i) => (
+          <div key={i} className="cand-row">
+            <span className={`cand-bpm ${c.top?'top':'dim'}`}>{c.bpm}</span>
+            <div className="cbw"><div className="cbf" style={{width:c.conf+'%',background:c.top?'#00dfb0':c.conf>40?'#e0b020':'#2a4a3e'}}/></div>
+            <span className="cpct">{c.conf}%</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="sa-hdr">МЕТРИКИ АЛГОРИТМА</div>
+      <div className="sa-grp" style={{marginBottom:18}}>
+        {[
+          {lbl:'Обнаружение импульсов',  val:72,  color:'#00dfb0'},
+          {lbl:'Автокорреляция',  val:68,  color:'#00dfb0'},
+          {lbl:'Спектральный поток',    val:44,  color:'#e0b020'},
+          {lbl:'SNR',              txt:'14.2 дБ'},
+          {lbl:'Уровень входа',   txt:'–21.3 dBFS'},
+        ].map((r,i) => (
+          <div key={i} className="sa-row">
+            <span className="sa-lbl">{r.lbl}</span>
+            {r.val!=null
+              ? <><div className="sa-bw"><div className="sa-bf" style={{width:r.val+'%',background:r.color}}/></div><span style={{fontSize:11,color:r.color,width:36,textAlign:'right',fontWeight:500}}>{r.val}%</span></>
+              : <span className="sa-val">{r.txt}</span>}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ── Screen: History ── */
+function HistoryScreen() {
+  const confColor = c => c<30?'#e04040':c<70?'#e0b020':'#00dfb0';
+  const today = [{bpm:'207.9',time:'22:09 · 18 мин',conf:82,seed:101,col:'#00dfb0'},{bpm:'188.1',time:'21:34 · 6 мин',conf:46,seed:55,col:'#c8a020',a:true}];
+  const yest  = [{bpm:'196.4',time:'15:11 · 42 мин',conf:71,seed:77,col:'#00dfb0'},{bpm:'174.4',time:'12:05 · 11 мин',conf:65,seed:43,col:'#00dfb0'},{bpm:'181.2',time:'10:52 · 4 мин',conf:38,seed:88,col:'#c8a020',a:true}];
+  return (
+    <>
+      <StatusBar time="22:40" batt="61"/>
+      <div className="nav"><span style={{width:60}}/><span className="nav-title" style={{fontSize:11,letterSpacing:'.18em',color:'#7ab8aa',fontWeight:500}}>ИСТОРИЯ</span><span style={{width:60}}/></div>
+      <div className="hist-top">
+        <div className="hstats">
+          <div className="hst"><span className="hst-v">14</span><span className="hst-l">Сессий</span></div>
+          <div className="hst"><span className="hst-v">196.2</span><span className="hst-l">Avg BPM</span></div>
+          <div className="hst"><span className="hst-v">4.1h</span><span className="hst-l">Всего</span></div>
+        </div>
+        <button className="exp-btn">↓ CSV</button>
+      </div>
+      <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column',gap:0}}>
+        <div className="datelbl">Сегодня · 30 мая</div>
+        <div className="hist-grp">
+          {today.map((s,i) => <div key={i} className="hist-item"><div className={`hbpm ${s.a?'a':'g'}`}>{s.bpm}</div><div className="hmeta"><div className="htime">{s.time}</div><div className="hcbar"><div className="hcfill" style={{width:s.conf+'%',background:confColor(s.conf)}}/></div></div><MiniWave seed={s.seed} color={s.col}/></div>)}
+        </div>
+        <div className="datelbl" style={{marginTop:8}}>Вчера · 29 мая</div>
+        <div className="hist-grp">
+          {yest.map((s,i) => <div key={i} className="hist-item"><div className={`hbpm ${s.a?'a':'g'}`}>{s.bpm}</div><div className="hmeta"><div className="htime">{s.time}</div><div className="hcbar"><div className="hcfill" style={{width:s.conf+'%',background:confColor(s.conf)}}/></div></div><MiniWave seed={s.seed} color={s.col}/></div>)}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── Screen: Settings ── */
+function SettingsScreen({onPush}) {
+  const [range, setRange] = useState('pro');
+  const [t, setT] = useState({wf:true,sp:true,screen:true});
+  const tog = k => setT(p => ({...p,[k]:!p[k]}));
+  return (
+    <>
+      <StatusBar time="22:41" batt="61"/>
+      <div className="nav"><span style={{width:60}}/><span className="nav-title" style={{fontSize:11,letterSpacing:'.18em',color:'#7ab8aa',fontWeight:500}}>НАСТРОЙКИ</span><span style={{width:60}}/></div>
+      <div className="sscroll">
+        <div className="s-hdr">Детектор BPM</div>
+        <div className="s-grp">
+          <div className="s-row" style={{cursor:'default'}}>
+            <IcoPulse/>
+            <span className="s-lbl">Диапазон BPM</span>
+            <div className="range-row">
+              <div className={`ropt${range==='free'?' on':''}`} onClick={()=>setRange('free')}>170–230</div>
+              <div className={`ropt${range==='pro'?' on':''}`} onClick={()=>setRange('pro')}>155–230</div>
+            </div>
+          </div>
+          <div className="slider-wrap">
+            <div className="slider-lbl"><span>Чувствительность</span><span>+3 дБ</span></div>
+            <div className="slider"><div className="slider-fill" style={{width:'62%'}}/><div className="slider-thumb" style={{left:'calc(62% - 7px)'}}/></div>
+          </div>
+          <div className="s-row"><span className="s-lbl">Сглаживание BPM</span><span className="s-val">Умеренное</span><span className="s-chev">›</span></div>
+        </div>
+        <div className="s-hdr">Отображение</div>
+        <div className="s-grp">
+          {[{k:'wf',lbl:'Waveform'},{k:'sp',lbl:'Spectrum'},{k:'screen',lbl:'Не гасить экран'}].map(({k,lbl}) =>
+            <div key={k} className="s-row" onClick={()=>tog(k)}><span className="s-lbl">{lbl}</span><div className={`tog ${t[k]?'on':'off'}`}/></div>
+          )}
+        </div>
+        <div className="s-hdr">Pro-функции</div>
+        <div className="s-grp">
+          <div className="s-row" onClick={()=>onPush('analyzer')}><span className="s-lbl">Анализатор сигнала</span><span className="s-badge">Pro</span><span className="s-chev">›</span></div>
+          <div className="s-row" onClick={()=>onPush('history')}><span className="s-lbl">История сессий</span><span className="s-badge">Pro</span><span className="s-chev">›</span></div>
+          <div className="s-row" onClick={()=>onPush('paywall')}><span className="s-lbl" style={{color:'#00dfb0'}}>Upgrade to Pro</span><span className="s-chev" style={{color:'#00dfb0'}}>›</span></div>
+        </div>
+        <div className="s-hdr">О приложении</div>
+        <div className="s-grp">
+          <div className="s-row" style={{cursor:'default'}}><span className="s-lbl">Версия</span><span className="s-val">1.2.4 · Pro</span></div>
+          <div className="s-row"><span className="s-lbl">Написать отзыв</span><span className="s-chev">›</span></div>
+          <div className="s-row"><span className="s-lbl" style={{color:'#e04040'}}>Сбросить данные</span></div>
+        </div>
+        <div style={{height:24}}/>
+      </div>
+    </>
+  );
+}
+
+/* ── Screen: Paywall ── */
+function PaywallScreen() {
+  return (
+    <>
+      <StatusBar time="04:11" batt="48"/>
+      <div className="nav"><span style={{width:60}}/><span className="nav-title" style={{fontSize:11,letterSpacing:'.18em',color:'#7ab8aa',fontWeight:500}}>UPGRADE TO PRO</span><span style={{width:60}}/></div>
+      <div className="pw-hero">
+        <div className="pw-h">Читай любой трек.<br/>Без ограничений.</div>
+        <div className="pw-sub">Единоразово — без автопродления навсегда</div>
+      </div>
+      <div className="feat-tbl">
+        <div className="feat-hdr"><span className="fhn">Функция</span><span className="fhf">Free</span><span className="fhp">Pro</span></div>
+        <div className="feat-row"><span className="fn">BPM Range</span><span className="ff">170–230</span><span className="fp">155–230</span></div>
+        <div className="feat-row"><span className="fn">Анализатор сигнала</span><span className="ff">–</span><span className="fp">✓</span></div>
+        <div className="feat-row"><span className="fn">История сессий</span><span className="ff">30 сек</span><span className="fp">∞</span></div>
+        <div className="feat-row"><span className="fn">Export CSV/JSON</span><span className="ff">–</span><span className="fp">✓</span></div>
+        <div className="feat-row"><span className="fn">Lock-screen Widget</span><span className="ff">–</span><span className="fp" style={{fontSize:9,color:'#c8a020'}}>Скоро</span></div>
+      </div>
+      <div className="cta-wrap">
+        <div style={{position:'relative'}}>
+          <div className="cta-p"><div className="best">Best value</div>Lifetime — $4.99</div>
+        </div>
+        <div className="cta-s">Annual — $3.99 / yr</div>
+      </div>
+      <div className="restore">Restore purchases</div>
+      <div className="rdmap">
+        <div className="rdmap-t">Coming to Pro</div>
+        <div className="rdmap-i"><div className="rdi-dot"/>Lock-screen Widget · iOS 16+</div>
+        <div className="rdmap-i"><div className="rdi-dot"/>Apple Watch companion</div>
+        <div className="rdmap-i"><div className="rdi-dot"/>MIDI tap sync</div>
+      </div>
+    </>
+  );
+}
+
+/* ────────────────────────────────────────────
+   NAVIGATOR WITH SWIPE SUPPORT
+──────────────────────────────────────────── */
+function Navigator() {
+  const [tab, setTab] = useState('radar');
+  const [stack, setStack] = useState([]);
+  const push = useCallback(s => setStack(p => [...p, s]), []);
+  const pop  = useCallback(() => setStack(p => p.slice(0,-1)), []);
+  const topScreen = stack[stack.length-1] || null;
+  
+  const screenRef = useRef(null);
+  const touchStart = useRef({x:0,y:0});
+  
+  useEffect(() => {
+    const el = screenRef.current;
+    if (!el || topScreen) return; // No swipe if modal open
+    
+    const handleTouchStart = (e) => {
+      touchStart.current = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+    };
+    
+    const handleTouchEnd = (e) => {
+      const dx = e.changedTouches[0].clientX - touchStart.current.x;
+      const dy = Math.abs(e.changedTouches[0].clientY - touchStart.current.y);
+      
+      if (Math.abs(dx) < 50 || dy > Math.abs(dx)) return; // Too short or vertical
+      
+      const tabs = ['radar', 'history', 'settings'];
+      const idx = tabs.indexOf(tab);
+      
+      if (dx > 0 && idx > 0) setTab(tabs[idx-1]); // Swipe right → prev
+      else if (dx < 0 && idx < tabs.length-1) setTab(tabs[idx+1]); // Swipe left → next
+    };
+    
+    el.addEventListener('touchstart', handleTouchStart);
+    el.addEventListener('touchend', handleTouchEnd);
+    return () => {
+      el.removeEventListener('touchstart', handleTouchStart);
+      el.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [tab, topScreen]);
+
+  const tabMap = { radar:<RadarScreen onPush={push}/>, history:<HistoryScreen/>, settings:<SettingsScreen onPush={push}/> };
+  const pushMap = { analyzer:<AnalyzerScreen/>, paywall:<PaywallScreen/>, history:<HistoryScreen/>, settings:<SettingsScreen onPush={push}/> };
+
+  const switchTab = (t) => { setStack([]); setTab(t); };
+
+  return (
+    <div className="phone">
+      <div className="screens" ref={screenRef}>
+        {/* Tab screens */}
+        {Object.entries(tabMap).map(([id, el]) => (
+          <div key={id} className={`screen ${tab===id && !topScreen ? 'active' : tab==='radar'||id==='radar'?'hidden-left':'hidden-right'}`}>
+            {el}
+            <TabBar active={tab} onChange={switchTab} />
+          </div>
+        ))}
+        {/* Pushed screens */}
+        {Object.entries(pushMap).map(([id, el]) => (
+          <div key={id} className={`screen ${topScreen===id ? 'active' : 'hidden-right'}`}>
+            <div style={{display:'flex',alignItems:'center',padding:'14px 20px 8px',borderBottom:'1px solid #0f1712',flexShrink:0,background:'#050807'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer'}} onClick={pop}>
+                <IcoBack/>
+                <span style={{fontSize:10,color:'#3a6858',letterSpacing:'.06em'}}>Назад</span>
+              </div>
+            </div>
+            <div style={{flex:1,overflowY:'auto',overflowX:'hidden',display:'flex',flexDirection:'column'}}>
+              {el}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Navigator/>);
+</script>
+</body>
+</html>
