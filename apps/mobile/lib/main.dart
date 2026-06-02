@@ -59,7 +59,7 @@ class HitechBpmRadarApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Hitech BPM Radar',
+      title: 'TrackScope',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -176,7 +176,7 @@ class _CapturePipelineState extends State<_CapturePipeline> {
   Widget build(BuildContext context) {
     if (_startupError != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Hitech BPM Radar')),
+        appBar: AppBar(title: const Text('TrackScope')),
         body: Padding(
           padding: const EdgeInsets.all(24),
           child: Center(
