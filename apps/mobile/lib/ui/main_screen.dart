@@ -372,8 +372,15 @@ class _GlassmorphismCard extends StatelessWidget {
             child: Container(
               color: Colors.white.withAlpha(8),
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+              // NeverScrollableScrollPhysics: card never scrolls (no indicator,
+              // no programmatic scroll jump). ScrollView still handles overflow
+              // gracefully on small screens without throwing layout errors.
+              // The pill jitter was caused by ClampingScrollPhysics re-computing
+              // scroll extent during AnimatedSwitcher's dual-child phase (both
+              // old+new BPM text live briefly) → scroll position jumped. With
+              // NeverScrollable the position is locked to 0.
               child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
+                physics: const NeverScrollableScrollPhysics(),
                 child: _InfoTableContent(
                   result: result,
                   viz: viz,
@@ -796,29 +803,35 @@ class _AnimatedBpmDisplay extends StatelessWidget {
             ),
           ),
         ),
-        // Meta row: BPM unit + unstable pill + range
+        // Meta row: BPM unit + unstable pill + range.
+        // Fixed-height SizedBox prevents _AnimatedBpmDisplay Column height
+        // from changing when the pill appears/disappears (pill ≈ 24 pt,
+        // plain text ≈ 18 pt → 6 pt shift was enough to trigger ScrollView).
         const SizedBox(height: 5),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'BPM',
-              style: AppTextStyles.mono(
-                  14, FontWeight.w400, AppColors.textSecondary,
-                  letterSpacing: 4),
-            ),
-            if (isUnstable) ...[
+        SizedBox(
+          height: 28,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'BPM',
+                style: AppTextStyles.mono(
+                    14, FontWeight.w400, AppColors.textSecondary,
+                    letterSpacing: 4),
+              ),
+              if (isUnstable) ...[
+                const SizedBox(width: 10),
+                _UnstablePill(),
+              ],
               const SizedBox(width: 10),
-              _UnstablePill(),
+              Text(
+                '155–230 · Hitech',
+                style: AppTextStyles.mono(
+                    10, FontWeight.w400, AppColors.textMuted),
+              ),
             ],
-            const SizedBox(width: 10),
-            Text(
-              '155–230 · Hitech',
-              style: AppTextStyles.mono(
-                  10, FontWeight.w400, AppColors.textMuted),
-            ),
-          ],
+          ),
         ),
       ],
     );
