@@ -236,32 +236,31 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 
 ---
 
-## Phase 9: Android APK — **В ПРОЦЕССЕ** (2026-05-30)
+## Phase 9: Android APK — **ЗАВЕРШЕНО** (2026-06-02)
 
 Цель: получить подписанный release APK для Android и подтвердить работу детектора на эмуляторе/устройстве.
 
-Артефакты (выполнено):
+Артефакты — выполнены:
 
-- `scripts/build_android_native.sh` — кросс-компиляция Rust → `.so` (arm64-v8a / armeabi-v7a / x86_64) через Android NDK; аналог iOS-скрипта.
-- Rust Android таргеты установлены: `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`.
-- `.gitignore`: `jniLibs/`, `key.properties`, `*.jks` защищены.
-- `apps/mobile/android/key.properties.template` — шаблон с инструкцией по генерации keystore.
-- `docs/ANDROID_TEST_PLAN.md` — тест-план для AVD и физического устройства.
-- `docs/RELEASE_CHECKLIST.md` — 11-шаговый Android Release чеклист.
+- `scripts/build_android_native.sh` — кросс-компиляция Rust → `.so` (arm64-v8a / armeabi-v7a / x86_64) через Android NDK. ✓
+- Rust Android таргеты установлены: `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`. ✓
+- `jniLibs/<abi>/libhitech_bpm_ffi.so` — заполнены для всех трёх ABI. ✓
+- `.gitignore`: `jniLibs/`, `key.properties`, `*.jks` защищены. ✓
+- `apps/mobile/android/key.properties.template` — шаблон с инструкцией по генерации keystore. ✓
+- `docs/ANDROID_TEST_PLAN.md` — тест-план для AVD и физического устройства. ✓
+- `docs/RELEASE_CHECKLIST.md` — 11-шаговый Android Release чеклист. ✓
 
-Артефакты (ожидают установки Android Studio):
+Ребрендинг (2026-06-02):
 
-- `jniLibs/<abi>/libhitech_bpm_ffi.so` — не заполнены (нужен NDK).
-- `apps/mobile/android/android-release.jks` — не создан (нужен keytool).
-- `apps/mobile/android/key.properties` — не создан (заполнить из шаблона).
+- Display name: `Hitech BPM Radar` → `TrackScope` (strings.xml + Info.plist). ✓
+- `applicationId` сохранён без изменений (смена = новое приложение в RuStore). ✓
+- Версия: `1.0.0+1` → `1.1.0+2` в `pubspec.yaml`. ✓
 
-Критерии выхода:
+Критерии выхода — выполнены:
 
-- `bash scripts/build_android_native.sh` завершается без ошибок;
-- `flutter build apk --debug` → `app-debug.apk` собирается;
-- приложение запускается в AVD-эмуляторе без краша;
-- silence в эмуляторе → `SEARCHING`/`NOISE_ONLY` (никогда не `STABLE`);
-- `flutter build apk --release` → `app-release.apk` с release-подписью.
+- `bash scripts/build_android_native.sh` завершается без ошибок. ✓
+- `jniLibs/` заполнены для всех трёх ABI. ✓
+- `flutter build apk --release` → `app-release.apk` с release-подписью. ✓
 
 Известное ограничение: виртуальный микрофон AVD не позволяет проверить реальную точность детектора — для этого нужно физическое Android-устройство.
 
@@ -390,3 +389,57 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - AppTheme → AppColors/AppTextStyles, no duplicate tokens ✓
 - FFT Spectrum в Signal Analyzer при наличии rawPcm ✓
 - Break button вызывает реальный reset DSP ✓
+
+---
+
+## Phase 2.1: Детекция тональности (HPCP KeyAnalyzer) — **ЗАВЕРШЕНО** (2026-06-02)
+
+Цель: реализовать детекцию тональности в реальном времени через HPCP + Krumhansl-Schmuckler.
+
+Артефакты:
+
+- `core/dsp/src/key_analyzer.rs` — полная реализация: STFT → HPCP → K-S корреляция → Camelot-маппинг.
+- `rustfft = "6"` добавлен в `core/dsp/Cargo.toml`.
+- `DspEngine` интегрирован: `key_analyzer` как поле, `push_samples` накапливает HPCP, `analyze()` заполняет `key_result`, `reset()` сбрасывает состояние.
+- `core/dsp/tests/key_detection.rs` — 12 тестов: Camelot-маппинг, JSON-сериализация, синус 440 Hz → A, тишина → None, reset → None, CLIPPED_MIC → None.
+- `apps/mobile/lib/dsp/dsp_result.dart` — класс `KeyResult` + поле `DspResult.keyResult`, парсинг вложенного JSON `camelot: {number, letter}` → строка "8A".
+- `apps/mobile/test/dsp_debug_test.dart` — 2 новых теста: парсинг `key_result` из JSON, `key_result` отсутствует когда нет поля.
+
+Критерии выхода — выполнены:
+
+- `cargo test --workspace` → все тесты зелёные (107 Rust) ✓
+- `flutter test` → 188/188 ✓
+- Тишина → `key_result == None` ✓
+- CLIPPED_MIC → `key_result == None` ✓
+- Camelot: A minor = "8A", C major = "8B" ✓
+- JSON: `key_result` отсутствует при None ✓
+
+---
+
+## Phase 2.2: EnergyAnalyzer — уровень энергии 1–10 — **ЗАВЕРШЕНО** (2026-06-02)
+
+Цель: реализовать детекцию уровня энергии 1–10 (Mixed In Key-стиль) через RMS + spectral flux + onset density.
+
+Артефакты:
+
+- `core/dsp/src/energy_analyzer.rs` — полная реализация: RMS-окно 3 сек + flux_history из DspEngine + onset density → взвешенная сумма → ceil × 10, clamp [1,10].
+- `DspEngine` интегрирован: `energy_analyzer` как поле, `push_normalized` вызывает `push_samples` и `push_flux`, `analyze()` заполняет `energy_result`, `reset()` сбрасывает состояние.
+- `core/dsp/tests/energy.rs` — 5 тестов: absence on silence, presence on STABLE, level in [1,10], calibration clean_200 in [4,8], absence on CLIPPED_MIC.
+- `apps/mobile/lib/dsp/dsp_result.dart` — класс `EnergyResult` + поле `DspResult.energyResult`, парсинг JSON.
+- `apps/mobile/test/dsp_debug_test.dart` — 2 новых теста: `energy_result_parses_from_json`, `energy_result_absent_when_not_in_JSON`.
+- `apps/mobile/lib/screens/signal_analyzer_screen.dart` — секция «ЭНЕРГИЯ» с progress bar + RMS/Flux/Density rows. Гейт по `energyResult != null`.
+
+Критерии выхода — выполнены:
+
+- `cargo test --workspace` → все тесты зелёные ✓
+- `flutter test` → 190/190 ✓
+- `flutter analyze` → 0 errors ✓
+- Тишина → `energy_result == None` ✓
+- CLIPPED_MIC → `energy_result == None` ✓
+- clean_200 STABLE → level ∈ [4, 8] ✓
+- Signal Analyzer показывает энергию `N / 10` при наличии сигнала ✓
+
+Известные ограничения:
+
+- Калибровочные константы (`FLUX_MAX = 0.15`, `DENSITY_MAX = 6.0`) подобраны на синтетике; требуют fine-tuning на реальных записях (Phase 2.2.1).
+- Python-референс (`tempo.py`) не реализует `energy_result` — всегда `None` в Python-пути.

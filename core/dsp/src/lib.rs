@@ -4,6 +4,14 @@
 //! гейтов качества сигнала и hitech-нормализации кандидатов. Realtime-детекция
 //! онсетов и оценка кандидатов заполнят эту границу в Phase 2.
 
+pub mod energy_analyzer;
+pub mod genre_preset;
+pub mod key_analyzer;
+
+pub use energy_analyzer::{EnergyAnalyzer, EnergyResult};
+pub use genre_preset::GenrePreset;
+pub use key_analyzer::{KeyAnalyzer, KeyResult};
+
 use std::collections::VecDeque;
 
 use serde::Serialize;
@@ -165,6 +173,15 @@ pub struct DspResult {
     pub signal_quality: SignalQuality,
     pub candidates: Vec<TempoCandidate>,
     pub timing: DspTiming,
+    /// Жанровый пресет, использованный при анализе. Default = HitechPsy.
+    /// Присутствует в JSON для диагностики; Dart-парсер игнорирует неизвестные поля.
+    pub genre_preset: GenrePreset,
+    /// Результат определения тональности. None в Phase 1 (Phase 2 skeleton).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_result: Option<KeyResult>,
+    /// Результат анализа энергии 1–10. None в Phase 1 (Phase 2 skeleton).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub energy_result: Option<EnergyResult>,
     /// Диагностика алгоритма — присутствует в каждом снапшоте.
     pub debug: DspDebug,
 }
@@ -227,6 +244,8 @@ pub struct DspEngine {
     pcm_capacity: usize,
     onset_capacity: usize,
     hop_sec: f32,
+    key_analyzer: KeyAnalyzer,
+    energy_analyzer: EnergyAnalyzer,
 }
 
 /// Ёмкость скользящего BPM-буфера в `DspEngine`.
@@ -302,6 +321,8 @@ impl DspEngine {
             pcm_capacity,
             onset_capacity,
             hop_sec,
+            key_analyzer: KeyAnalyzer::new(config.sample_rate as f32),
+            energy_analyzer: EnergyAnalyzer::new(config.sample_rate as f32),
         }
     }
 
@@ -335,6 +356,8 @@ impl DspEngine {
             .saturating_add(normalized.len() as u64);
 
         // Ограниченное PCM-кольцо: O(новых) работы, не растёт выше pcm_capacity.
+        self.key_analyzer.push_samples(normalized);
+        self.energy_analyzer.push_samples(normalized);
         for &sample in normalized {
             if self.pcm_window.len() >= self.pcm_capacity && self.pcm_capacity > 0 {
                 self.pcm_window.pop_front();
@@ -353,6 +376,7 @@ impl DspEngine {
                 None => 0.0,
             };
             self.prev_frame_rms = Some(rms);
+            self.energy_analyzer.push_flux(flux);
             if self.onset_history.len() >= self.onset_capacity && self.onset_capacity > 0 {
                 self.onset_history.pop_front();
             }
@@ -592,6 +616,30 @@ impl DspEngine {
             self.bpm_history.clear();
         }
 
+        // Детекция тональности (Phase 2.1). Подавляется при клиппинге,
+        // шуме-без-сигнала и тишине — anti-fake: нет тональности без музыки.
+        if !matches!(result.lock_state, LockState::ClippedMic | LockState::NoiseOnly)
+            && !result.signal_quality.silence
+        {
+            let kr = self.key_analyzer.current_key();
+            if kr.key.is_some() {
+                result.key_result = Some(kr);
+            }
+        }
+
+        // Анализ энергии (Phase 2.2). Подавляется при клиппинге и тишине.
+        // Гейт по паттерну key_result: anti-fake — нет уровня без сигнала.
+        if !matches!(result.lock_state, LockState::ClippedMic)
+            && !result.signal_quality.silence
+        {
+            let window_secs = self.config.analysis_window_seconds;
+            let onset_count = self.onset_history.len();
+            let er = self.energy_analyzer.current_energy(onset_count, window_secs);
+            if er.level > 0 {
+                result.energy_result = Some(er);
+            }
+        }
+
         // Запомнить состояние для следующего вызова.
         self.prev_lock_state = Some(result.lock_state);
         result
@@ -609,6 +657,8 @@ impl DspEngine {
         self.tempo_shift_counter = 0;
         self.force_next_searching = false;
         self.has_ever_been_stable = false;
+        self.key_analyzer.reset();
+        self.energy_analyzer.reset();
     }
 
     fn observed_seconds(&self) -> f32 {
@@ -867,6 +917,9 @@ fn analyze_from_envelope(
         signal_quality,
         candidates,
         timing,
+        genre_preset: GenrePreset::default(),
+        key_result: None,
+        energy_result: None,
         debug,
     }
 }
@@ -925,6 +978,9 @@ pub fn analyze_candidates(
             hop_time_sec: 0.0,
             first_lock_time_sec: primary_bpm.map(|_| analysis_time_sec.min(config.lock_min_seconds)),
         },
+        genre_preset: GenrePreset::default(),
+        key_result: None,
+        energy_result: None,
         debug: DspDebug {
             onset_rate_hz: 0.0,
             onset_strength: 0.0,
@@ -1545,6 +1601,9 @@ fn empty_result(
             hop_time_sec: 0.0,
             first_lock_time_sec: None,
         },
+        genre_preset: GenrePreset::default(),
+        key_result: None,
+        energy_result: None,
         debug: DspDebug {
             onset_rate_hz: 0.0,
             onset_strength: 0.0,

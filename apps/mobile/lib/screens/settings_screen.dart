@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../features/genre_preset/genre_preset.dart';
 import '../monetization/feature_flags.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_colors.dart';
@@ -21,12 +22,16 @@ class SettingsScreen extends StatelessWidget {
     required this.onSignalAnalyzerTap,
     required this.onHistoryTap,
     required this.onUpgradeTap,
+    required this.onRestoreTap,
+    this.onSetlistTap,
   });
 
   final FeatureFlags flags;
   final VoidCallback onSignalAnalyzerTap;
   final VoidCallback onHistoryTap;
   final VoidCallback onUpgradeTap;
+  final VoidCallback onRestoreTap;
+  final VoidCallback? onSetlistTap;
 
   @override
   Widget build(BuildContext context) {
@@ -59,10 +64,20 @@ class SettingsScreen extends StatelessWidget {
               const _SectionHeader('АУДИО'),
               _SettingsGroup(
                 children: [
+                  _GenrePickerRow(
+                    selected: s.selectedGenre,
+                    flags: flags,
+                    onChanged: (g) => s.setSelectedGenre(g),
+                    onUpgradeTap: onUpgradeTap,
+                    showDivider: true,
+                  ),
                   _InfoRow(
                     label: 'BPM Range',
-                    value: flags.isPro ? '155–230' : '170–230',
-                    badge: flags.isPro ? null : 'PRO',
+                    value: '${flags.minBpm.toInt()}–${flags.maxBpm.toInt()}',
+                    badge: (!flags.isPro &&
+                            s.selectedGenre == GenrePreset.hitechPsy)
+                        ? 'PRO'
+                        : null,
                     showDivider: true,
                   ),
                   _SliderRow(
@@ -125,6 +140,12 @@ class SettingsScreen extends StatelessWidget {
                     label: 'История сессий',
                     isPro: !flags.isPro,
                     onTap: onHistoryTap,
+                    showDivider: true,
+                  ),
+                  _NavRow(
+                    label: 'Сетлист',
+                    isPro: !flags.canAccessSetlist,
+                    onTap: onSetlistTap ?? () {},
                     showDivider: false,
                   ),
                 ],
@@ -144,7 +165,7 @@ class SettingsScreen extends StatelessWidget {
                   _NavRow(
                     label: 'Восстановить покупки',
                     labelColor: AppColors.textMuted,
-                    onTap: () {},
+                    onTap: onRestoreTap,
                     showDivider: false,
                   ),
                 ],
@@ -546,6 +567,158 @@ class _NavRow extends StatelessWidget {
                   color: AppColors.textMuted,
                   size: 13,
                 ),
+              ],
+            ),
+          ),
+        ),
+        if (showDivider)
+          const Divider(height: 1, thickness: 1, color: Color(0xFF080C09)),
+      ],
+    );
+  }
+}
+
+// ── Genre picker row ──────────────────────────────────────────────────────────
+// Tappable row showing current genre; opens bottom sheet with all presets.
+// Pro presets are shown with a PRO badge; tapping them calls onUpgradeTap.
+
+class _GenrePickerRow extends StatelessWidget {
+  const _GenrePickerRow({
+    required this.selected,
+    required this.flags,
+    required this.onChanged,
+    required this.onUpgradeTap,
+    this.showDivider = false,
+  });
+
+  final GenrePreset selected;
+  final FeatureFlags flags;
+  final ValueChanged<GenrePreset> onChanged;
+  final VoidCallback onUpgradeTap;
+  final bool showDivider;
+
+  void _showPicker(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.textMuted,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                'ЖАНР / ПРЕСЕТ',
+                style: AppTextStyles.sectionLabel,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...GenrePreset.allPresets.map((preset) {
+              final isSelected = preset == selected;
+              final requiresPro = preset.isProRequired && !flags.isPro;
+              final (minB, maxB) = preset.bpmRange;
+              return InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  if (requiresPro) {
+                    onUpgradeTap();
+                  } else {
+                    onChanged(preset);
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 13),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              preset.label,
+                              style: AppTextStyles.mono(
+                                13,
+                                FontWeight.w500,
+                                isSelected
+                                    ? AppColors.accent
+                                    : AppColors.textPrimary,
+                              ),
+                            ),
+                            Text(
+                              '${minB.toInt()}–${maxB.toInt()} BPM',
+                              style: AppTextStyles.mono(
+                                  10, FontWeight.w400, AppColors.textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (requiresPro)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentDim,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text('PRO',
+                              style: AppTextStyles.mono(
+                                  8, FontWeight.w600, AppColors.accent)),
+                        )
+                      else if (isSelected)
+                        Icon(Icons.check,
+                            color: AppColors.accent, size: 16),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (minB, maxB) = selected.bpmRange;
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => _showPicker(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Жанр',
+                    style: AppTextStyles.mono(
+                        12, FontWeight.w400, AppColors.textSecondary),
+                  ),
+                ),
+                Text(
+                  '${selected.label}  ${minB.toInt()}–${maxB.toInt()}',
+                  style: AppTextStyles.mono(
+                      11, FontWeight.w400, AppColors.textMuted),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right,
+                    color: AppColors.textMuted, size: 13),
               ],
             ),
           ),

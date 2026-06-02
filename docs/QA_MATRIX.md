@@ -267,7 +267,7 @@ real` = 0 (нет регрессий).
   рендерит реальные DspDebug-метрики (onset rate, peak prominence, harmonic
   ambiguity, stability score, warnings).
 
-Всего **132 Flutter-теста** — PASS (Verified on 2026-06-01).
+Всего **186 Flutter-тестов** — PASS (Verified on 2026-06-02).
 
 Примечание: standalone-виджеты из исходного задания (`LockStateBadge`, `InfoCard`,
 `BpmDisplayWidget`, `MockDspEngine`) не существуют — реальный UI использует

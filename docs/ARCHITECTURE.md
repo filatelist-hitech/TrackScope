@@ -111,6 +111,15 @@ FFI-слой предоставляет `hitech_bpm_engine_new_with_min_bpm(floa
 алгоритме нет. `CaptureBridge` пересоздаётся при смене tier (новый minBpm)
 через `ListenableBuilder` на `ProStatusService.instance`.
 
+### v2 компоненты (Phase 1 scaffolding, 2026-06-01)
+
+- `core/dsp/src/genre_preset.rs` — `GenrePreset` enum: 7 жанровых пресетов с BPM-диапазонами и нормализационными порогами. Free: HitechPsy + Psytrance + Darkpsy; Pro: всё + Custom.
+- `core/dsp/src/key_analyzer.rs` — `KeyAnalyzer` skeleton: HPCP + Krumhansl-Schmuckler (Phase 2). `KeyResult { key, camelot, confidence }`.
+- `core/dsp/src/energy_analyzer.rs` — `EnergyAnalyzer` skeleton: RMS + flux + onset density → уровень 1–10 (Phase 2).
+- `DspResult` расширен: `genre_preset`, `key_result: Option<KeyResult>`, `energy_result: Option<EnergyResult>` (все None в Phase 1).
+- `lib/features/setlist/` — `SetlistService` + `SetlistEntry`: запись сета с экспортом (Pro).
+- ADR-документы: `docs/adr/001-004` — архитектурные решения для v2 компонентов.
+
 ## Форма публичного DSP API
 
 Rust DSP-крейт раскрывает стабильное концептуальное API:

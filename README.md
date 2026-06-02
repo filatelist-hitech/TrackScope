@@ -52,10 +52,12 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 | Phase 9 | Android APK: `build_android_native.sh` готов, ожидает установки Android Studio + NDK |
 | Phase 10 | Freemium: RevenueCat IAP, Free/Pro tier, PaywallScreen, экспорт, история 24 ч |
 | Phase 11 | **Design System v2**: Tab Bar, BPM Hero 72 px, ConfidenceBar 7 px, Signal Analyzer, Settings |
+| Phase 12 | **UI polish**: type scale +2 px, waveform ambient glow, AppTheme → AppColors/AppTextStyles, FFT в Signal Analyzer, Break button |
+| v1.1 | **Monetization Phase 1**: SetlistScreen (Pro), 14-Day Trial badge, Paywall 2.0 Coming-Soon, Multi-Genre Presets (7 жанров, Free/Pro) |
 
 ### В процессе
 
-В процессе: финализация Android APK (Phase 9) и web preview визуализации.
+В процессе: финализация Android APK (Phase 9).
 
 ### Ключевые характеристики
 
@@ -66,7 +68,7 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 - Half-time / double-time кандидаты всегда видны; никогда не скрываются
 - Anti-fake: нет хардкоженых BPM, нет фейкового пульса по таймеру
 - SNR-оценка и гейтинг качества сигнала
-- 75 Rust-тестов + 21 Python-тест + 132 Flutter-теста, 21 реальная hitech-фикстура (180–210 BPM)
+- 75 Rust-тестов + 21 Python-тест + 186 Flutter-тестов, 21 реальная hitech-фикстура (180–210 BPM)
 
 ## Design v2
 
@@ -217,7 +219,7 @@ flutter run --release
 - [Архитектура](docs/ARCHITECTURE.md)
 - [DSP-алгоритм](docs/DSP_ALGORITHM.md)
 - [QA-матрица](docs/QA_MATRIX.md)
-- [Roadmap](docs/ROADMAP.md)
+- [Roadmap v1](docs/ROADMAP.md) · [Roadmap v2](docs/ROADMAP_V2.md)
 - [Заметки по мобильному аудио](docs/MOBILE_AUDIO.md)
 - [Ручной тест-чеклист (mobile)](docs/MANUAL_TEST_CHECKLIST.md)
 - [Релизный чеклист](docs/RELEASE_CHECKLIST.md)
@@ -255,10 +257,12 @@ flutter run --release
 
 | Фича | Free | Pro |
 |---|---|---|
-| BPM Range | 170–230 | 155–230 |
+| BPM Range | 170–230 (Hitech/Psy) | 155–230 + 6 жанров |
+| Genre Presets | 3 (Hitech, Psy, Darkpsy) | 7 + Custom |
 | Debug Screen | ✕ (paywall) | ✓ |
 | History | 30 сек | 24 ч |
 | Export CSV/JSON | ✕ (paywall) | ✓ |
+| Setlist Tracker | ✕ (paywall) | ✓ |
 | Lock-screen Widget | Скоро | Скоро |
 
 ### Monetization Setup

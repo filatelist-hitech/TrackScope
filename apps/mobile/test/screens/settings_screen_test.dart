@@ -18,6 +18,7 @@ void main() {
           onSignalAnalyzerTap: () {},
           onHistoryTap: () {},
           onUpgradeTap: () {},
+          onRestoreTap: () {},
         ),
       );
 
