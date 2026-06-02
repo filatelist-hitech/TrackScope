@@ -58,10 +58,11 @@ class WaveformColumnPainter extends CustomPainter {
     final h = size.height;
     final centerY = h / 2;
 
-    // Background.
+    // Background — matches AppColors.background (#050807) so the waveform
+    // panel blends with the app surface instead of showing a blue tint.
     canvas.drawRect(
       Rect.fromLTWH(0, 0, w, h),
-      Paint()..color = const Color(0xFF07070F),
+      Paint()..color = const Color(0xFF050807),
     );
 
     // ── Reference grid ────────────────────────────────────────────────────────

@@ -586,6 +586,8 @@ class _StatCell extends StatelessWidget {
           Text(
             label,
             style: AppTextStyles.statsLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
           Row(
@@ -897,14 +899,17 @@ class _TraktorStyleAppBar extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          // left: 16 pt keeps title centred; right: 10 pt moves gear icon
+          // closer to the screen edge, visually level with the REC badge.
+          padding: const EdgeInsets.only(left: 16, right: 10),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Left: REC badge when capturing, spacer otherwise
               if (isCapturing)
                 _RecBadge()
               else
-                const SizedBox(width: 30),
+                const SizedBox(width: 26),
 
               // Center: title
               Expanded(
@@ -921,6 +926,7 @@ class _TraktorStyleAppBar extends StatelessWidget {
               // Right: PRO badge + settings/debug icon
               Row(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   if (!isPro && onUpgradeTap != null)
                     GestureDetector(
@@ -941,17 +947,20 @@ class _TraktorStyleAppBar extends StatelessWidget {
                         ),
                       ),
                     ),
+                  // 26×26 matches REC badge height (~22 pt) more closely
+                  // than the previous 30×30, so both sit on the same
+                  // visual centre line when crossAxisAlignment: center.
                   SizedBox(
-                    width: 30,
-                    height: 30,
+                    width: 26,
+                    height: 26,
                     child: Container(
                       decoration: BoxDecoration(
                         color: const Color(0xFF0D1712),
-                        borderRadius: BorderRadius.circular(9),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: IconButton(
                         padding: EdgeInsets.zero,
-                        iconSize: 14,
+                        iconSize: 13,
                         icon: const Icon(Icons.settings_outlined,
                             color: AppColors.textSecondary),
                         onPressed: onDebugTap,
