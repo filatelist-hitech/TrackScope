@@ -612,23 +612,24 @@ class _StatCell extends StatelessWidget {
         children: [
           Text(
             label,
-            style: AppTextStyles.statsLabel,
+            style: AppTextStyles.mono(9, FontWeight.w400, AppColors.textMuted,
+                letterSpacing: 1.0),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 1),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 value,
-                style: AppTextStyles.statsValue.copyWith(color: color),
+                style: AppTextStyles.mono(14, FontWeight.w400, color),
               ),
               if (isLink) ...[
                 const SizedBox(width: 3),
                 Text(
                   '›',
-                  style: AppTextStyles.mono(12, FontWeight.w400, color),
+                  style: AppTextStyles.mono(10, FontWeight.w400, color),
                 ),
               ],
             ],
@@ -1086,16 +1087,17 @@ class _EnergyCell extends StatelessWidget {
       children: [
         Text(
           'ЭНЕРГИЯ',
-          style: AppTextStyles.statsLabel,
+          style: AppTextStyles.mono(9, FontWeight.w400, AppColors.textMuted,
+              letterSpacing: 1.0),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 1),
         Text(
           '$level/10',
-          style: AppTextStyles.statsValue,
+          style: AppTextStyles.mono(14, FontWeight.w400, AppColors.textSecondary),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         ClipRRect(
           borderRadius: BorderRadius.circular(2),
           child: LinearProgressIndicator(
