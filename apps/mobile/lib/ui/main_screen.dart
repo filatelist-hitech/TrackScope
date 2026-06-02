@@ -142,9 +142,9 @@ class _MainScreenState extends State<MainScreen> {
                 // ── Zone label: WAVEFORM ──────────────────────────────────
                 const _ZoneLabelRow(label: 'WAVEFORM'),
 
-                // ── Waveform — fixed 120 px ───────────────────────────────
+                // ── Waveform — fixed 90 px ───────────────────────────────
                 SizedBox(
-                  height: 120,
+                  height: 90,
                   child: RepaintBoundary(
                     child: _WaveformView(viz: _viz),
                   ),
@@ -155,7 +155,7 @@ class _MainScreenState extends State<MainScreen> {
 
                 // ── Live spectrum ─────────────────────────────────────────
                 Expanded(
-                  flex: 22,
+                  flex: 15,
                   child: RepaintBoundary(
                     child: _LiveSpectrumView(viz: _viz),
                   ),
@@ -163,7 +163,7 @@ class _MainScreenState extends State<MainScreen> {
 
                 // ── Info card ─────────────────────────────────────────────
                 Expanded(
-                  flex: 43,
+                  flex: 55,
                   child: RepaintBoundary(
                     child: _GlassmorphismCard(
                       result: result,
@@ -196,7 +196,7 @@ class _ZoneLabelRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 6, 2, 2),
+      padding: const EdgeInsets.fromLTRB(2, 2, 2, 1),
       child: Text(
         label,
         style: AppTextStyles.sectionLabel,
@@ -366,28 +366,17 @@ class _GlassmorphismCard extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: BackdropFilter(
-            // Reduced from 12→8: meaningful perf improvement on real devices
-            // since the background repaints every ~50 ms with live waveform.
             filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: Container(
               color: Colors.white.withAlpha(8),
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-              // ClampingScrollPhysics: allows finger-scroll on small screens so
-              // energy / key rows at the bottom are reachable. The original
-              // NeverScrollable band-aid (Phase 6) prevented ClampingScrollPhysics
-              // from jumping during AnimatedSwitcher's dual-child phase; that's
-              // no longer a problem because the switcher now fires only on
-              // null↔value transitions (ValueKey(hasValue)), not every 50 ms tick.
-              child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                child: _InfoTableContent(
-                  result: result,
-                  viz: viz,
-                  displayBpm: displayBpm,
-                  isLockingDisplay: isLockingDisplay,
-                  onBestCandidateTap: onBestCandidateTap,
-                  onBreak: onBreak,
-                ),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
+              child: _InfoTableContent(
+                result: result,
+                viz: viz,
+                displayBpm: displayBpm,
+                isLockingDisplay: isLockingDisplay,
+                onBestCandidateTap: onBestCandidateTap,
+                onBreak: onBreak,
               ),
             ),
           ),
@@ -482,7 +471,7 @@ class _InfoTableContent extends StatelessWidget {
 
         // ── Full-width confidence bar ────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 6),
+          padding: const EdgeInsets.only(top: 5, bottom: 4),
           child: ConfidenceBar(confidence: conf),
         ),
 
@@ -490,7 +479,7 @@ class _InfoTableContent extends StatelessWidget {
         Center(
           child: _BreakButtonInline(onTap: onBreak ?? () {}),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
 
         // ── Stats grid ───────────────────────────────────────────────────────
         // Row 1: Уровень входа (left-aligned) | Лучший кандидат (centered)
@@ -510,7 +499,7 @@ class _InfoTableContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 2),
         // Row 2: Клиппинг (left-aligned) | Шум (centered)
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -532,7 +521,7 @@ class _InfoTableContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 2),
         // Row 3: ×½ / ×2 — full width centered (both half and double visible)
         Center(
           child: _StatCell(
@@ -541,32 +530,34 @@ class _InfoTableContent extends StatelessWidget {
             centered: true,
           ),
         ),
-        // ── Energy + Key row (conditional — shown only when data available) ──
-        if (hasEnergy || hasKey) ...[
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: hasEnergy
-                    ? _EnergyCell(energyResult: energyResult)
-                    : const SizedBox(),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: hasKey
-                    ? _StatCell(
-                        label: 'ТОНАЛЬНОСТЬ',
-                        value: kResult.camelot ?? '—',
-                        centered: true,
-                      )
-                    : const SizedBox(),
-              ),
-            ],
-          ),
-        ],
+        // ── Energy + Key row — always shown; '—' when data unavailable ────────
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: hasEnergy
+                  ? _EnergyCell(energyResult: energyResult)
+                  : const _StatCell(label: 'ЭНЕРГИЯ', value: '—'),
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: hasKey
+                  ? _StatCell(
+                      label: 'ТОНАЛЬНОСТЬ',
+                      value: kResult!.camelot ?? '—',
+                      centered: true,
+                    )
+                  : const _StatCell(
+                      label: 'ТОНАЛЬНОСТЬ',
+                      value: '—',
+                      centered: true,
+                    ),
+            ),
+          ],
+        ),
 
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
 
         // ── Lock state chips ─────────────────────────────────────────────────
         _ModeChips(lockState: lock),
@@ -659,7 +650,7 @@ class _BreakButtonInline extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
         decoration: BoxDecoration(
           color: AppColors.surface,
           border: Border.all(color: AppColors.bpmEmpty),
@@ -792,9 +783,9 @@ class _AnimatedBpmDisplay extends StatelessWidget {
     final effectiveColor =
         isLockingDisplay ? textColor.withAlpha(180) : textColor;
 
-    // Font size: always 72 to prevent layout jank on state change.
-    const fontSize = 72.0;
-    const letterSpacing = -2.5;
+    // Font size: always 52 to prevent layout jank on state change.
+    const fontSize = 52.0;
+    const letterSpacing = -1.5;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -841,13 +832,9 @@ class _AnimatedBpmDisplay extends StatelessWidget {
             ),
           ),
         ),
-        // Meta row: BPM unit + unstable pill + range.
-        // Fixed-height SizedBox prevents _AnimatedBpmDisplay Column height
-        // from changing when the pill appears/disappears (pill ≈ 24 pt,
-        // plain text ≈ 18 pt → 6 pt shift was enough to trigger ScrollView).
-        const SizedBox(height: 5),
+        const SizedBox(height: 1),
         SizedBox(
-          height: 28,
+          height: 18,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,

@@ -632,7 +632,8 @@ void main() {
     expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
   });
 
-  testWidgets('hides energy row when energy_result is null', (tester) async {
+  testWidgets('shows energy placeholder when energy_result is null',
+      (tester) async {
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
     addTearDown(() async {
@@ -647,11 +648,12 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('ЭНЕРГИЯ'), findsNothing);
+    // Label always visible; value is '—' placeholder, no '/10' progress bar
+    expect(find.text('ЭНЕРГИЯ'), findsOneWidget);
     expect(find.textContaining('/10'), findsNothing);
   });
 
-  testWidgets('hides key row when key_result is null', (tester) async {
+  testWidgets('shows key placeholder when key_result is null', (tester) async {
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
     addTearDown(() async {
@@ -666,10 +668,11 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('ТОНАЛЬНОСТЬ'), findsNothing);
+    // Label always visible even when key is null
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
   });
 
-  testWidgets('hides key row when key_result confidence is below threshold',
+  testWidgets('shows key placeholder when key_result confidence is below threshold',
       (tester) async {
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
@@ -685,8 +688,25 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // confidence 0.15 < 0.25 threshold → key row must not render
-    expect(find.text('ТОНАЛЬНОСТЬ'), findsNothing);
+    // confidence 0.15 < 0.25 threshold → camelot value hidden, label still present
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
     expect(find.text('8B'), findsNothing);
+  });
+
+  testWidgets('energy label always visible before any result arrives',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    // No result at all — energy and key rows show placeholders
+    expect(find.text('ЭНЕРГИЯ'), findsOneWidget);
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
   });
 }
