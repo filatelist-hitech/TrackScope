@@ -2,7 +2,7 @@
 
 _Track architecture changes, important files, build system changes, DSP pipeline changes and FFI integrations._
 
-_Last updated: 2026-06-02. Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
+_Last updated: 2026-06-02 (Phase 2.1 HPCP KeyAnalyzer). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
 
 ---
 
@@ -48,7 +48,7 @@ lib/
 ├── main_web.dart               Web-safe entry (no purchases_flutter)
 ├── dsp/
 │   ├── bindings.dart           Raw C ABI via dart:ffi
-│   ├── dsp_result.dart         Typed DspResult, DspDebug, LockState, TempoRelation
+│   ├── dsp_result.dart         Typed DspResult, DspDebug, LockState, TempoRelation, KeyResult (Phase 2.1)
 │   └── engine.dart             FFI handle lifetime + stream/poll
 ├── capture/
 │   ├── capture_bridge.dart     DSP worker isolate, PCM→f32, analyzeJson poll, broadcast streams
@@ -115,7 +115,8 @@ lib.rs              DspEngine, DspConfig, DspResult, analyze_pcm, analyze_from_e
                     — SNR estimation (estimate_snr_db, Phase 4)
 energy_analyzer.rs  Energy band analysis helpers
 genre_preset.rs     Genre presets (hitech 155–230 BPM defaults)
-key_analyzer.rs     Key / harmonic analysis (Phase 2 roadmap)
+key_analyzer.rs     HPCP KeyAnalyzer (Phase 2.1) — STFT→12-bin HPCP→K-S→Camelot
+                    KeyResult {key, mode, camelot, confidence}; integrated in DspEngine
 bin/analyze_wav.rs  CLI: reads WAV → feeds DspEngine → prints JSON
 ```
 
@@ -183,6 +184,7 @@ core/dsp/tests/
   streaming.rs            Streaming timing tests (first-lock ≤6s, stable ≤12s, re-lock ≤3s)
   stability.rs            Parabolic interpolation precision, BPM streak stability
   range_coverage.rs       155–230 BPM matrix (16 points, step 5)
+  key_detection.rs        HPCP KeyAnalyzer tests: Camelot mapping, JSON, silence/clip suppression (Phase 2.1)
   common/mod.rs           Deterministic fixture generators mirroring Python helpers
 
 core/tests/
@@ -212,7 +214,7 @@ flutter analyze
 
 ## DSP Contract (must not break)
 
-`DspResult` JSON keys: `primary_bpm` (nullable), `confidence` (0–1), `lock_state`, `signal_quality`, `candidates`, `timing`, `debug`
+`DspResult` JSON keys: `primary_bpm` (nullable), `confidence` (0–1), `lock_state`, `signal_quality`, `candidates`, `timing`, `debug`, `key_result` (optional, Phase 2.1)
 
 `LockState`: SEARCHING | LOCKING | STABLE | UNSTABLE | BREAKDOWN | CLIPPED_MIC | NOISE_ONLY
 

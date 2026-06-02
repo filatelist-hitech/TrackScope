@@ -390,3 +390,27 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - AppTheme → AppColors/AppTextStyles, no duplicate tokens ✓
 - FFT Spectrum в Signal Analyzer при наличии rawPcm ✓
 - Break button вызывает реальный reset DSP ✓
+
+---
+
+## Phase 2.1: Детекция тональности (HPCP KeyAnalyzer) — **ЗАВЕРШЕНО** (2026-06-02)
+
+Цель: реализовать детекцию тональности в реальном времени через HPCP + Krumhansl-Schmuckler.
+
+Артефакты:
+
+- `core/dsp/src/key_analyzer.rs` — полная реализация: STFT → HPCP → K-S корреляция → Camelot-маппинг.
+- `rustfft = "6"` добавлен в `core/dsp/Cargo.toml`.
+- `DspEngine` интегрирован: `key_analyzer` как поле, `push_samples` накапливает HPCP, `analyze()` заполняет `key_result`, `reset()` сбрасывает состояние.
+- `core/dsp/tests/key_detection.rs` — 12 тестов: Camelot-маппинг, JSON-сериализация, синус 440 Hz → A, тишина → None, reset → None, CLIPPED_MIC → None.
+- `apps/mobile/lib/dsp/dsp_result.dart` — класс `KeyResult` + поле `DspResult.keyResult`, парсинг вложенного JSON `camelot: {number, letter}` → строка "8A".
+- `apps/mobile/test/dsp_debug_test.dart` — 2 новых теста: парсинг `key_result` из JSON, `key_result` отсутствует когда нет поля.
+
+Критерии выхода — выполнены:
+
+- `cargo test --workspace` → все тесты зелёные (107 Rust) ✓
+- `flutter test` → 188/188 ✓
+- Тишина → `key_result == None` ✓
+- CLIPPED_MIC → `key_result == None` ✓
+- Camelot: A minor = "8A", C major = "8B" ✓
+- JSON: `key_result` отсутствует при None ✓

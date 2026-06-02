@@ -10,7 +10,7 @@ pub mod key_analyzer;
 
 pub use energy_analyzer::EnergyResult;
 pub use genre_preset::GenrePreset;
-pub use key_analyzer::KeyResult;
+pub use key_analyzer::{KeyAnalyzer, KeyResult};
 
 use std::collections::VecDeque;
 
@@ -244,6 +244,7 @@ pub struct DspEngine {
     pcm_capacity: usize,
     onset_capacity: usize,
     hop_sec: f32,
+    key_analyzer: KeyAnalyzer,
 }
 
 /// Ёмкость скользящего BPM-буфера в `DspEngine`.
@@ -319,6 +320,7 @@ impl DspEngine {
             pcm_capacity,
             onset_capacity,
             hop_sec,
+            key_analyzer: KeyAnalyzer::new(config.sample_rate as f32),
         }
     }
 
@@ -352,6 +354,7 @@ impl DspEngine {
             .saturating_add(normalized.len() as u64);
 
         // Ограниченное PCM-кольцо: O(новых) работы, не растёт выше pcm_capacity.
+        self.key_analyzer.push_samples(normalized);
         for &sample in normalized {
             if self.pcm_window.len() >= self.pcm_capacity && self.pcm_capacity > 0 {
                 self.pcm_window.pop_front();
@@ -609,6 +612,17 @@ impl DspEngine {
             self.bpm_history.clear();
         }
 
+        // Детекция тональности (Phase 2.1). Подавляется при клиппинге,
+        // шуме-без-сигнала и тишине — anti-fake: нет тональности без музыки.
+        if !matches!(result.lock_state, LockState::ClippedMic | LockState::NoiseOnly)
+            && !result.signal_quality.silence
+        {
+            let kr = self.key_analyzer.current_key();
+            if kr.key.is_some() {
+                result.key_result = Some(kr);
+            }
+        }
+
         // Запомнить состояние для следующего вызова.
         self.prev_lock_state = Some(result.lock_state);
         result
@@ -626,6 +640,7 @@ impl DspEngine {
         self.tempo_shift_counter = 0;
         self.force_next_searching = false;
         self.has_ever_been_stable = false;
+        self.key_analyzer.reset();
     }
 
     fn observed_seconds(&self) -> f32 {
