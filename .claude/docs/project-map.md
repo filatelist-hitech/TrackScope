@@ -2,7 +2,7 @@
 
 _Track architecture changes, important files, build system changes, DSP pipeline changes and FFI integrations._
 
-_Last updated: 2026-06-03 (Phase 2.2.1 EnergyAnalyzer calibration). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
+_Last updated: 2026-06-03 (Radar no-scroll + energy/key always visible). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
 
 ---
 
@@ -196,7 +196,7 @@ core/tests/
   helpers/synthetic_fixtures.py  Python fixture generators
 
 apps/mobile/test/
-  widget_test.dart               MainScreen + InfoCard + badge states (132+ tests)
+  widget_test.dart               MainScreen + InfoCard + badge states + energy/key always-visible (196 tests)
   dsp_debug_test.dart            DspDebug.fromJson parsing
   screens/signal_analyzer_screen_test.dart
 

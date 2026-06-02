@@ -470,5 +470,26 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 
 Известные ограничения:
 
-- На малых экранах (высота < 700 px) нижняя часть info-карты обрезается `NeverScrollableScrollPhysics` — pre-existing behaviour Phase 6.
+- ~~На малых экранах (высота < 700 px) нижняя часть info-карты обрезается `NeverScrollableScrollPhysics`~~ — устранено в Radar UI refactor (2026-06-03).
 - Colorful gradient в energy bar (teal → yellow → red) не поддерживается `LinearProgressIndicator`; используется однотонный цвет по диапазону уровня. Полный gradient требует `CustomPainter`.
+
+---
+
+## Radar UI: no-scroll + energy/key always visible — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: убрать скролл в info-карте Radar tab; энергия и тональность всегда отображаются.
+
+Артефакты:
+
+- `SingleChildScrollView` удалён из `_GlassmorphismCard`; заменён на `OverflowBox(maxHeight: infinity)` — подавляет layout assertion без скролла, клиппинг через `Clip.hardEdge` на контейнере.
+- Строка «ЭНЕРГИЯ / ТОНАЛЬНОСТЬ» рендерится безусловно: при `null` показывается заглушка `—` той же высоты.
+- Оригинальный визуальный масштаб восстановлен: 72px BPM hero, 120px waveform, flex 22/43.
+- Единственное отличие от Phase 2.3: зазор между цифрой BPM и строкой «BPM 155–230 · Hitech» уменьшен (SizedBox 5→0, высота строки 28→22px).
+- Тесты: 3 обновлены (`findsNothing` → `findsOneWidget` для лейблов), +1 новый (`energy_always_visible_even_when_null`). Итого 196 Flutter тестов.
+
+Критерии выхода — выполнены:
+
+- `flutter test` → 196/196 ✓
+- `flutter analyze` → 0 errors ✓
+- ЭНЕРГИЯ и ТОНАЛЬНОСТЬ видимы при любом DSP-состоянии ✓
+- Скролл недоступен ✓
