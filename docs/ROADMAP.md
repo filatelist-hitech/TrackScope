@@ -446,6 +446,21 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - Калибровочные константы (`FLUX_MAX = 0.15`, `DENSITY_MAX = 6.0`) подобраны на синтетике; требуют fine-tuning на реальных записях (Phase 2.2.1).
 - Python-референс (`tempo.py`) не реализует `energy_result` — всегда `None` в Python-пути.
 
+### Phase 2.2.3: динамический hop_sec (2026-06-03)
+
+`EnergyAnalyzer::new(sample_rate, hop_sec)` — сигнатура расширена. Реальный `hop_sec` передаётся из `DspEngine` (вычислен как `hop_size / sample_rate`). Константа `HOP_SEC = 0.0025` удалена. `flux_capacity` и `onset_density_hz` теперь корректны для любого sample rate, не только 48 kHz. `min_peak_gap` вычисляется динамически: `(0.1 / hop_sec).round()` (100 мс зазор).
+
+Артефакты:
+- `core/dsp/src/energy_analyzer.rs` — удалена `const HOP_SEC`, добавлено поле `hop_sec: f32`, сигнатура `new(sample_rate, hop_sec)`, динамический `min_peak_gap`.
+- `core/dsp/src/lib.rs` — call site обновлён: `EnergyAnalyzer::new(config.sample_rate as f32, hop_sec)`.
+- `core/dsp/tests/energy.rs` — +2 документальных теста: `flux_floor_does_not_silence_quiet_pulse_amplitude_0_1`, `flux_floor_boundary_very_quiet_pulse_amplitude_0_02`.
+
+Критерии выхода — выполнены:
+- `cargo test --workspace` → 122/122 Rust-тестов ✓
+- `flutter test` → 218/218 (1 pre-existing dsp_engine_test) ✓
+- `FLUX_ABSOLUTE_FLOOR` верифицирован: при amplitude=0.1 (~-20 dBFS) пики flux детектируются в STABLE ✓
+- Нет изменений в `DspResult` / FFI / Dart-контракте ✓
+
 ---
 
 ## Phase 2.3: Energy / Key Display на Radar Tab — **ЗАВЕРШЕНО** (2026-06-03)

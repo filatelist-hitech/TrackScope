@@ -2,7 +2,7 @@
 
 _Track architecture changes, important files, build system changes, DSP pipeline changes and FFI integrations._
 
-_Last updated: 2026-06-03 (Phase 2.2.2: EnergyAnalyzer onset_density fix — count_flux_peaks replaces onset_history.len()). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
+_Last updated: 2026-06-03 (Phase 2.5: FFI new_with_range + GenrePreset.custom + AppSettings.customMin/customMax/setCustomRange/effectiveBpmRange + CaptureBridge.maxBpm + SettingsScreen CUSTOM RANGE UI). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
 
 ---
 
@@ -30,7 +30,7 @@ scripts/          Build scripts (iOS / Android / release)
 |---|---|
 | Rust DSP library | `core/dsp/src/lib.rs` — `DspEngine`, `analyze_pcm`, `DspConfig` |
 | Rust DSP binary | `core/dsp/src/bin/analyze_wav.rs` — CLI WAV analyzer |
-| Rust FFI | `core/ffi/src/lib.rs` — 6 C symbols exported |
+| Rust FFI | `core/ffi/src/lib.rs` — 7 C symbols exported |
 | Flutter app (mobile) | `apps/mobile/lib/main.dart` |
 | Flutter app (web) | `apps/mobile/lib/main_web.dart` (no RevenueCat) |
 | Python offline analyzer | `tools/offline-lab/offline_lab.py` |
@@ -75,12 +75,13 @@ lib/
 │   ├── settings_screen.dart    5 sections, SharedPreferences, WakelockPlus, BpmSmoothing picker
 │   └── permission_denied_screen.dart
 ├── settings/
-│   └── app_settings.dart       ChangeNotifier singleton: showWaveform, showSpectrum, keepScreenOn, inputSensitivity, bpmSmoothing
+│   └── app_settings.dart       ChangeNotifier singleton: showWaveform, showSpectrum, keepScreenOn, inputSensitivity, bpmSmoothing,
+│                                 customMin/customMax (Phase 2.4), effectiveBpmRange, setCustomRange (validated)
 ├── monetization/
 │   ├── purchases_gateway.dart  Abstract
 │   ├── revenue_cat_gateway.dart  Only file importing purchases_flutter
 │   ├── pro_status_service.dart ChangeNotifier singleton
-│   ├── feature_flags.dart      BPM range, debug, history, export gating
+│   ├── feature_flags.dart      BPM range (incl. customMin/customMax for Custom preset), debug, history, export gating
 │   └── paywall_screen.dart     Design v2: FREE/PRO columns, CTA hierarchy, Roadmap card
 ├── history/
 │   ├── bpm_history.dart        BpmSample (bpm, confidence), capped by duration/count
@@ -117,6 +118,8 @@ energy_analyzer.rs  EnergyAnalyzer: RMS+flux+onset_density → level 1–10 (Pha
                     Phase 2.2.2: onset_density via count_flux_peaks() — local maxima above
                     max(mean+2σ, FLUX_ABSOLUTE_FLOOR=0.01) with 100ms min-gap.
                     Real hitech density [1.5, 8.0] Hz; white noise → 0 Hz (below absolute floor).
+                    Phase 2.2.3: new(sample_rate, hop_sec) — hop_sec dynamic from DspEngine;
+                    HOP_SEC const removed; min_peak_gap = (0.1/hop_sec).round().
 genre_preset.rs     Genre presets (hitech 155–230 BPM defaults)
 key_analyzer.rs     HPCP KeyAnalyzer (Phase 2.1) — STFT→12-bin HPCP→K-S→Camelot
                     KeyResult {key, mode, camelot, confidence}; integrated in DspEngine
@@ -138,10 +141,11 @@ bin/stream_analyze_wav.rs  CLI streaming: feeds WAV → DspEngine 100ms chunks �
 
 ## FFI Layer (`core/ffi/`)
 
-Six exported C symbols (`core/ffi/src/lib.rs`):
+Seven exported C symbols (`core/ffi/src/lib.rs`):
 ```c
 hitech_bpm_engine_new()
-hitech_bpm_engine_new_with_min_bpm(float min_bpm)  // Phase 10: Free=170, Pro=155
+hitech_bpm_engine_new_with_min_bpm(float min_bpm)    // Phase 10: Free=170, Pro=155
+hitech_bpm_engine_new_with_range(float min, float max) // Phase 2.4: Custom preset; min∈[80,260], max∈[min+10,300]
 hitech_bpm_engine_free(handle)
 hitech_bpm_engine_reset(handle)
 hitech_bpm_engine_push_samples(handle, samples, len, sample_rate) -> bool

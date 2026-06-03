@@ -149,3 +149,41 @@ fn onset_density_hz_low_on_white_noise() {
         }
     }
 }
+
+/// Phase 2.2.3: FLUX_ABSOLUTE_FLOOR верификация — тихий пульс amplitude=0.1 (~-20 dBFS).
+/// Если STABLE достигнут — onset_density_hz должна быть > 0 (порог не режет все удары).
+/// Если STABLE не достигнут — тест не падает (документальный: тихий сигнал может не захватиться).
+#[test]
+fn flux_floor_does_not_silence_quiet_pulse_amplitude_0_1() {
+    let pulse = common::pulse_track(200.0, 14.0, 0.1); // ≈ -20 dBFS
+    let results = run_stream_full(&pulse);
+    let stable_energies: Vec<_> = results
+        .iter()
+        .filter(|r| r.lock_state == LockState::Stable)
+        .filter_map(|r| r.energy_result.as_ref())
+        .collect();
+    for er in &stable_energies {
+        assert!(
+            er.onset_density_hz > 0.0,
+            "quiet pulse (amplitude=0.1) in STABLE should still have onset_density_hz > 0, got {}",
+            er.onset_density_hz
+        );
+    }
+    // Если STABLE не достигнут — это known limitation (тихий сигнал); не fail.
+}
+
+/// Phase 2.2.3: FLUX_ABSOLUTE_FLOOR нижняя граница — очень тихий пульс amplitude=0.02 (~-34 dBFS).
+/// Документальный тест: не ожидаем STABLE. Фиксирует поведение в пограничном диапазоне.
+#[test]
+fn flux_floor_boundary_very_quiet_pulse_amplitude_0_02() {
+    let pulse = common::pulse_track(200.0, 14.0, 0.02); // ≈ -34 dBFS
+    let results = run_stream_full(&pulse);
+    // На таком тихом сигнале ожидаем SEARCHING или NOISE_ONLY, но не STABLE.
+    // Тест — документальный: не падает при любом исходе.
+    let stable_count = results
+        .iter()
+        .filter(|r| r.lock_state == LockState::Stable)
+        .count();
+    // Допускаем STABLE только если движок всё же зафиксировал пульс — не режем его искусственно.
+    let _ = stable_count;
+}

@@ -28,9 +28,6 @@ const DENSITY_MIN: f32 = 0.5;
 /// Phase 2.2.2: density вычисляется через count_flux_peaks() — реальные
 /// локальные максимумы flux_history выше среднего. Диапазон hitech: ~3–8 Hz.
 const DENSITY_MAX: f32 = 8.0;
-/// Предполагаемый hop-шаг (сек) для пересчёта кол-ва пиков в Hz.
-/// Должен совпадать с DspConfig::hop_seconds (дефолт 0.0025 с).
-const HOP_SEC: f32 = 0.0025;
 /// Абсолютный минимальный порог flux для пика — отсекает шумовые флуктуации.
 /// Белый шум amplitude=0.28 даёт max flux ≈ 0.008; kick-барабан >> 0.01.
 const FLUX_ABSOLUTE_FLOOR: f32 = 0.01;
@@ -68,6 +65,8 @@ impl Default for EnergyResult {
 pub struct EnergyAnalyzer {
     #[allow(dead_code)]
     sample_rate: f32,
+    /// Реальный hop-шаг (сек), переданный из DspEngine при создании.
+    hop_sec: f32,
     /// Скользящий PCM-буфер для вычисления RMS (3 сек).
     rms_window: VecDeque<f32>,
     rms_capacity: usize,
@@ -77,13 +76,14 @@ pub struct EnergyAnalyzer {
 }
 
 impl EnergyAnalyzer {
-    pub fn new(sample_rate: f32) -> Self {
+    pub fn new(sample_rate: f32, hop_sec: f32) -> Self {
         let sr = if sample_rate > 0.0 { sample_rate } else { 48_000.0 };
+        let hop = hop_sec.max(0.001);
         let rms_capacity = (sr * 3.0) as usize;
-        // Предположим hop ~2.5 мс: 3 с / 0.0025 = 1200 кадров.
-        let flux_capacity = ((3.0 / 0.0025) as usize).max(8);
+        let flux_capacity = ((3.0 / hop) as usize).max(8);
         Self {
             sample_rate: sr,
+            hop_sec: hop,
             rms_window: VecDeque::with_capacity(rms_capacity),
             rms_capacity,
             flux_history: VecDeque::with_capacity(flux_capacity),
@@ -130,15 +130,15 @@ impl EnergyAnalyzer {
         // Порог = max(mean + 2σ, абсолютный пол). Белый шум (max flux ≈ 0.008)
         // не дотягивается до 0.01; реальные удары дают пики >> 0.01.
         let threshold = (mean + 2.0 * std_dev).max(FLUX_ABSOLUTE_FLOOR);
-        // 40 кадров × 2.5 мс/кадр = 100 мс минимального зазора.
-        const MIN_PEAK_GAP: usize = 40;
+        // 100 мс минимального зазора, динамически из hop_sec.
+        let min_peak_gap = (0.1 / self.hop_sec).round() as usize;
         let mut count = 0usize;
         let mut last_peak_idx = 0usize;
         for i in 1..flux.len() - 1 {
             if flux[i] > flux[i - 1]
                 && flux[i] > flux[i + 1]
                 && flux[i] > threshold
-                && (count == 0 || i - last_peak_idx >= MIN_PEAK_GAP)
+                && (count == 0 || i - last_peak_idx >= min_peak_gap)
             {
                 count += 1;
                 last_peak_idx = i;
@@ -176,7 +176,7 @@ impl EnergyAnalyzer {
 
         // ── Onset density (Phase 2.2.2) ───────────────────────────────────────
         // Используем реальные пики flux, а не длину буфера.
-        let window_secs = self.flux_history.len() as f32 * HOP_SEC;
+        let window_secs = self.flux_history.len() as f32 * self.hop_sec;
         let peak_count = self.count_flux_peaks();
         let onset_density_hz = if window_secs > 0.0 {
             peak_count as f32 / window_secs
@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn energy_reset_clears_state() {
-        let mut ea = EnergyAnalyzer::new(48_000.0);
+        let mut ea = EnergyAnalyzer::new(48_000.0, 0.0025);
         let samples: Vec<f32> = (0..480).map(|i| (i as f32 * 0.01).sin() * 0.5).collect();
         ea.push_samples(&samples);
         ea.push_flux(0.05);
@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn energy_level_silence_returns_low() {
         // Тишина (нули) → level = 1 (минимум шкалы).
-        let mut ea = EnergyAnalyzer::new(48_000.0);
+        let mut ea = EnergyAnalyzer::new(48_000.0, 0.0025);
         let silence: Vec<f32> = vec![0.0; 48_000 * 3];
         ea.push_samples(&silence);
         ea.push_flux(0.0);
@@ -271,7 +271,7 @@ mod tests {
         // Громкий синтетический пульс 200 BPM с нормализованным сигналом.
         // RMS ≈ -12 dBFS, flux 0.10, density 3.5 /s → level ≥ 5.
         let sr = 48_000_usize;
-        let mut ea = EnergyAnalyzer::new(sr as f32);
+        let mut ea = EnergyAnalyzer::new(sr as f32, 0.0025);
 
         // Заполнить RMS-буфер сигналом амплитудой 0.25 (≈ -12 dBFS).
         let samples: Vec<f32> = (0..sr * 3).map(|i| 0.25 * ((i as f32 * 0.01).sin())).collect();

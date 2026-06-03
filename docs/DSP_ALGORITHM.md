@@ -185,9 +185,11 @@ interface DspDebug {
 
 ### Граница FFI (Phase 2)
 
-Крейт `core/ffi` экспонирует потоковый движок не-Rust-вызывающим (Flutter, нативные iOS/Android аудио-мосты). Границу пересекают всего шесть символов; ни один из них не позволяет вызывающему считать BPM самостоятельно:
+Крейт `core/ffi` экспонирует потоковый движок не-Rust-вызывающим (Flutter, нативные iOS/Android аудио-мосты). Границу пересекают семь символов; ни один из них не позволяет вызывающему считать BPM самостоятельно:
 
 - `hitech_bpm_engine_new` / `hitech_bpm_engine_free` — время жизни хэндла.
+- `hitech_bpm_engine_new_with_min_bpm(min_bpm: f32)` — конструктор с кастомным минимальным BPM (Phase 10: Free=170, Pro=155). `min_bpm` зажимается в [80, 230].
+- `hitech_bpm_engine_new_with_range(min_bpm: f32, max_bpm: f32)` — конструктор с полным диапазоном (Phase 2.5: Custom preset). `min` зажимается в [80, 260], `max` в [min+10, 300].
 - `hitech_bpm_engine_reset` — сбросить скользящее состояние на месте.
 - `hitech_bpm_engine_push_samples(samples, len, sample_rate) -> bool` — вход с аудио-потока; легковесно по аллокациям.
 - `hitech_bpm_engine_analyze_json(engine) -> *mut c_char` — опрос на UI-частоте. Сериализует текущий `DspResult` в UTF-8 JSON, владелец — вызывающий. JSON-ключи соответствуют контракту выше. Рекомендуемая частота опроса ~10–30 Гц; не вызывать с аудио-потока.
@@ -464,7 +466,7 @@ Double-time-нормализация (>260 → ÷2) не затронута ра
 
 1. **RMS dBFS** (40%) — скользящий PCM-буфер 3 сек; вычисляется независимо в `EnergyAnalyzer.push_samples()`.
 2. **Spectral flux** (35%) — среднее по `flux_history`, получаемой через `push_flux(flux)` из `DspEngine` (уже вычисленный flux, без дублирования CPU).
-3. **Onset density** (25%) — `count_flux_peaks() / (flux_history.len() × HOP_SEC)`. Считаются локальные максимумы `flux_history` выше порога `max(mean+2σ, 0.01)` с минимальным зазором 100 мс между пиками.
+3. **Onset density** (25%) — `count_flux_peaks() / (flux_history.len() × hop_sec)`. Считаются локальные максимумы `flux_history` выше порога `max(mean+2σ, 0.01)` с минимальным зазором 100 мс между пиками. `hop_sec` передаётся из `DspEngine` (Phase 2.2.3: динамический, не константа).
 
 Нормализация: каждая компонента линейно масштабируется в [0, 1] по калибровочным константам, затем взвешивается. Результат → `ceil(sum × 10).clamp(1, 10)`.
 
@@ -492,6 +494,10 @@ Double-time-нормализация (>260 → ÷2) не затронута ра
 ### Известные ограничения
 
 - Константы подобраны на синтетических фикстурах; требуют fine-tuning на реальных записях (Phase 2.2.1).
-- `FLUX_ABSOLUTE_FLOOR = 0.01` калиброван под `pulse_track(amplitude=0.7)`; для очень тихих треков (amplitude << 0.3) onset_density может недосчитывать удары.
+- `FLUX_ABSOLUTE_FLOOR = 0.01` калиброван под `pulse_track(amplitude=0.7)`; для очень тихих треков (amplitude << 0.3) onset_density может недосчитывать удары. Верификация в `flux_floor_does_not_silence_quiet_pulse_amplitude_0_1` показала: при amplitude=0.1 (~-20 dBFS) пики flux всё ещё детектируются в STABLE.
 - `energy_result` не вычисляется в batch-пути `analyze_pcm` — только в потоковом `DspEngine`.
 - Python-референс (`tempo.py`) не реализует `energy_result` — всегда `None` в Python-пути.
+
+### Phase 2.2.3: динамический hop_sec (2026-06-03)
+
+`EnergyAnalyzer::new(sample_rate, hop_sec)` — сигнатура расширена. Реальный `hop_sec` передаётся из `DspEngine` (вычислен как `hop_size / sample_rate`). Константа `HOP_SEC = 0.0025` удалена. `flux_capacity` и `onset_density_hz` теперь корректны для любого sample rate, не только 48 kHz. `min_peak_gap` вычисляется динамически: `(0.1 / hop_sec).round()` (100 мс зазор).
