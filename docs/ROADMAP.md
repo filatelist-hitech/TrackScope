@@ -494,3 +494,49 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - `flutter analyze` → 0 errors ✓
 - ЭНЕРГИЯ и ТОНАЛЬНОСТЬ видимы при любом DSP-состоянии ✓
 - Скролл недоступен ✓
+
+---
+
+## Phase 2.4: Setlist — Camelot Key + Energy Level — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: дополнить каркас `SetlistService` / `SetlistEntry` / `SetlistScreen`, реализованный
+в Phase 10, реальными данными KeyAnalyzer и EnergyAnalyzer (Phase 2.1 + 2.2).
+
+### Что изменилось
+
+- **`SetlistEntry`** (`apps/mobile/lib/features/setlist/setlist_entry.dart`):
+  - Раскомментированы поля `camelotKey: String?` и `energyLevel: int?`.
+  - `toJson()` включает поля только если не null (JSON-backward-compatible).
+  - `toCsvRow()` добавляет два столбца; `setlistCsvHeader` обновлён:
+    `timestamp,bpm,lock_state,confidence,input_level_dbfs,camelot_key,energy_level`.
+
+- **`SetlistService`** (`apps/mobile/lib/features/setlist/setlist_service.dart`):
+  - `onDspResult` передаёт `result.keyResult?.camelot` и `result.energyResult?.level`
+    в конструктор `SetlistEntry`.
+  - `exportJson()` содержит `has_key_data` и `has_energy_data` в summary-объекте.
+
+- **`SetlistScreen._EntryRow`** (`apps/mobile/lib/features/setlist/setlist_screen.dart`):
+  - Если `entry.camelotKey != null` — отображается акцентным цветом справа от confidence.
+  - Если `entry.energyLevel != null` — отображается `E{N}` muted-цветом.
+
+**Anti-fake инвариант сохранён:** запись в сетлист происходит **только** при
+`lockState == STABLE` и `primaryBpm != null`. Поля key/energy берутся из реального
+DSP-результата; fallback-значений нет.
+
+### Тесты
+
+- `test/features/setlist/setlist_service_test.dart` — +6 новых тестов:
+  `onDspResult with key_result stores camelotKey`, `without key_result stores null`,
+  `with energy_result stores energyLevel`, `exportJson contains camelot_key`,
+  `exportJson contains has_key_data field`, `exportCsv header/row columns`.
+- `test/features/setlist/setlist_screen_test.dart` — +3 новых теста:
+  `shows camelot key`, `shows energy level`, `renders without camelot/energy (null)`.
+
+Критерии выхода — выполнены:
+
+- `flutter test` → 203 passed (1 pre-existing dsp_engine_test — нет .dylib) ✓
+- `flutter analyze` → 0 errors, 17 pre-existing infos ✓
+- `SetlistEntry` хранит `camelotKey`/`energyLevel` ✓
+- `_EntryRow` отображает `8A` и `E7` при наличии данных ✓
+- CSV-заголовок обновлён, JSON-summary содержит `has_key_data`/`has_energy_data` ✓
+- Anti-fake: запись только при STABLE + primaryBpm != null ✓

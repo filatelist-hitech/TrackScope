@@ -307,6 +307,20 @@ class _EntryRow extends StatelessWidget {
             style:
                 AppTextStyles.mono(9, FontWeight.w400, AppColors.textMuted),
           ),
+          if (entry.camelotKey != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              entry.camelotKey!,
+              style: AppTextStyles.mono(9, FontWeight.w700, AppColors.accent),
+            ),
+          ],
+          if (entry.energyLevel != null) ...[
+            const SizedBox(width: 6),
+            Text(
+              'E${entry.energyLevel}',
+              style: AppTextStyles.mono(9, FontWeight.w400, AppColors.textMuted),
+            ),
+          ],
         ],
       ),
     );

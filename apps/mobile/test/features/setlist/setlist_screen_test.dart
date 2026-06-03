@@ -1,15 +1,55 @@
 // SetlistScreen widget tests.
 //
-// Smoke render, Pro-gate (Free → PaywallScreen), REC/STOP toggle.
+// Smoke render, Pro-gate (Free → PaywallScreen), REC/STOP toggle,
+// Phase 2.4: _EntryRow camelot/energy display.
 
 import 'package:flutter/material.dart' hide LockState;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
 import 'package:TrackScope/features/setlist/setlist_screen.dart';
 import 'package:TrackScope/features/setlist/setlist_service.dart';
 import 'package:TrackScope/monetization/feature_flags.dart';
 import 'package:TrackScope/monetization/paywall_screen.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: child);
+
+DspResult _stableResult({
+  double bpm = 200.0,
+  KeyResult? keyResult,
+  EnergyResult? energyResult,
+}) =>
+    DspResult(
+      primaryBpm: bpm,
+      confidence: 0.9,
+      lockState: LockState.stable,
+      signalQuality: const SignalQuality(
+        inputLevelDbfs: null,
+        peakDbfs: null,
+        clipping: false,
+        clippedFrameRatio: 0.0,
+        noiseLevel: 'low',
+        snrEstimateDb: null,
+        silence: false,
+        breakdownLikely: false,
+      ),
+      candidates: const [],
+      timing: const DspTiming(
+        analysisTimeSec: 5.0,
+        windowTimeSec: 12.0,
+        hopTimeSec: 0.0025,
+        firstLockTimeSec: 4.2,
+      ),
+      debug: const DspDebug(
+        onsetRateHz: 0.0,
+        onsetStrength: 0.0,
+        tempoPeakProminence: 0.0,
+        harmonicAmbiguity: 0.0,
+        stabilityScore: 0.0,
+        warnings: [],
+      ),
+      keyResult: keyResult,
+      energyResult: energyResult,
+    );
 
 void main() {
   group('SetlistScreen Pro-gate', () {
@@ -79,6 +119,64 @@ void main() {
       await tester.tap(find.text('СТОП'));
       await tester.pump();
       expect(find.text('ОСТАНОВЛЕНО'), findsOneWidget);
+      service.dispose();
+    });
+  });
+
+  // Phase 2.4: _EntryRow camelot/energy display
+
+  group('_EntryRow camelot and energy display', () {
+    testWidgets('shows camelot key when entry.camelotKey != null',
+        (tester) async {
+      final service = SetlistService()..startRecording();
+      service.onDspResult(_stableResult(
+        keyResult: const KeyResult(
+          key: 'A',
+          mode: 'Minor',
+          camelot: '8A',
+          confidence: 0.72,
+        ),
+      ));
+      await tester.pumpWidget(_wrap(SetlistScreen(
+        service: service,
+        flags: const FeatureFlags(isPro: true),
+      )));
+      expect(find.text('8A'), findsOneWidget);
+      service.dispose();
+    });
+
+    testWidgets('shows energy level when entry.energyLevel != null',
+        (tester) async {
+      final service = SetlistService()..startRecording();
+      service.onDspResult(_stableResult(
+        energyResult: const EnergyResult(
+          level: 7,
+          rmsDbfs: -8.0,
+          spectralFlux: 0.05,
+          onsetDensityHz: 3.5,
+        ),
+      ));
+      await tester.pumpWidget(_wrap(SetlistScreen(
+        service: service,
+        flags: const FeatureFlags(isPro: true),
+      )));
+      expect(find.text('E7'), findsOneWidget);
+      service.dispose();
+    });
+
+    testWidgets('renders entry without camelot and energy when both null',
+        (tester) async {
+      final service = SetlistService()..startRecording();
+      service.onDspResult(_stableResult());
+      await tester.pumpWidget(_wrap(SetlistScreen(
+        service: service,
+        flags: const FeatureFlags(isPro: true),
+      )));
+      // BPM is shown
+      expect(find.text('200.0'), findsOneWidget);
+      // No camelot or energy chip rendered
+      expect(find.textContaining(RegExp(r'^\d+[AB]$')), findsNothing);
+      expect(find.textContaining(RegExp(r'^E\d+$')), findsNothing);
       service.dispose();
     });
   });

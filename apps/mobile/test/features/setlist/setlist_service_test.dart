@@ -6,7 +6,8 @@ DspResult _makeResult({
   LockState lockState = LockState.stable,
   double? primaryBpm = 200.0,
   double confidence = 0.9,
-  double inputLevelDbfs = -14.0,
+  KeyResult? keyResult,
+  EnergyResult? energyResult,
 }) {
   return DspResult(
     primaryBpm: primaryBpm,
@@ -37,8 +38,24 @@ DspResult _makeResult({
       stabilityScore: 0.0,
       warnings: [],
     ),
+    keyResult: keyResult,
+    energyResult: energyResult,
   );
 }
+
+const _keyResult8A = KeyResult(
+  key: 'A',
+  mode: 'Minor',
+  camelot: '8A',
+  confidence: 0.72,
+);
+
+const _energyResult7 = EnergyResult(
+  level: 7,
+  rmsDbfs: -8.0,
+  spectralFlux: 0.05,
+  onsetDensityHz: 3.5,
+);
 
 void main() {
   group('SetlistService', () {
@@ -81,7 +98,6 @@ void main() {
     test('deduplication: same BPM within 5s → single entry', () {
       service.startRecording();
       service.onDspResult(_makeResult(primaryBpm: 200.0));
-      // Второй вызов сразу после — дедуплицируется (delta < 0.5, secs < 5)
       service.onDspResult(_makeResult(primaryBpm: 200.1));
       expect(service.entryCount, 1);
     });
@@ -89,7 +105,7 @@ void main() {
     test('different BPM (delta > 0.5) creates new entry', () {
       service.startRecording();
       service.onDspResult(_makeResult(primaryBpm: 200.0));
-      service.onDspResult(_makeResult(primaryBpm: 201.0)); // delta = 1.0 > 0.5
+      service.onDspResult(_makeResult(primaryBpm: 201.0));
       expect(service.entryCount, 2);
     });
 
@@ -132,8 +148,64 @@ void main() {
     test('averageBpm computed correctly', () {
       service.startRecording();
       service.onDspResult(_makeResult(primaryBpm: 190.0));
-      service.onDspResult(_makeResult(primaryBpm: 210.0)); // delta > 0.5
+      service.onDspResult(_makeResult(primaryBpm: 210.0));
       expect(service.averageBpm, closeTo(200.0, 0.1));
+    });
+
+    // Phase 2.4: camelot key + energy level
+
+    test('onDspResult with key_result stores camelotKey in entry', () {
+      service.startRecording();
+      service.onDspResult(_makeResult(keyResult: _keyResult8A));
+      expect(service.entries.first.camelotKey, equals('8A'));
+    });
+
+    test('onDspResult without key_result stores null camelotKey', () {
+      service.startRecording();
+      service.onDspResult(_makeResult());
+      expect(service.entries.first.camelotKey, isNull);
+    });
+
+    test('onDspResult with energy_result stores energyLevel in entry', () {
+      service.startRecording();
+      service.onDspResult(_makeResult(energyResult: _energyResult7));
+      expect(service.entries.first.energyLevel, equals(7));
+    });
+
+    test('exportJson contains camelot_key when present', () {
+      service.startRecording();
+      service.onDspResult(_makeResult(keyResult: _keyResult8A));
+      final json = service.exportJson();
+      expect(json, contains('"camelot_key"'));
+      expect(json, contains('"8A"'));
+    });
+
+    test('exportJson contains has_key_data field', () {
+      service.startRecording();
+      service.onDspResult(_makeResult(keyResult: _keyResult8A));
+      final json = service.exportJson();
+      expect(json, contains('"has_key_data": true'));
+      expect(json, contains('"has_energy_data": false'));
+    });
+
+    test('exportCsv header contains camelot_key and energy_level columns', () {
+      service.startRecording();
+      service.onDspResult(_makeResult());
+      final csv = service.exportCsv();
+      expect(csv, contains('camelot_key'));
+      expect(csv, contains('energy_level'));
+    });
+
+    test('exportCsv row contains empty strings when camelot/energy null', () {
+      service.startRecording();
+      service.onDspResult(_makeResult(primaryBpm: 200.0));
+      final csv = service.exportCsv();
+      // The row ends with two empty columns: ,, at end
+      final rows = csv.trim().split('\n');
+      expect(rows.length, equals(2)); // header + 1 row
+      // last two CSV columns are empty
+      final row = rows[1];
+      expect(row, endsWith(',,'));
     });
   });
 }

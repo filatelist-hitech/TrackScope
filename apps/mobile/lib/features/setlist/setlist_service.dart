@@ -75,6 +75,8 @@ class SetlistService extends ChangeNotifier {
       lockState: result.lockState,
       confidence: result.confidence,
       inputLevelDbfs: result.signalQuality.inputLevelDbfs ?? 0.0,
+      camelotKey: result.keyResult?.camelot,
+      energyLevel: result.energyResult?.level,
     ));
     notifyListeners();
   }
@@ -86,6 +88,8 @@ class SetlistService extends ChangeNotifier {
       'exported_at': DateTime.now().toIso8601String(),
       'entry_count': _entries.length,
       'duration_seconds': duration.inSeconds,
+      'has_key_data': _entries.any((e) => e.camelotKey != null),
+      'has_energy_data': _entries.any((e) => e.energyLevel != null),
       'entries': list,
     });
   }
