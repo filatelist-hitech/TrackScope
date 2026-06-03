@@ -28,6 +28,10 @@
     ],
     "deny": [
       "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -f:*)",
+      "Bash(sudo rm:*)",
+      "Bash(chmod 777:*)",
       "Bash(rm -rf /:*)",
       "Bash(rm -rf ~:*)",
       "Bash(rm -rf ..:*)",
@@ -45,6 +49,10 @@
           {
             "type": "command",
             "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"hitech-bpm-radar — anti-fake rules in effect; current phase: see docs/ROADMAP.md\"}}'"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/session-context.sh 2>/dev/null || true"
           }
         ]
       }
@@ -59,6 +67,17 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/block-dangerous.sh"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit",
@@ -66,6 +85,10 @@
           {
             "type": "command",
             "command": "bash -c 'f=\"$CLAUDE_TOOL_INPUT_FILE_PATH\"; case \"$f\" in *.rs) /opt/homebrew/opt/rust/bin/cargo fmt --check -- \"$f\" || true ;; *.py) python3 -m py_compile \"$f\" 2>&1 || true ;; esac'"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/docs-reminder.sh 2>/dev/null || true"
           }
         ]
       }

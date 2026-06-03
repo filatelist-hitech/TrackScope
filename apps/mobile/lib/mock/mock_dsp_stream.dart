@@ -19,105 +19,179 @@ import '../dsp/dsp_result.dart';
 class MockDspStream {
   MockDspStream._();
 
+  // Контроллер для переключения режимов в реальном времени
+  static final _modeController = StreamController<MockDspMode>.broadcast();
+  static var _currentMode = MockDspMode.idle;
+
   /// Целевой темп симуляции (произвольный hitech-диапазон, не хардкод
   /// продакшен-значения — это демонстрационный поток превью).
-  static const double _targetBpm = 193.0;
+  static const double _targetBpmActive = 174.4;
+  static const double _targetBpmUnstable = 188.0;
   static final Random _rng = Random(0xB12);
+
+  /// Управление режимом превью (idle, active, unstable)
+  static Stream<MockDspMode> get modeStream => _modeController.stream;
+  static void setMode(MockDspMode mode) {
+    _currentMode = mode;
+    _modeController.add(mode);
+  }
+
+  static MockDspMode get currentMode => _currentMode;
 
   // PCM генератор — константы
   static const int _kSampleRate = 48000;
   static const int _kChunkSamples = 2400; // 50 ms при 48 kHz
 
-  /// Симулирует трек, выходящий на стабильный захват ~193 BPM:
-  /// SEARCHING → LOCKING → STABLE с нарастанием уверенности и лёгким
-  /// джиттером BPM. `primaryBpm` остаётся `null` в SEARCHING (контракт
-  /// «нет значения до захвата»).
+  /// Симулирует трек с переключаемыми режимами:
+  /// - idle: SEARCHING, no capture, confidence ~8%
+  /// - active: SEARCHING → LOCKING → STABLE ~174 BPM, confidence 77%
+  /// - unstable: UNSTABLE, confidence 44%, BPM скачет
+  ///
+  /// Режимы переключаются через `setMode()` в реальном времени.
   static Stream<DspResult> stable() async* {
-    var confidence = 0.30;
+    var confidence = 0.0;
     var state = LockState.searching;
     var elapsedSec = 0.0;
     double? firstLockSec;
+    var mode = _currentMode;
+    late StreamSubscription<MockDspMode> modeSub;
 
-    while (true) {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-      elapsedSec += 0.1;
+    modeSub = modeStream.listen((newMode) {
+      mode = newMode;
+      // Reset state on mode change
+      confidence = 0.0;
+      state = LockState.searching;
+      elapsedSec = 0.0;
+      firstLockSec = null;
+    });
 
-      confidence = (confidence + 0.02).clamp(0.0, 0.92);
-      if (confidence > 0.5 && state == LockState.searching) {
-        state = LockState.locking;
-        firstLockSec ??= elapsedSec;
-      }
-      if (confidence > 0.75 && state == LockState.locking) {
-        state = LockState.stable;
-      }
+    try {
+      while (true) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        elapsedSec += 0.05;
 
-      final locked = state != LockState.searching;
-      final bpm = _targetBpm + (_rng.nextDouble() - 0.5) * 0.4;
-      final primaryBpm = locked ? bpm : null;
+        // Mode-specific behavior
+        switch (mode) {
+          case MockDspMode.idle:
+            confidence = 0.08; // Очень низкая
+            state = LockState.searching;
+            break;
 
-      yield DspResult(
-        primaryBpm: primaryBpm,
-        confidence: confidence,
-        lockState: state,
-        signalQuality: SignalQuality(
-          inputLevelDbfs: -15.0 + (_rng.nextDouble() - 0.5) * 2,
-          peakDbfs: -8.0 + (_rng.nextDouble() - 0.5) * 2,
-          clipping: false,
-          clippedFrameRatio: 0.0,
-          noiseLevel: 'low',
-          snrEstimateDb: 18.0 + (_rng.nextDouble() - 0.5) * 2,
-          silence: false,
-          breakdownLikely: false,
-        ),
-        candidates: [
-          TempoCandidate(
-            bpm: bpm,
-            relation: 'main',
-            score: confidence,
-            rawScore: confidence,
+          case MockDspMode.active:
+            // Нарастание: SEARCHING → LOCKING → STABLE
+            confidence = (confidence + 0.015).clamp(0.0, 0.77);
+            if (confidence > 0.5 && state == LockState.searching) {
+              state = LockState.locking;
+              firstLockSec ??= elapsedSec;
+            }
+            if (confidence > 0.73 && state == LockState.locking) {
+              state = LockState.stable;
+            }
+            break;
+
+          case MockDspMode.unstable:
+            // Скачущие значения, не достигает STABLE
+            confidence = 0.44;
+            state = LockState.unstable;
+            break;
+        }
+
+        final locked = state != LockState.searching;
+        final bpm = mode == MockDspMode.unstable
+            ? _targetBpmUnstable + (_rng.nextDouble() - 0.5) * 4.0 // Больше джиттера
+            : _targetBpmActive + (_rng.nextDouble() - 0.5) * 0.4;
+        final primaryBpm = locked ? bpm : null;
+        final inputLevel = mode == MockDspMode.idle ? -42.9 : -21.3;
+        final noiseLevel = mode == MockDspMode.idle ? 'low' : 'medium';
+
+        // Energy level: simulate increasing 1→7 as confidence grows (active mode),
+        // null in idle/searching. Present in locking/stable only.
+        final energyLevel = (confidence * 9 + 1).round().clamp(1, 10);
+        final energyResult = locked
+            ? EnergyResult(
+                level: energyLevel,
+                rmsDbfs: inputLevel + (_rng.nextDouble() - 0.5) * 2,
+                spectralFlux: 0.06 + confidence * 0.09,
+                onsetDensityHz: 2.8 + confidence * 0.5,
+              )
+            : null;
+
+        // Key result: emitted only in stable state (enough history for HPCP).
+        final keyResult = state == LockState.stable
+            ? const KeyResult(
+                key: 'A',
+                mode: 'Minor',
+                camelot: '8A',
+                confidence: 0.62,
+              )
+            : null;
+
+        yield DspResult(
+          primaryBpm: primaryBpm,
+          confidence: confidence,
+          lockState: state,
+          signalQuality: SignalQuality(
+            inputLevelDbfs: inputLevel + (_rng.nextDouble() - 0.5) * 0.5,
+            peakDbfs: inputLevel + 5 + (_rng.nextDouble() - 0.5) * 2,
+            clipping: false,
+            clippedFrameRatio: 0.0,
+            noiseLevel: noiseLevel,
+            snrEstimateDb: 14.2 + (_rng.nextDouble() - 0.5) * 1,
+            silence: false,
+            breakdownLikely: false,
+          ),
+          candidates: [
+            TempoCandidate(
+              bpm: bpm,
+              relation: 'main',
+              score: confidence,
+              rawScore: confidence,
+              stabilityScore: confidence * 0.9,
+              rangeScore: 1.0,
+              sourceBpm: null,
+            ),
+            TempoCandidate(
+              bpm: bpm / 2,
+              relation: 'half_time',
+              score: confidence * 0.4,
+              rawScore: confidence * 0.4,
+              stabilityScore: confidence * 0.4,
+              rangeScore: 0.1,
+              sourceBpm: bpm,
+            ),
+          ],
+          timing: DspTiming(
+            analysisTimeSec: elapsedSec,
+            windowTimeSec: 12.0,
+            hopTimeSec: 0.0025,
+            firstLockTimeSec: firstLockSec,
+          ),
+          debug: DspDebug(
+            onsetRateHz: locked ? 3.3 : 0.0,
+            onsetStrength: locked ? 0.025 : 0.0,
+            tempoPeakProminence: locked ? confidence * 0.6 : 0.0,
+            harmonicAmbiguity: 0.1,
             stabilityScore: confidence * 0.9,
-            rangeScore: 1.0,
-            sourceBpm: null,
+            warnings: const [],
           ),
-          // half-time-кандидат всегда виден (anti-fake: не скрываем).
-          TempoCandidate(
-            bpm: bpm / 2,
-            relation: 'half_time',
-            score: confidence * 0.4,
-            rawScore: confidence * 0.4,
-            stabilityScore: confidence * 0.4,
-            rangeScore: 0.1,
-            sourceBpm: bpm,
-          ),
-        ],
-        timing: DspTiming(
-          analysisTimeSec: elapsedSec,
-          windowTimeSec: 12.0,
-          hopTimeSec: 0.0025,
-          firstLockTimeSec: firstLockSec,
-        ),
-        debug: DspDebug(
-          onsetRateHz: locked ? 3.3 : 0.0,
-          onsetStrength: locked ? 0.025 : 0.0,
-          tempoPeakProminence: locked ? confidence * 0.6 : 0.0,
-          harmonicAmbiguity: 0.1,
-          stabilityScore: confidence * 0.9,
-          warnings: const [],
-        ),
-      );
+          energyResult: energyResult,
+          keyResult: keyResult,
+        );
+      }
+    } finally {
+      modeSub.cancel();
     }
   }
 
   /// Синтетический поток PCM-16 LE mono для `VizController.attachRawPcm()`.
   ///
   /// Эмитит чанки 2400 сэмплов каждые 50 мс (48 кГц). Форма сигнала —
-  /// kick+bass+hat+rumble, синхронизированные с `_targetBpm`, зеркалит
+  /// kick+bass+hat+rumble, синхронизированные с текущим режимом, зеркалит
   /// `.claude/mockup/index.html oscSample()`. Подаётся как `rawPcm:` в
   /// `main_web.dart`, чтобы waveform и live-spectrum анимировались.
   ///
   /// ТОЛЬКО для web preview — никогда не импортировать из `lib/main.dart`.
   static Stream<Uint8List> rawPcm() {
-    const hopMs = 60000.0 / _targetBpm; // мс на удар ~311 мс
     final rng = Random(0xC13);
     var tick = 0;
 
@@ -126,6 +200,12 @@ class MockDspStream {
       (_) {
         final chunkStart = tick * _kChunkSamples;
         tick++;
+
+        // Выбор BPM в зависимости от режима
+        final targetBpm = _currentMode == MockDspMode.unstable
+            ? _targetBpmUnstable
+            : _targetBpmActive;
+        final hopMs = 60000.0 / targetBpm; // мс на удар
 
         final bytes = Uint8List(_kChunkSamples * 2);
         for (var i = 0; i < _kChunkSamples; i++) {
@@ -152,3 +232,5 @@ class MockDspStream {
     );
   }
 }
+
+enum MockDspMode { idle, active, unstable }

@@ -1,8 +1,8 @@
 // Экран Paywall — Design System v2.
 //
 // Value headline + column headers + CTA-иерархия (primary filled / secondary outline).
-// "Debug Screen" переименован в "Signal Analyzer".
-// Roadmap card заменила дублирующую строку виджета.
+// "Debug Screen" переименован в "Signal Analyzer". Roadmap card для coming-soon.
+// v2: Multi-Genre и Setlist Tracker строки добавлены в таблицу сравнения.
 
 import 'package:flutter/material.dart';
 
@@ -69,6 +69,15 @@ class PaywallScreen extends StatelessWidget {
               _SecondaryCtaButton(
                 label: 'Annual — \$3.99/yr',
                 onTap: () => _purchaseAnnual(context),
+              ),
+              const SizedBox(height: 4),
+              Center(
+                child: Text(
+                  '14 дней бесплатно',
+                  style: AppTextStyles.mono(
+                    9, FontWeight.w400, AppColors.accent,
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
 
@@ -210,9 +219,13 @@ class _ComparisonTable extends StatelessWidget {
           const Divider(color: AppColors.borderFaint, height: 16),
           const _TableRow('BPM Range', '170–230', '155–230'),
           const Divider(color: AppColors.borderFaint, height: 16),
+          const _TableRow('Multi-Genre', '3 жанра', '7 + Custom'),
+          const Divider(color: AppColors.borderFaint, height: 16),
           const _TableRow('Анализатор сигнала', '—', '✓'),
           const Divider(color: AppColors.borderFaint, height: 16),
           const _TableRow('История', '30 сек', '24 ч'),
+          const Divider(color: AppColors.borderFaint, height: 16),
+          const _TableRow('Setlist Tracker', '—', '✓'),
           const Divider(color: AppColors.borderFaint, height: 16),
           const _TableRow('Export CSV/JSON', '—', '✓'),
         ],

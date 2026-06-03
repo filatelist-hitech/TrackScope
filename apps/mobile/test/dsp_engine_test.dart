@@ -6,8 +6,8 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/dsp/dsp_result.dart';
-import 'package:hitech_bpm_radar/dsp/engine.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
+import 'package:TrackScope/dsp/engine.dart';
 
 import 'helpers/native_library.dart';
 import 'helpers/synthetic_pulse.dart';

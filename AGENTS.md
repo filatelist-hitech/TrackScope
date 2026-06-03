@@ -1,4 +1,4 @@
-# AGENTS.md — hitech-bpm-radar
+# AGENTS.md — TrackScope
 
 ## Требования к тулчейну
 

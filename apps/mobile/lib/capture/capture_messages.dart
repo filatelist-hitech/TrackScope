@@ -18,6 +18,7 @@ class WorkerInit {
     required this.captureSampleRate,
     required this.pollIntervalMs,
     this.minBpm,
+    this.maxBpm,
   });
 
   /// Куда воркер должен слать снапшоты `DspResultMessage` и события
@@ -29,6 +30,9 @@ class WorkerInit {
   /// Минимальный BPM для hitech-диапазона (Free: 170, Pro: 155).
   /// Если null, используется дефолт Rust (155).
   final double? minBpm;
+  /// Максимальный BPM. Если задан вместе с minBpm — вызывается new_with_range
+  /// (Custom preset). Если null — new_with_min_bpm или new.
+  final double? maxBpm;
 }
 
 /// Main → worker: принять сырой кусок PCM-байтов. Формат сэмплов

@@ -126,7 +126,13 @@ class _MainScreenState extends State<MainScreen> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: StreamBuilder<DspResult>(
+          child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Adaptive waveform height: 90dp on compact screens (Pixel 4,
+            // iPhone SE etc.), 120dp on larger phones (Pixel 7, iPhone 14+).
+            // Threshold on body height: <680dp → compact.
+            final waveformHeight = constraints.maxHeight < 680 ? 90.0 : 120.0;
+            return StreamBuilder<DspResult>(
           stream: widget.results,
           builder: (context, snap) {
             if (snap.data != null) _lastResult = snap.data;
@@ -142,9 +148,9 @@ class _MainScreenState extends State<MainScreen> {
                 // ── Zone label: WAVEFORM ──────────────────────────────────
                 const _ZoneLabelRow(label: 'WAVEFORM'),
 
-                // ── Waveform — fixed 120 px ───────────────────────────────
+                // ── Waveform — adaptive height ────────────────────────────
                 SizedBox(
-                  height: 120,
+                  height: waveformHeight,
                   child: RepaintBoundary(
                     child: _WaveformView(viz: _viz),
                   ),
@@ -177,6 +183,8 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ],
             );
+          },
+        );
           },
         ),
         ),
@@ -366,29 +374,39 @@ class _GlassmorphismCard extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: BackdropFilter(
-            // Reduced from 12→8: meaningful perf improvement on real devices
-            // since the background repaints every ~50 ms with live waveform.
             filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: Container(
-              color: Colors.white.withAlpha(8),
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-              // NeverScrollableScrollPhysics: card never scrolls (no indicator,
-              // no programmatic scroll jump). ScrollView still handles overflow
-              // gracefully on small screens without throwing layout errors.
-              // The pill jitter was caused by ClampingScrollPhysics re-computing
-              // scroll extent during AnimatedSwitcher's dual-child phase (both
-              // old+new BPM text live briefly) → scroll position jumped. With
-              // NeverScrollable the position is locked to 0.
-              child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
-                child: _InfoTableContent(
-                  result: result,
-                  viz: viz,
-                  displayBpm: displayBpm,
-                  isLockingDisplay: isLockingDisplay,
-                  onBestCandidateTap: onBestCandidateTap,
-                  onBreak: onBreak,
-                ),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(8),
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+              clipBehavior: Clip.hardEdge,
+              child: LayoutBuilder(
+                builder: (context, cc) {
+                  // Adaptive compact mode based on empirically measured card heights:
+                  //   Pixel 4 (real): cc.maxHeight ≈ 312.7 dp → compact + no chips
+                  //   Pixel 7 (real): cc.maxHeight ≈ 350.8 dp → compact + chips shown
+                  //
+                  // compact (<420 dp): BPM font 52→52dp, spacings 3→1dp, break-padding 8→5dp.
+                  // showLockChips (≥335 dp): mode chips visible when enough vertical room.
+                  //   Pixel 4 (312.7 < 335) → chips hidden  → content ~257dp, inner ~302dp ✓
+                  //   Pixel 7 (350.8 ≥ 335) → chips shown   → content ~286dp, inner ~340dp ✓
+                  final bool compact = cc.maxHeight < 420;
+                  return OverflowBox(
+                    alignment: Alignment.topCenter,
+                    maxHeight: double.infinity,
+                    child: _InfoTableContent(
+                      result: result,
+                      viz: viz,
+                      displayBpm: displayBpm,
+                      isLockingDisplay: isLockingDisplay,
+                      onBestCandidateTap: onBestCandidateTap,
+                      onBreak: onBreak,
+                      compact: compact,
+                      showLockChips: cc.maxHeight >= 335,
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -408,6 +426,8 @@ class _InfoTableContent extends StatelessWidget {
     this.isLockingDisplay = false,
     this.onBestCandidateTap,
     this.onBreak,
+    this.showLockChips = true,
+    this.compact = false,
   });
 
   final DspResult? result;
@@ -416,10 +436,25 @@ class _InfoTableContent extends StatelessWidget {
   final bool isLockingDisplay;
   final VoidCallback? onBestCandidateTap;
   final VoidCallback? onBreak;
+  /// На очень компактных экранах (Pixel 4, iPhone SE) скрываем чипы
+  /// состояния захвата, чтобы строки ЭНЕРГИЯ/ТОНАЛЬНОСТЬ оставались видимыми.
+  final bool showLockChips;
+  /// Compact mode: BPM font 52 dp, spacings 1 dp, break-button padding reduced.
+  /// Activated by _GlassmorphismCard when cc.maxHeight < 420 dp.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    // Adaptive spacing and BPM font size driven by compact mode.
+    final double spacing = compact ? 1.0 : 3.0;
+    final double bpmFontSize = compact ? 52.0 : 72.0;
+
     final r = result;
+    final energyResult = r?.energyResult;
+    final keyResult = r?.keyResult;
+    final hasEnergy = energyResult != null;
+    final kResult = keyResult;
+    final hasKey = kResult != null && kResult.confidence >= 0.25;
     final bpm = displayBpm ?? r?.primaryBpm;
     final conf = r?.confidence ?? 0.0;
     final lock = r?.lockState ?? LockState.searching;
@@ -473,20 +508,23 @@ class _InfoTableContent extends StatelessWidget {
             viz: viz,
             isLockingDisplay: isLockingDisplay,
             isUnstable: lock == LockState.unstable,
+            fontSize: bpmFontSize,
+            subtitleHeight: compact ? 18.0 : 22.0,
           ),
         ),
 
         // ── Full-width confidence bar ────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 6),
+          padding: const EdgeInsets.only(top: 4, bottom: 4),
           child: ConfidenceBar(confidence: conf),
         ),
 
         // ── Break button — centered ──────────────────────────────────────────
         Center(
-          child: _BreakButtonInline(onTap: onBreak ?? () {}),
+          child: _BreakButtonInline(
+              onTap: onBreak ?? () {}, compactPadding: compact),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: spacing),
 
         // ── Stats grid ───────────────────────────────────────────────────────
         // Row 1: Уровень входа (left-aligned) | Лучший кандидат (centered)
@@ -506,7 +544,7 @@ class _InfoTableContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: spacing),
         // Row 2: Клиппинг (left-aligned) | Шум (centered)
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -528,7 +566,7 @@ class _InfoTableContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: spacing),
         // Row 3: ×½ / ×2 — full width centered (both half and double visible)
         Center(
           child: _StatCell(
@@ -537,10 +575,38 @@ class _InfoTableContent extends StatelessWidget {
             centered: true,
           ),
         ),
-        const SizedBox(height: 8),
+        // ── Energy + Key row — always shown; '—' when data unavailable ────────
+        SizedBox(height: spacing),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: hasEnergy
+                  ? _EnergyCell(energyResult: energyResult)
+                  : const _StatCell(label: 'ЭНЕРГИЯ', value: '—'),
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: hasKey
+                  ? _StatCell(
+                      label: 'ТОНАЛЬНОСТЬ',
+                      value: kResult.camelot ?? '—',
+                      centered: true,
+                    )
+                  : const _StatCell(
+                      label: 'ТОНАЛЬНОСТЬ',
+                      value: '—',
+                      centered: true,
+                    ),
+            ),
+          ],
+        ),
 
-        // ── Lock state chips ─────────────────────────────────────────────────
-        _ModeChips(lockState: lock),
+        if (showLockChips) ...[
+          SizedBox(height: spacing),
+          // ── Lock state chips ───────────────────────────────────────────────
+          _ModeChips(lockState: lock),
+        ],
       ],
     );
   }
@@ -622,15 +688,18 @@ class _StatCell extends StatelessWidget {
 // ── Break button inline (prototype .brk) ────────────────────────────────────
 
 class _BreakButtonInline extends StatelessWidget {
-  const _BreakButtonInline({required this.onTap});
+  const _BreakButtonInline({required this.onTap, this.compactPadding = false});
   final VoidCallback onTap;
+  /// When true, reduces vertical padding from 8 → 5 dp to save vertical space.
+  final bool compactPadding;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        padding: EdgeInsets.symmetric(
+            horizontal: 18, vertical: compactPadding ? 5 : 8),
         decoration: BoxDecoration(
           color: AppColors.surface,
           border: Border.all(color: AppColors.bpmEmpty),
@@ -742,12 +811,18 @@ class _AnimatedBpmDisplay extends StatelessWidget {
     required this.viz,
     this.isLockingDisplay = false,
     this.isUnstable = false,
+    this.fontSize = 72.0,
+    this.subtitleHeight = 22.0,
   });
 
   final double? bpm;
   final VizController viz;
   final bool isLockingDisplay;
   final bool isUnstable;
+  /// Hero BPM font size: 72 dp (normal) or 52 dp (compact).
+  final double fontSize;
+  /// Height of the subtitle row beneath the BPM number.
+  final double subtitleHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -763,9 +838,8 @@ class _AnimatedBpmDisplay extends StatelessWidget {
     final effectiveColor =
         isLockingDisplay ? textColor.withAlpha(180) : textColor;
 
-    // Font size: always 72 to prevent layout jank on state change.
-    const fontSize = 72.0;
-    const letterSpacing = -2.5;
+    // Letter spacing tighter at large size; slightly looser at compact 52 dp.
+    final double letterSpacing = fontSize < 60 ? -1.5 : -2.5;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -812,13 +886,8 @@ class _AnimatedBpmDisplay extends StatelessWidget {
             ),
           ),
         ),
-        // Meta row: BPM unit + unstable pill + range.
-        // Fixed-height SizedBox prevents _AnimatedBpmDisplay Column height
-        // from changing when the pill appears/disappears (pill ≈ 24 pt,
-        // plain text ≈ 18 pt → 6 pt shift was enough to trigger ScrollView).
-        const SizedBox(height: 5),
         SizedBox(
-          height: 28,
+          height: subtitleHeight,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
@@ -1041,6 +1110,60 @@ class _RecBadgeState extends State<_RecBadge>
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Energy cell (label + numeric value + compact colour bar) ─────────────────
+// Gated: only rendered when energyResult != null.
+// Color: levels 1–3 danger / 4–7 warning / 8–10 accent — mirrors ConfidenceBar.
+
+class _EnergyCell extends StatelessWidget {
+  const _EnergyCell({required this.energyResult});
+  final EnergyResult energyResult;
+
+  static Color _barColor(int level) {
+    if (level <= 3) return AppColors.danger;
+    if (level <= 7) return AppColors.warning;
+    return AppColors.accent;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final level = energyResult.level.clamp(1, 10);
+    final fraction = level / 10.0;
+    final color = _barColor(level);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'ЭНЕРГИЯ',
+          style: AppTextStyles.statsLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        // Compact layout: value + progress bar in one row (same height as _StatCell)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text('$level/10', style: AppTextStyles.statsValue),
+            const SizedBox(width: 6),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: fraction,
+                  backgroundColor: AppColors.surface2,
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                  minHeight: 4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

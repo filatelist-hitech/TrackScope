@@ -5,8 +5,8 @@
 // EMA-сглаженное при STABLE; снэпает к первому значению без задержки EMA.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/capture/bpm_display.dart';
-import 'package:hitech_bpm_radar/dsp/dsp_result.dart';
+import 'package:TrackScope/capture/bpm_display.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
 
 // ── Фабричные хелперы ────────────────────────────────────────────────────────
 

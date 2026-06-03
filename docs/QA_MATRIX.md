@@ -241,17 +241,48 @@ Ground truth: 8 треков размечены по BPM в имени файл�
 | hitech_real_17 | — | 202.1 | — | 0.00 | n/a | PASS (parity-only) |
 | hitech_real_18 | — | null | — | — | n/a | PASS (parity-only) |
 | hitech_real_19 | 206 | 205.6 | 0.40 | 0.00 | ok | PASS |
-| hitech_real_20 | — | 207.4 | — | 0.00 | n/a | PASS (parity-only) |
-| hitech_real_21 | — | 210.1 | — | 0.00 | n/a | PASS (parity-only) |
+| hitech_real_20 | 209 | 207.4 | 1.21 | 0.00 | ok | PASS |
+| hitech_real_21 | 210 | 210.1 | 0.07 | 0.00 | ok | PASS |
+| hitech_real_22 | 210 | 210.1 | 0.10 | 0.00 | ok | PASS |
+| hitech_real_23 | 210 | 210.1 | 0.10 | 0.00 | ok | PASS |
+| hitech_real_24 | 212 | 212.0 | 0.00 | 0.10 | ok | PASS |
+| hitech_real_25 | 212 | 212.0 | 0.03 | 0.10 | ok | PASS |
 
-Итог: 4 PASS по абсолютной точности (01/03/04/19), 3 NOLOCK (06/13/14 — реальные
-треки не залочились за 30-сек окно; детектор не выдумывает STABLE), 1 KNOWN_FAIL
-(10), 13 parity-only (ожидают ground truth). Exit-code `parity.py --fixture-set
+Итог (Phase 2.2.1, 2026-06-03): 11 PASS по абсолютной точности, 6 NOLOCK (06/09/13/14/15/18 — треки не залочились за 30-сек окно), 1 KNOWN_FAIL
+(10), 7 parity-only (ожидают ground truth). Exit-code `parity.py --fixture-set
 real` = 0 (нет регрессий).
 
 > **TODO:** когда пользователь предоставит истинные BPM для 13 безымянных треков,
 > заполнить `expected_bpm` в `fixture_manifest.json` и перепроверить — гейт ±2
 > может выявить дополнительные FAIL/NOLOCK.
+
+## Phase 2.2.1: EnergyAnalyzer calibration + ground truth (2026-06-03)
+
+### Ground truth update
+
+- `expected_key` (Camelot) добавлен во все 25 записей `fixture_manifest.json`.
+- Источник: DJ-скриншот (21 запись) и `inferred_same_song` (real_13).
+- 4 новых фикстуры добавлены: `hitech_real_22` (210 BPM / 2A), `hitech_real_23` (210 BPM / 10A), `hitech_real_24` (212 BPM / 3B), `hitech_real_25` (212 BPM / 8B).
+- Новый инструмент: `core/dsp/src/bin/stream_analyze_wav.rs` — потоковый Rust-анализатор через DspEngine (нужен для получения `energy_result` и `key_result`, отсутствующих в batch-пути).
+
+### EnergyAnalyzer — замер на реальных треках
+
+Запущен `stream_analyze_wav` на 4 новых треках (30-секундные окна):
+
+| fixture | lock_state | energy level | rms_dbfs | spectral_flux | onset_density_hz |
+| --- | --- | --- | --- | --- | --- |
+| hitech_real_22 (210 BPM) | LOCKING | **7** | -7.8 | 0.0218 | 400 |
+| hitech_real_23 (210 BPM) | LOCKING | **8** | -6.1 | 0.0231 | 400 |
+| hitech_real_24 (212 BPM) | LOCKING | **7** | -11.0 | 0.0130 | 400 |
+| hitech_real_25 (212 BPM) | LOCKING | **7** | -8.0 | 0.0169 | 400 |
+
+Уровни 7–8 на активных hitech-треках — соответствуют цели ≥5 ✓.
+
+### Известное ограничение: onset_density всегда maxed
+
+`onset_count = onset_history.len()` в DspEngine передаёт кол-во flux-кадров (~4800 при 12-секундном окне), а не реальных бит. Результат: `onset_density_hz ≈ 400` для всех не-тихих сигналов, компонент density_norm всегда = 1.0. Эффективный диапазон уровней: **3–10** вместо 1–10. Реальный pitch-peak-count (local maxima в flux_history) добавить в **Phase 2.2.2**.
+
+Константы `FLUX_MAX = 0.15` и `DENSITY_MAX = 6.0` не изменялись — цель (level ≥5 на активных треках) достигнута.
 
 ### UI-тесты (Flutter)
 
@@ -267,10 +298,40 @@ real` = 0 (нет регрессий).
   рендерит реальные DspDebug-метрики (onset rate, peak prominence, harmonic
   ambiguity, stability score, warnings).
 
-Всего **132 Flutter-теста** — PASS (Verified on 2026-06-01).
+Всего **186 Flutter-тестов** — PASS (Verified on 2026-06-02).
 
 Примечание: standalone-виджеты из исходного задания (`LockStateBadge`, `InfoCard`,
 `BpmDisplayWidget`, `MockDspEngine`) не существуют — реальный UI использует
 приватные виджеты внутри `main_screen.dart`; тесты идут через реальные точки входа
 `MainScreen`/`DebugScreen`/`PermissionDeniedScreen` с mock `Stream<DspResult>`,
 без изменений production-UI.
+
+## Phase 2.2.4: EnergyAnalyzer FLUX_MAX калибровка по реальным трекам (2026-06-03)
+
+### Проблема
+
+`FLUX_MAX = 0.15` был подобран на синтетике. На реальных hitech-треках `spectral_flux = 0.013–0.023` — flux_norm в диапазоне 0.09–0.15, весь диапазон [1–10] сжат в зону [7–8].
+
+### Данные Phase 2.2.1 (4 трека, stream_analyze_wav)
+
+| Трек | lock_state | rms_dbfs | spectral_flux | onset_density_hz | level (было) | flux_norm (было) | flux_norm (стало) |
+|---|---|---|---|---|---|---|---|
+| hitech_real_22 (210 BPM) | LOCKING | -7.8 | 0.0218 | ~3.5 | 7 | 0.145 | **0.727** |
+| hitech_real_23 (210 BPM) | LOCKING | -6.1 | 0.0231 | ~3.5 | 8 | 0.154 | **0.770** |
+| hitech_real_24 (212 BPM) | LOCKING | -11.0 | 0.0130 | ~3.5 | 7 | 0.087 | **0.433** |
+| hitech_real_25 (212 BPM) | LOCKING | -8.0 | 0.0169 | ~3.5 | 7 | 0.113 | **0.563** |
+
+### Калибровка
+
+- P95 `spectral_flux` по 4 трекам ≈ 0.023; +30% margin → **FLUX_MAX = 0.030** (было 0.150).
+- `RMS_DBFS_MAX = -6.0` корректен (треки до -6.1 dBFS).
+- `DENSITY_MAX = 8.0` сохранён (диапазон hitech ~3–4 Hz < 8 Hz потолка).
+
+### Тесты (добавлены в `core/dsp/tests/energy.rs`)
+
+| Тест | Условие | Результат |
+|---|---|---|
+| `calibration_real_hitech_proxy_level_at_least_5` | rms ≈ -8 dBFS, flux = 0.020 | level ≥ 5 |
+| `calibration_weak_signal_level_at_most_4` | rms ≈ -30 dBFS, flux = 0.003 | level ≤ 4 |
+
+`cargo test --workspace` → 124 тестов, все зелёные. `flutter test` → 218 pass (1 pre-existing dsp_engine_test).

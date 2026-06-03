@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 
 import 'capture/capture_bridge.dart';
 import 'capture/microphone_source.dart';
+import 'features/setlist/setlist_service.dart';
 import 'history/session_history_controller.dart';
 import 'monetization/feature_flags.dart';
 import 'monetization/pro_status_service.dart';
@@ -58,7 +59,7 @@ class HitechBpmRadarApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Hitech BPM Radar',
+      title: 'TrackScope',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -93,15 +94,27 @@ class _LiveCaptureScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Rebuild the entire capture pipeline when Pro status changes
-    // so that CaptureBridge picks up the new minBpm.
+    // Rebuild when Pro status OR selected genre changes so that
+    // CaptureBridge picks up the new minBpm/maxBpm.
+    // _CapturePipeline uses ValueKey(minBpm-maxBpm) so its state is
+    // only disposed/recreated when the BPM range actually changes —
+    // not on every unrelated AppSettings notification.
     return ListenableBuilder(
-      listenable: ProStatusService.instance,
+      listenable: Listenable.merge([
+        ProStatusService.instance,
+        AppSettings.instance,
+      ]),
       builder: (context, _) {
         final flags = FeatureFlags(
           isPro: _forceProTier || ProStatusService.instance.isPro,
+          selectedGenre: AppSettings.instance.selectedGenre,
+          customMin: AppSettings.instance.customMin,
+          customMax: AppSettings.instance.customMax,
         );
-        return _CapturePipeline(flags: flags);
+        return _CapturePipeline(
+          key: ValueKey('${flags.minBpm}-${flags.maxBpm}'),
+          flags: flags,
+        );
       },
     );
   }
@@ -110,7 +123,7 @@ class _LiveCaptureScaffold extends StatelessWidget {
 /// The actual capture pipeline that owns CaptureBridge, MicrophoneSource,
 /// and SessionHistoryController. Disposed and respawned on tier change.
 class _CapturePipeline extends StatefulWidget {
-  const _CapturePipeline({required this.flags});
+  const _CapturePipeline({super.key, required this.flags});
   final FeatureFlags flags;
 
   @override
@@ -121,17 +134,23 @@ class _CapturePipelineState extends State<_CapturePipeline> {
   late final CaptureBridge _bridge;
   late final MicrophoneSource _mic;
   late final SessionHistoryController _history;
+  late final SetlistService _setlist;
   Object? _startupError;
 
   @override
   void initState() {
     super.initState();
-    _bridge = CaptureBridge(minBpm: widget.flags.minBpm);
+    _bridge = CaptureBridge(
+      minBpm: widget.flags.minBpm,
+      maxBpm: widget.flags.maxBpm,
+    );
     _mic = MicrophoneSource();
     _history = SessionHistoryController(
       flags: widget.flags,
       resultsStream: _bridge.results,
     );
+    _setlist = SetlistService();
+    _bridge.results.listen(_setlist.onDspResult);
     _startCapture();
   }
 
@@ -154,6 +173,7 @@ class _CapturePipelineState extends State<_CapturePipeline> {
     _bridge.dispose();
     _mic.dispose();
     _history.dispose();
+    _setlist.dispose();
     super.dispose();
   }
 
@@ -161,7 +181,7 @@ class _CapturePipelineState extends State<_CapturePipeline> {
   Widget build(BuildContext context) {
     if (_startupError != null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Hitech BPM Radar')),
+        appBar: AppBar(title: const Text('TrackScope')),
         body: Padding(
           padding: const EdgeInsets.all(24),
           child: Center(
@@ -181,6 +201,7 @@ class _CapturePipelineState extends State<_CapturePipeline> {
       flags: widget.flags,
       historyController: _history,
       onBreak: _bridge.resetEngine,
+      setlistService: _setlist,
     );
   }
 }
