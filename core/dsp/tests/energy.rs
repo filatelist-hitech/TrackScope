@@ -172,6 +172,69 @@ fn flux_floor_does_not_silence_quiet_pulse_amplitude_0_1() {
     // Если STABLE не достигнут — это known limitation (тихий сигнал); не fail.
 }
 
+/// Phase 2.2.4: синтетический прокси реального hitech-трека.
+/// Параметры: rms ≈ -8 dBFS, flux ≈ 0.020 — соответствуют замерам треков 22–25.
+/// Ожидаем energy_level ≥ 5 (активный hitech-трек должен быть в верхней половине шкалы).
+#[test]
+fn calibration_real_hitech_proxy_level_at_least_5() {
+    use hitech_bpm_dsp::EnergyAnalyzer;
+
+    let sr = 48_000_f32;
+    let hop_sec = 0.0025_f32;
+    let mut ea = EnergyAnalyzer::new(sr, hop_sec);
+
+    // RMS ≈ -8 dBFS: amplitude = 10^(-8/20) * sqrt(2) ≈ 0.563 (sine RMS = amp/√2).
+    let amplitude = 0.563_f32;
+    let samples: Vec<f32> = (0..((sr * 3.0) as usize))
+        .map(|i| amplitude * (2.0 * std::f32::consts::PI * 200.0 * i as f32 / sr).sin())
+        .collect();
+    ea.push_samples(&samples);
+
+    // flux ≈ 0.020 — медиана по треку из Phase 2.2.1 (диапазон 0.013–0.023).
+    let flux_capacity = ((3.0 / hop_sec) as usize).max(8);
+    for _ in 0..flux_capacity {
+        ea.push_flux(0.020);
+    }
+
+    let result = ea.current_energy();
+    assert!(
+        result.level >= 5,
+        "real hitech proxy (rms≈-8 dBFS, flux≈0.020) should yield level >= 5, got {}",
+        result.level
+    );
+}
+
+/// Phase 2.2.4: слабый сигнал (rms ≈ -30 dBFS, низкий flux) → level ≤ 4.
+/// Гарантирует что шкала не «зависает» в высоких значениях для слабого сигнала.
+#[test]
+fn calibration_weak_signal_level_at_most_4() {
+    use hitech_bpm_dsp::EnergyAnalyzer;
+
+    let sr = 48_000_f32;
+    let hop_sec = 0.0025_f32;
+    let mut ea = EnergyAnalyzer::new(sr, hop_sec);
+
+    // RMS ≈ -30 dBFS: amplitude = 10^(-30/20) * sqrt(2) ≈ 0.045.
+    let amplitude = 0.045_f32;
+    let samples: Vec<f32> = (0..((sr * 3.0) as usize))
+        .map(|i| amplitude * (2.0 * std::f32::consts::PI * 200.0 * i as f32 / sr).sin())
+        .collect();
+    ea.push_samples(&samples);
+
+    // flux ≈ 0.003 — очень слабый транзиентный отклик.
+    let flux_capacity = ((3.0 / hop_sec) as usize).max(8);
+    for _ in 0..flux_capacity {
+        ea.push_flux(0.003);
+    }
+
+    let result = ea.current_energy();
+    assert!(
+        result.level <= 4,
+        "weak signal (rms≈-30 dBFS, flux≈0.003) should yield level <= 4, got {}",
+        result.level
+    );
+}
+
 /// Phase 2.2.3: FLUX_ABSOLUTE_FLOOR нижняя граница — очень тихий пульс amplitude=0.02 (~-34 dBFS).
 /// Документальный тест: не ожидаем STABLE. Фиксирует поведение в пограничном диапазоне.
 #[test]

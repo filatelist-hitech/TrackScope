@@ -463,6 +463,36 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 
 ---
 
+### Phase 2.2.4: калибровка FLUX_MAX по реальным hitech-трекам — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: устранить сжатие диапазона energy_level в зону [7–8] на активных треках из-за завышенного `FLUX_MAX`.
+
+**Проблема:** `FLUX_MAX = 0.15` (по синтетике). Реальные треки: `spectral_flux = 0.013–0.023` → flux_norm 0.09–0.15 → весь диапазон [1–10] «сжат» у потолка.
+
+Артефакты:
+- `core/dsp/src/energy_analyzer.rs` — `FLUX_MAX`: 0.15 → **0.030** (P95 реальных треков ≈ 0.023 + 30% margin). Обновлён комментарий с empirical-обоснованием.
+- `core/dsp/tests/energy.rs` — +2 теста: `calibration_real_hitech_proxy_level_at_least_5` (rms ≈ -8 dBFS, flux ≈ 0.020 → level ≥ 5), `calibration_weak_signal_level_at_most_4` (rms ≈ -30 dBFS, flux ≈ 0.003 → level ≤ 4).
+- `docs/DSP_ALGORITHM.md` — таблица констант обновлена, добавлен подраздел Phase 2.2.4 с таблицей сравнения flux_norm.
+- `docs/QA_MATRIX.md` — добавлена секция Phase 2.2.4 с данными 4 реальных треков.
+
+Критерии выхода — выполнены:
+- `FLUX_MAX = 0.030` откалиброван по эмпирическим данным (4 трека) ✓
+- Активные hitech-треки (rms ≈ -8 dBFS, flux ≈ 0.020) дают level ≥ 5 ✓
+- Слабый сигнал (rms ≈ -30 dBFS, flux ≈ 0.003) даёт level ≤ 4 ✓
+- Синтетика `clean_200` сохраняет level ∈ [4, 8] (без регрессий) ✓
+- `cargo test --workspace` → 124/124 Rust-тестов ✓
+- `flutter test` → 218 pass (1 pre-existing) ✓
+- `offline_lab.py report` → exit code 0 ✓
+- Тишина → `energy_result == None` ✓
+- CLIPPED_MIC → `energy_result == None` ✓
+- Нет изменений в `DspResult` / FFI / Dart-контракте / публичном API ✓
+
+Известные ограничения:
+- Калибровка по 4 трекам; для устойчивости нужно ≥ 10 треков из разных жанровых поддиапазонов.
+- Аудиофайлы треков 01–21 отсутствуют в репозитории (авторское право) — замер только по трекам 22–25.
+
+---
+
 ## Phase 2.3: Energy / Key Display на Radar Tab — **ЗАВЕРШЕНО** (2026-06-03)
 
 Цель: показать `EnergyResult.level` и `KeyResult.camelot` на главном экране (Radar tab) в info-таблице — данные уже жили в `DspResult` после Phase 2.1–2.2, требовался только UI-слой.

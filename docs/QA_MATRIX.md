@@ -305,3 +305,33 @@ real` = 0 (нет регрессий).
 приватные виджеты внутри `main_screen.dart`; тесты идут через реальные точки входа
 `MainScreen`/`DebugScreen`/`PermissionDeniedScreen` с mock `Stream<DspResult>`,
 без изменений production-UI.
+
+## Phase 2.2.4: EnergyAnalyzer FLUX_MAX калибровка по реальным трекам (2026-06-03)
+
+### Проблема
+
+`FLUX_MAX = 0.15` был подобран на синтетике. На реальных hitech-треках `spectral_flux = 0.013–0.023` — flux_norm в диапазоне 0.09–0.15, весь диапазон [1–10] сжат в зону [7–8].
+
+### Данные Phase 2.2.1 (4 трека, stream_analyze_wav)
+
+| Трек | lock_state | rms_dbfs | spectral_flux | onset_density_hz | level (было) | flux_norm (было) | flux_norm (стало) |
+|---|---|---|---|---|---|---|---|
+| hitech_real_22 (210 BPM) | LOCKING | -7.8 | 0.0218 | ~3.5 | 7 | 0.145 | **0.727** |
+| hitech_real_23 (210 BPM) | LOCKING | -6.1 | 0.0231 | ~3.5 | 8 | 0.154 | **0.770** |
+| hitech_real_24 (212 BPM) | LOCKING | -11.0 | 0.0130 | ~3.5 | 7 | 0.087 | **0.433** |
+| hitech_real_25 (212 BPM) | LOCKING | -8.0 | 0.0169 | ~3.5 | 7 | 0.113 | **0.563** |
+
+### Калибровка
+
+- P95 `spectral_flux` по 4 трекам ≈ 0.023; +30% margin → **FLUX_MAX = 0.030** (было 0.150).
+- `RMS_DBFS_MAX = -6.0` корректен (треки до -6.1 dBFS).
+- `DENSITY_MAX = 8.0` сохранён (диапазон hitech ~3–4 Hz < 8 Hz потолка).
+
+### Тесты (добавлены в `core/dsp/tests/energy.rs`)
+
+| Тест | Условие | Результат |
+|---|---|---|
+| `calibration_real_hitech_proxy_level_at_least_5` | rms ≈ -8 dBFS, flux = 0.020 | level ≥ 5 |
+| `calibration_weak_signal_level_at_most_4` | rms ≈ -30 dBFS, flux = 0.003 | level ≤ 4 |
+
+`cargo test --workspace` → 124 тестов, все зелёные. `flutter test` → 218 pass (1 pre-existing dsp_engine_test).
