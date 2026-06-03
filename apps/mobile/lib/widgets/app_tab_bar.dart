@@ -29,7 +29,7 @@ class AppTabBar extends StatelessWidget {
           top: BorderSide(color: AppColors.borderFaint),
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(0, 14, 0, 20),
+      padding: EdgeInsets.fromLTRB(0, 14, 0, 20 + MediaQuery.paddingOf(context).bottom),
       child: Row(
         children: AppTab.values.map((tab) {
           return _TabItem(
