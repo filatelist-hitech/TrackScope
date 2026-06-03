@@ -1,7 +1,7 @@
 name: TrackScope
 description: Realtime hitech/psytrance BPM radar mobile shell.
 publish_to: "none"
-version: 1.1.1+4
+version: 1.1.1+3
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
