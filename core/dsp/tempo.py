@@ -148,7 +148,7 @@ def analyze_pcm(
         confidence = min(confidence, 0.28)
         primary_bpm = None
         warnings.append("weak periodic onset structure")
-    elif confidence >= 0.70 and duration_sec >= 6.0:
+    elif confidence >= 0.65 and duration_sec >= 6.0:
         lock_state = "STABLE"
         timing = DspTiming(
             analysis_time_sec=round(duration_sec, 3),

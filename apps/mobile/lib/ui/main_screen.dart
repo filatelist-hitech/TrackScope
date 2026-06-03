@@ -126,7 +126,13 @@ class _MainScreenState extends State<MainScreen> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: StreamBuilder<DspResult>(
+          child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Adaptive waveform height: 90dp on compact screens (Pixel 4,
+            // iPhone SE etc.), 120dp on larger phones (Pixel 7, iPhone 14+).
+            // Threshold on body height: <680dp → compact.
+            final waveformHeight = constraints.maxHeight < 680 ? 90.0 : 120.0;
+            return StreamBuilder<DspResult>(
           stream: widget.results,
           builder: (context, snap) {
             if (snap.data != null) _lastResult = snap.data;
@@ -142,9 +148,9 @@ class _MainScreenState extends State<MainScreen> {
                 // ── Zone label: WAVEFORM ──────────────────────────────────
                 const _ZoneLabelRow(label: 'WAVEFORM'),
 
-                // ── Waveform — fixed 120 px ──────────────────────────────
+                // ── Waveform — adaptive height ────────────────────────────
                 SizedBox(
-                  height: 120,
+                  height: waveformHeight,
                   child: RepaintBoundary(
                     child: _WaveformView(viz: _viz),
                   ),
@@ -177,6 +183,8 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ],
             );
+          },
+        );
           },
         ),
         ),
@@ -373,16 +381,21 @@ class _GlassmorphismCard extends StatelessWidget {
               ),
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
               clipBehavior: Clip.hardEdge,
-              child: OverflowBox(
-                alignment: Alignment.topCenter,
-                maxHeight: double.infinity,
-                child: _InfoTableContent(
-                  result: result,
-                  viz: viz,
-                  displayBpm: displayBpm,
-                  isLockingDisplay: isLockingDisplay,
-                  onBestCandidateTap: onBestCandidateTap,
-                  onBreak: onBreak,
+              child: LayoutBuilder(
+                builder: (context, cc) => OverflowBox(
+                  alignment: Alignment.topCenter,
+                  maxHeight: double.infinity,
+                  child: _InfoTableContent(
+                    result: result,
+                    viz: viz,
+                    displayBpm: displayBpm,
+                    isLockingDisplay: isLockingDisplay,
+                    onBestCandidateTap: onBestCandidateTap,
+                    onBreak: onBreak,
+                    // showLockChips: compact-screen chip-hiding is a TODO
+                    // (Phase 14) — needs reliable height measurement before
+                    // activating; keep default true to not break widget tests.
+                  ),
                 ),
               ),
             ),
@@ -403,6 +416,7 @@ class _InfoTableContent extends StatelessWidget {
     this.isLockingDisplay = false,
     this.onBestCandidateTap,
     this.onBreak,
+    this.showLockChips = true,
   });
 
   final DspResult? result;
@@ -411,6 +425,9 @@ class _InfoTableContent extends StatelessWidget {
   final bool isLockingDisplay;
   final VoidCallback? onBestCandidateTap;
   final VoidCallback? onBreak;
+  /// На очень компактных экранах (Pixel 4, iPhone SE) скрываем чипы
+  /// состояния захвата, чтобы строки ЭНЕРГИЯ/ТОНАЛЬНОСТЬ оставались видимыми.
+  final bool showLockChips;
 
   @override
   Widget build(BuildContext context) {
@@ -564,10 +581,11 @@ class _InfoTableContent extends StatelessWidget {
           ],
         ),
 
-        const SizedBox(height: 3),
-
-        // ── Lock state chips ─────────────────────────────────────────────────
-        _ModeChips(lockState: lock),
+        if (showLockChips) ...[
+          const SizedBox(height: 3),
+          // ── Lock state chips ───────────────────────────────────────────────
+          _ModeChips(lockState: lock),
+        ],
       ],
     );
   }
@@ -1097,19 +1115,24 @@ class _EnergyCell extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 2),
-        Text(
-          '$level/10',
-          style: AppTextStyles.statsValue,
-        ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: LinearProgressIndicator(
-            value: fraction,
-            backgroundColor: AppColors.surface2,
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-            minHeight: 4,
-          ),
+        // Compact layout: value + progress bar in one row (same height as _StatCell)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text('$level/10', style: AppTextStyles.statsValue),
+            const SizedBox(width: 6),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: fraction,
+                  backgroundColor: AppColors.surface2,
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                  minHeight: 4,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

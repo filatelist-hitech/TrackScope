@@ -211,6 +211,54 @@ void main() {
       expect(9, equals(9)); // heavy → 9
     });
 
+    test('smooth() передаёт keyResult и energyResult без изменений', () {
+      final s = BpmSmoother();
+      const key = KeyResult(confidence: 0.72, camelot: '8A', key: 'A', mode: 'Minor');
+      const energy = EnergyResult(
+        level: 7,
+        rmsDbfs: -8.0,
+        spectralFlux: 0.02,
+        onsetDensityHz: 3.5,
+      );
+      final raw = DspResult(
+        primaryBpm: 200.0,
+        confidence: 0.80,
+        lockState: LockState.locking,
+        signalQuality: const SignalQuality(
+          inputLevelDbfs: -16.0,
+          peakDbfs: null,
+          clipping: false,
+          clippedFrameRatio: 0.0,
+          noiseLevel: 'medium',
+          snrEstimateDb: 2.7,
+          silence: false,
+          breakdownLikely: false,
+        ),
+        candidates: const [],
+        timing: const DspTiming(
+          analysisTimeSec: 10.0,
+          windowTimeSec: 12.0,
+          hopTimeSec: 0.0025,
+          firstLockTimeSec: null,
+        ),
+        debug: const DspDebug(
+          onsetRateHz: 0.0,
+          onsetStrength: 0.0,
+          tempoPeakProminence: 0.0,
+          harmonicAmbiguity: 0.0,
+          stabilityScore: 0.0,
+          warnings: [],
+        ),
+        keyResult: key,
+        energyResult: energy,
+      );
+      final smoothed = s.smooth(raw);
+      expect(smoothed.keyResult, same(key),
+          reason: 'smoother не должен отбрасывать keyResult');
+      expect(smoothed.energyResult, same(energy),
+          reason: 'smoother не должен отбрасывать energyResult');
+    });
+
     test('BPM не изобретается при lockState != STABLE/LOCKING', () {
       final s = BpmSmoother(bpmWindowSize: 3);
       // Заполняем окно.
