@@ -2,7 +2,7 @@
 ///
 /// Фикстуры генерируются в памяти: чистые синусы и аккорды.
 /// Anti-fake инварианты: тишина и шум не дают key_result.
-use hitech_bpm_dsp::key_analyzer::{to_camelot, CamelotKey, KeyMode, MusicalKey};
+use hitech_bpm_dsp::key_analyzer::{to_camelot, CamelotKey, KeyAnalyzer, KeyMode, MusicalKey};
 use hitech_bpm_dsp::{DspConfig, DspEngine, DspResult, KeyResult};
 
 // ── Вспомогательные генераторы ─────────────────────────────────────────────
@@ -56,6 +56,21 @@ fn push_and_analyze(samples: &[f32], sample_rate: u32) -> DspResult {
         engine.push_samples(c, sample_rate);
     }
     engine.analyze()
+}
+
+/// Прямой анализ через KeyAnalyzer — без lock_state-гейта DspEngine.
+///
+/// DspEngine подавляет key_result при NOISE_ONLY. Чистый монотональный синус
+/// (нет ритмических онсетов → flux≈0) получает NOISE_ONLY — это корректное
+/// anti-fake поведение. Для верификации HPCP-маппинга и K-S корреляции
+/// KeyAnalyzer тестируется в изоляции, минуя этот гейт.
+fn analyze_key_direct(samples: &[f32], sample_rate: u32) -> KeyResult {
+    let mut analyzer = KeyAnalyzer::new(sample_rate as f32);
+    let chunk = (sample_rate as usize) / 10;
+    for c in samples.chunks(chunk.max(1)) {
+        analyzer.push_samples(c);
+    }
+    analyzer.current_key()
 }
 
 // ── Camelot unit-тесты ────────────────────────────────────────────────────
@@ -117,63 +132,69 @@ fn key_result_present_in_json_when_some() {
 // ── Детекция на синусах ───────────────────────────────────────────────────
 
 #[test]
-fn a440_sine_detects_a() {
-    // 440 Hz = A4 → pitch class 9 (A)
-    let samples = pure_sine(440.0, 10.0, 48000);
-    let result = push_and_analyze(&samples, 48000);
-    if let Some(kr) = &result.key_result {
-        assert_eq!(
-            kr.key,
-            Some(MusicalKey::A),
-            "A440 должен детектировать тональность A, confidence={}",
-            kr.confidence
-        );
-    } else {
-        // Допустимо: уверенность может быть ниже порога на чистом синусе
-        // без гармоник. Тест помечает проблему как предупреждение, не падает.
-        // Реальный use-case — аккорды, не одиночные синусы.
-        eprintln!("WARN: a440 sine не выдал key_result (confidence ниже порога)");
-    }
+fn a440_sine_maps_to_pitch_class_a() {
+    // 440 Hz = A4 → pitch class 9 (A). Тест через KeyAnalyzer напрямую:
+    // через DspEngine чистый синус → NOISE_ONLY → key_result подавляется
+    // (нет ритмических онсетов), что является корректным anti-fake поведением.
+    // Pearson(A_minor_profile, HPCP{9: dominant}) ≈ 0.69 → confidence ≈ 0.84.
+    let samples = pure_sine(440.0, 12.0, 48000);
+    let kr = analyze_key_direct(&samples, 48000);
+    assert!(
+        kr.key.is_some(),
+        "A440 через KeyAnalyzer должен давать key_result (confidence={:.3})",
+        kr.confidence
+    );
+    assert_eq!(
+        kr.key,
+        Some(MusicalKey::A),
+        "A440 → ключ A, confidence={:.3}",
+        kr.confidence
+    );
 }
 
 #[test]
-fn c4_sine_detects_c() {
-    // 261.63 Hz = C4 → pitch class 0 (C)
-    let samples = pure_sine(261.63, 10.0, 48000);
-    let result = push_and_analyze(&samples, 48000);
-    if let Some(kr) = &result.key_result {
-        assert_eq!(
-            kr.key,
-            Some(MusicalKey::C),
-            "C4 должен детектировать тональность C, confidence={}",
-            kr.confidence
-        );
-    } else {
-        eprintln!("WARN: C4 sine не выдал key_result (confidence ниже порога)");
-    }
+fn c4_sine_maps_to_pitch_class_c() {
+    // 261.63 Hz = C4 → pitch class 0 (C). Аналогично: KeyAnalyzer напрямую.
+    let samples = pure_sine(261.63, 12.0, 48000);
+    let kr = analyze_key_direct(&samples, 48000);
+    assert!(
+        kr.key.is_some(),
+        "C4 через KeyAnalyzer должен давать key_result (confidence={:.3})",
+        kr.confidence
+    );
+    assert_eq!(
+        kr.key,
+        Some(MusicalKey::C),
+        "C4 → ключ C, confidence={:.3}",
+        kr.confidence
+    );
 }
 
 #[test]
-fn a_minor_chord_detects_a_minor_or_high_confidence() {
-    // A-minor chord: A4=440, C5=523.25, E5=659.25 Hz
+fn a_minor_chord_detects_a_minor_camelot_8a() {
+    // A-minor chord через DspEngine: биения между A4/C5/E5 создают ненулевой
+    // spectral flux → не NOISE_ONLY → key_result не подавляется.
+    // K-S A_minor выигрывает у C_major: Pearson ≈ 0.89 vs 0.58
+    // (A=9 получает вес 6.33 в профиле root=A, тогда как в C_major — 3.66).
     let samples = chord_sine(&[440.0, 523.25, 659.25], 12.0, 48000);
     let result = push_and_analyze(&samples, 48000);
-    if let Some(kr) = &result.key_result {
-        // Ключ должен быть A или C (тесная гармония — оба возможны).
-        // Уверенность должна быть выше порога (0.25).
-        assert!(
-            kr.confidence > 0.25,
-            "A-minor chord: confidence должен быть > 0.25, got {}",
-            kr.confidence
-        );
-        assert!(
-            kr.key.is_some(),
-            "A-minor chord: key должен присутствовать"
-        );
-    } else {
-        // Нет key_result — confidence ниже порога. Не фейкаем.
-        eprintln!("WARN: A-minor chord не выдал key_result");
-    }
+    let kr = result
+        .key_result
+        .expect("A-minor chord через DspEngine должен давать key_result");
+    assert_eq!(
+        kr.key,
+        Some(MusicalKey::A),
+        "A-minor chord → ключ A, confidence={:.3}",
+        kr.confidence
+    );
+    assert_eq!(
+        kr.mode,
+        Some(KeyMode::Minor),
+        "A-minor chord → режим Minor, confidence={:.3}",
+        kr.confidence
+    );
+    let camelot = kr.camelot.expect("camelot должен присутствовать");
+    assert_eq!(camelot.label(), "8A", "A minor → Camelot 8A");
 }
 
 // ── Anti-fake: тишина и шум ───────────────────────────────────────────────

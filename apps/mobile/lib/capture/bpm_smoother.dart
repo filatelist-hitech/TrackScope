@@ -118,6 +118,8 @@ class BpmSmoother {
       candidates: raw.candidates, // raw-кандидаты никогда не скрываем
       timing: raw.timing,
       debug: raw.debug, // debug-метрики пробрасываем без изменений
+      keyResult: raw.keyResult,
+      energyResult: raw.energyResult,
     );
   }
 

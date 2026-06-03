@@ -245,6 +245,11 @@ void main() {
   testWidgets(
       'MainScreen renders primary_bpm and ACTIVE chip from STABLE snapshot',
       (tester) async {
+    // Large screen → card >420 dp → normal (non-compact) mode, chips visible.
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
     addTearDown(() async {
@@ -306,6 +311,11 @@ void main() {
 
   testWidgets('MainScreen shows поиск badge for SEARCHING snapshot',
       (tester) async {
+    // Large screen → card >420 dp → chips visible.
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
     addTearDown(() async {
@@ -329,6 +339,11 @@ void main() {
 
   testWidgets('MainScreen shows перегруз badge for CLIPPED_MIC',
       (tester) async {
+    // Large screen → chips visible.
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
     addTearDown(() async {
@@ -372,6 +387,11 @@ void main() {
   });
 
   testWidgets('MainScreen shows брейк badge for BREAKDOWN', (tester) async {
+    // Large screen → chips visible.
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
     addTearDown(() async { await ctrl.close(); await errs.close(); });
@@ -387,6 +407,11 @@ void main() {
   });
 
   testWidgets('MainScreen shows только шум badge for NOISE_ONLY', (tester) async {
+    // Large screen → chips visible.
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
     addTearDown(() async { await ctrl.close(); await errs.close(); });
@@ -402,6 +427,11 @@ void main() {
   });
 
   testWidgets('MainScreen shows захват badge for LOCKING', (tester) async {
+    // Large screen → chips visible.
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final ctrl = StreamController<DspResult>.broadcast();
     final errs = StreamController<CaptureError>.broadcast();
     addTearDown(() async { await ctrl.close(); await errs.close(); });
@@ -706,6 +736,64 @@ void main() {
     await tester.pump();
 
     // No result at all — energy and key rows show placeholders
+    expect(find.text('ЭНЕРГИЯ'), findsOneWidget);
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
+  });
+
+  // ── Compact layout (Phase 14) ───────────────────────────────────────────────
+
+  testWidgets('compact layout hides mode chips when card height is small',
+      (tester) async {
+    // 480×650 @ 1x. Body = 606dp (<680) → waveform 90dp. Card ≈ 315dp (<335).
+    // Matches real Pixel 4 card height (312.7dp measured).
+    // Wide enough (480dp) to avoid horizontal overflow in _StatCell.
+    tester.view.physicalSize = const Size(480, 650);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshot());
+    await tester.pump();
+    await tester.pump();
+
+    // On small screen card < 380dp → chips are hidden.
+    expect(find.text('ПОИСК'), findsNothing);
+    expect(find.text('ЗАХВАТ'), findsNothing);
+    expect(find.text('НЕСТАБ.'), findsNothing);
+  });
+
+  testWidgets('energy and key labels always visible in compact mode',
+      (tester) async {
+    // Same compact screen: 480×650 @ 1x, card ≈ 315dp (<335) → chips hidden,
+    // but ЭНЕРГИЯ / ТОНАЛЬНОСТЬ labels must remain visible.
+    tester.view.physicalSize = const Size(480, 650);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshot());
+    await tester.pump();
+    await tester.pump();
+
+    // ЭНЕРГИЯ and ТОНАЛЬНОСТЬ labels always present even in compact mode.
     expect(find.text('ЭНЕРГИЯ'), findsOneWidget);
     expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
   });

@@ -873,7 +873,7 @@ fn analyze_from_envelope(
         lock_state = LockState::NoiseOnly;
         confidence = confidence.min(0.28);
         primary_bpm = None;
-    } else if confidence >= 0.70 && duration_sec >= config.lock_min_seconds {
+    } else if confidence >= 0.65 && duration_sec >= config.lock_min_seconds {
         lock_state = LockState::Stable;
         timing.first_lock_time_sec = Some(config.lock_min_seconds.min(round_3(duration_sec)));
     } else if confidence < 0.45 {
@@ -951,7 +951,7 @@ pub fn analyze_candidates(
 
     let primary = candidates.first().cloned();
     let confidence = primary.as_ref().map(|item| item.score).unwrap_or(0.0).clamp(0.0, 1.0);
-    let lock_state = if confidence >= 0.70 && analysis_time_sec >= config.stable_min_seconds {
+    let lock_state = if confidence >= 0.65 && analysis_time_sec >= config.stable_min_seconds {
         LockState::Stable
     } else if confidence >= 0.45 && analysis_time_sec >= config.lock_min_seconds {
         LockState::Locking
@@ -1481,7 +1481,8 @@ fn signal_factor(signal_quality: &SignalQuality) -> f32 {
         } else if snr >= 3.0 {
             0.45 + 0.27 * ((snr - 3.0) / 7.0)
         } else {
-            0.28 // очень низкий SNR — близко к NOISE_ONLY
+            0.40 // низкий SNR в реальных клубных условиях — percentile-метод
+                 // переоценивает шум в помещении; 0.40 = нижняя граница диапазона 3–10 dB
         };
     }
 

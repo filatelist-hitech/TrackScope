@@ -20,6 +20,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../viz/live_spectrum_painter.dart';
 import '../viz/viz_controller.dart';
+import '../widgets/camelot_wheel_widget.dart';
 
 class SignalAnalyzerScreen extends StatefulWidget {
   const SignalAnalyzerScreen({super.key, required this.results, this.rawPcm});
@@ -135,6 +136,12 @@ class _SignalAnalyzerScreenState extends State<SignalAnalyzerScreen> {
                     if (r.energyResult != null) ...[
                       const _SectionHeader('ЭНЕРГИЯ'),
                       _EnergyGroup(energy: r.energyResult!),
+                    ],
+
+                    // ── Тональность ───────────────────────────────────
+                    if (r.keyResult != null) ...[
+                      const _SectionHeader('ТОНАЛЬНОСТЬ'),
+                      _KeyGroup(keyResult: r.keyResult!),
                     ],
 
                     // ── Метрики алгоритма ─────────────────────────────
@@ -475,7 +482,7 @@ class _EnergyRow extends StatelessWidget {
           ),
         ),
         if (showDivider)
-          Divider(height: 1, thickness: 0.5, color: AppColors.surfaceHigh),
+          const Divider(height: 1, thickness: 0.5, color: AppColors.surfaceHigh),
       ],
     );
   }
@@ -716,6 +723,49 @@ class _WarningRow extends StatelessWidget {
         if (showDivider)
           const Divider(height: 1, thickness: 1, color: Color(0xFF080C09)),
       ],
+    );
+  }
+}
+
+// ── Key (tonal) group ─────────────────────────────────────────────────────────
+// Camelot Wheel + one-line summary: "A Minor · 8A · 62%"
+
+class _KeyGroup extends StatelessWidget {
+  const _KeyGroup({required this.keyResult});
+  final KeyResult keyResult;
+
+  @override
+  Widget build(BuildContext context) {
+    final camelot = keyResult.camelot;
+    final keyName = keyResult.key ?? '';
+    final mode = keyResult.mode ?? '';
+    final confPct = (keyResult.confidence * 100).round();
+
+    // Build summary line: "A Minor · 8A · 62%"
+    final parts = <String>[];
+    if (keyName.isNotEmpty && mode.isNotEmpty) parts.add('$keyName $mode');
+    if (camelot != null) parts.add(camelot);
+    parts.add('$confPct%');
+    final summary = parts.join(' · ');
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+      decoration: BoxDecoration(
+        color: AppColors.surface2,
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Column(
+        children: [
+          CamelotWheelWidget(keyResult: keyResult, size: 180),
+          const SizedBox(height: 10),
+          Text(
+            summary,
+            style: AppTextStyles.mono(11, FontWeight.w500, AppColors.textPrimary),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }
