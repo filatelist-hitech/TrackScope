@@ -382,21 +382,31 @@ class _GlassmorphismCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
               clipBehavior: Clip.hardEdge,
               child: LayoutBuilder(
-                builder: (context, cc) => OverflowBox(
-                  alignment: Alignment.topCenter,
-                  maxHeight: double.infinity,
-                  child: _InfoTableContent(
-                    result: result,
-                    viz: viz,
-                    displayBpm: displayBpm,
-                    isLockingDisplay: isLockingDisplay,
-                    onBestCandidateTap: onBestCandidateTap,
-                    onBreak: onBreak,
-                    // showLockChips: compact-screen chip-hiding is a TODO
-                    // (Phase 14) — needs reliable height measurement before
-                    // activating; keep default true to not break widget tests.
-                  ),
-                ),
+                builder: (context, cc) {
+                  // Adaptive compact mode based on empirically measured card heights:
+                  //   Pixel 4 (real): cc.maxHeight ≈ 312.7 dp → compact + no chips
+                  //   Pixel 7 (real): cc.maxHeight ≈ 350.8 dp → compact + chips shown
+                  //
+                  // compact (<420 dp): BPM font 52→52dp, spacings 3→1dp, break-padding 8→5dp.
+                  // showLockChips (≥335 dp): mode chips visible when enough vertical room.
+                  //   Pixel 4 (312.7 < 335) → chips hidden  → content ~257dp, inner ~302dp ✓
+                  //   Pixel 7 (350.8 ≥ 335) → chips shown   → content ~286dp, inner ~340dp ✓
+                  final bool compact = cc.maxHeight < 420;
+                  return OverflowBox(
+                    alignment: Alignment.topCenter,
+                    maxHeight: double.infinity,
+                    child: _InfoTableContent(
+                      result: result,
+                      viz: viz,
+                      displayBpm: displayBpm,
+                      isLockingDisplay: isLockingDisplay,
+                      onBestCandidateTap: onBestCandidateTap,
+                      onBreak: onBreak,
+                      compact: compact,
+                      showLockChips: cc.maxHeight >= 335,
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -417,6 +427,7 @@ class _InfoTableContent extends StatelessWidget {
     this.onBestCandidateTap,
     this.onBreak,
     this.showLockChips = true,
+    this.compact = false,
   });
 
   final DspResult? result;
@@ -428,9 +439,16 @@ class _InfoTableContent extends StatelessWidget {
   /// На очень компактных экранах (Pixel 4, iPhone SE) скрываем чипы
   /// состояния захвата, чтобы строки ЭНЕРГИЯ/ТОНАЛЬНОСТЬ оставались видимыми.
   final bool showLockChips;
+  /// Compact mode: BPM font 52 dp, spacings 1 dp, break-button padding reduced.
+  /// Activated by _GlassmorphismCard when cc.maxHeight < 420 dp.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    // Adaptive spacing and BPM font size driven by compact mode.
+    final double spacing = compact ? 1.0 : 3.0;
+    final double bpmFontSize = compact ? 52.0 : 72.0;
+
     final r = result;
     final energyResult = r?.energyResult;
     final keyResult = r?.keyResult;
@@ -490,6 +508,8 @@ class _InfoTableContent extends StatelessWidget {
             viz: viz,
             isLockingDisplay: isLockingDisplay,
             isUnstable: lock == LockState.unstable,
+            fontSize: bpmFontSize,
+            subtitleHeight: compact ? 18.0 : 22.0,
           ),
         ),
 
@@ -501,9 +521,10 @@ class _InfoTableContent extends StatelessWidget {
 
         // ── Break button — centered ──────────────────────────────────────────
         Center(
-          child: _BreakButtonInline(onTap: onBreak ?? () {}),
+          child: _BreakButtonInline(
+              onTap: onBreak ?? () {}, compactPadding: compact),
         ),
-        const SizedBox(height: 2),
+        SizedBox(height: spacing),
 
         // ── Stats grid ───────────────────────────────────────────────────────
         // Row 1: Уровень входа (left-aligned) | Лучший кандидат (centered)
@@ -523,7 +544,7 @@ class _InfoTableContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 3),
+        SizedBox(height: spacing),
         // Row 2: Клиппинг (left-aligned) | Шум (centered)
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -545,7 +566,7 @@ class _InfoTableContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 3),
+        SizedBox(height: spacing),
         // Row 3: ×½ / ×2 — full width centered (both half and double visible)
         Center(
           child: _StatCell(
@@ -555,7 +576,7 @@ class _InfoTableContent extends StatelessWidget {
           ),
         ),
         // ── Energy + Key row — always shown; '—' when data unavailable ────────
-        const SizedBox(height: 3),
+        SizedBox(height: spacing),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -582,7 +603,7 @@ class _InfoTableContent extends StatelessWidget {
         ),
 
         if (showLockChips) ...[
-          const SizedBox(height: 3),
+          SizedBox(height: spacing),
           // ── Lock state chips ───────────────────────────────────────────────
           _ModeChips(lockState: lock),
         ],
@@ -667,15 +688,18 @@ class _StatCell extends StatelessWidget {
 // ── Break button inline (prototype .brk) ────────────────────────────────────
 
 class _BreakButtonInline extends StatelessWidget {
-  const _BreakButtonInline({required this.onTap});
+  const _BreakButtonInline({required this.onTap, this.compactPadding = false});
   final VoidCallback onTap;
+  /// When true, reduces vertical padding from 8 → 5 dp to save vertical space.
+  final bool compactPadding;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+        padding: EdgeInsets.symmetric(
+            horizontal: 18, vertical: compactPadding ? 5 : 8),
         decoration: BoxDecoration(
           color: AppColors.surface,
           border: Border.all(color: AppColors.bpmEmpty),
@@ -787,12 +811,18 @@ class _AnimatedBpmDisplay extends StatelessWidget {
     required this.viz,
     this.isLockingDisplay = false,
     this.isUnstable = false,
+    this.fontSize = 72.0,
+    this.subtitleHeight = 22.0,
   });
 
   final double? bpm;
   final VizController viz;
   final bool isLockingDisplay;
   final bool isUnstable;
+  /// Hero BPM font size: 72 dp (normal) or 52 dp (compact).
+  final double fontSize;
+  /// Height of the subtitle row beneath the BPM number.
+  final double subtitleHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -808,9 +838,8 @@ class _AnimatedBpmDisplay extends StatelessWidget {
     final effectiveColor =
         isLockingDisplay ? textColor.withAlpha(180) : textColor;
 
-    // Font size: always 72 to prevent layout jank on state change.
-    const fontSize = 72.0;
-    const letterSpacing = -2.5;
+    // Letter spacing tighter at large size; slightly looser at compact 52 dp.
+    final double letterSpacing = fontSize < 60 ? -1.5 : -2.5;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -858,7 +887,7 @@ class _AnimatedBpmDisplay extends StatelessWidget {
           ),
         ),
         SizedBox(
-          height: 22,
+          height: subtitleHeight,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
