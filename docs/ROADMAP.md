@@ -555,3 +555,106 @@ DSP-результата; fallback-значений нет.
 - `_EntryRow` отображает `8A` и `E7` при наличии данных ✓
 - CSV-заголовок обновлён, JSON-summary содержит `has_key_data`/`has_energy_data` ✓
 - Anti-fake: запись только при STABLE + primaryBpm != null ✓
+
+---
+
+## Phase 2.5: FFI `new_with_range` + Custom(min, max) пресет — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: дать Pro-пользователю полный контроль над BPM-диапазоном детектора через
+Custom-пресет с произвольными min/max; расширить FFI-границу обратно-совместимым
+третьим конструктором.
+
+### Что изменилось
+
+**Rust FFI** (`core/ffi/src/lib.rs`):
+
+- `hitech_bpm_engine_new_with_range(min_bpm: f32, max_bpm: f32)` — новый
+  конструктор. `min` зажимается в [80, 260], `max` в [min+10, 300]; не-finite →
+  дефолт (155, 230). Создаёт `DspConfig { target_bpm_min: min, target_bpm_max: max }`.
+- Тесты (`core/ffi/tests/ffi_contract.rs`):
+  - `engine_new_with_range_ctor_returns_non_null` — указатель ненулевой.
+  - `engine_new_with_range_detects_in_band_tempo` — детектирует 180 BPM в диапазоне
+    (160, 200), STABLE ≤ 13 с.
+
+**Dart bindings** (`apps/mobile/lib/dsp/bindings.dart`):
+
+- `typedef _EngineNewWithRangeC` / `HitechBpmEngineNewWithRange` добавлены.
+- `HitechBpmFfi.engineNewWithRange` — lookup `hitech_bpm_engine_new_with_range`.
+
+**DspEngine + CaptureBridge + dsp_worker**:
+
+- `DspEngine.fromBindings(…, maxBpm?)`: выбор конструктора — `new_with_range`
+  если `maxBpm != null`, `new_with_min_bpm` если только `minBpm != null`, иначе `new`.
+- `CaptureBridge` принимает `maxBpm?`; `WorkerInit` несёт поле `maxBpm?`;
+  worker выбирает конструктор по логике выше.
+
+**GenrePreset** (`apps/mobile/lib/features/genre_preset/genre_preset.dart`):
+
+- `custom` добавлен как 8-й вариант (в конец — индексы 0–7 стабильны для
+  SharedPreferences).
+- `isProRequired`: `custom → true`.
+- `bpmRange`: placeholder `(155.0, 230.0)` — реальные значения берутся из
+  `AppSettings.customMin/customMax` по `effectiveBpmRange`.
+- `allPresets`: теперь 8 вариантов; `freePresets` остаётся 3.
+
+**AppSettings** (`apps/mobile/lib/settings/app_settings.dart`):
+
+- Поля `customMin = 155.0` / `customMax = 230.0`.
+- SharedPreferences-ключи `'custom_min_bpm'` / `'custom_max_bpm'`.
+- `setCustomRange(min, max)`: валидация `min < max && min >= 80 && max <= 300` —
+  иначе no-op.
+- `effectiveBpmRange`: при `selectedGenre == custom` → `(customMin, customMax)`,
+  иначе → `selectedGenre.bpmRange`.
+- `resetAll()` сбрасывает `customMin/customMax` в дефолты.
+
+**FeatureFlags** (`apps/mobile/lib/monetization/feature_flags.dart`):
+
+- Новые поля `customMin`, `customMax` (defaults 155/230).
+- `maxBpm` добавлен: при `isPro && genre == custom` → `customMax`; иначе →
+  `preset.bpmRange.$2`.
+
+**main.dart**: `CaptureBridge` получает `maxBpm: flags.maxBpm` при создании;
+`ListenableBuilder` на `Listenable.merge([ProStatusService, AppSettings])` триггерит
+пересоздание при смене диапазона — новый `DspEngine` с обновлёнными min/max.
+
+**SettingsScreen** (`apps/mobile/lib/screens/settings_screen.dart`):
+
+- Секция «CUSTOM RANGE» появляется только при `selectedGenre == custom`.
+- Pro: два `_SliderRow` (Min BPM 80–max-10, Max BPM min+10–300).
+- Free: `_InfoRow` «Требуется PRO» с PRO-бейджем.
+- `_GenrePickerRow` и `_InfoRow BPM Range` отображают live-значения
+  `AppSettings.customMin/customMax`, а не placeholder `bpmRange`.
+
+### Тесты
+
+- `core/ffi/tests/ffi_contract.rs` → `engine_new_with_range_ctor_returns_non_null`,
+  `engine_new_with_range_detects_in_band_tempo` (+2 Rust).
+- `test/settings/custom_range_test.dart` → 11 тестов: defaults, validation
+  (valid, min==max, min>max, min<80, max>300, boundary), effectiveBpmRange.
+- `test/screens/settings_screen_custom_test.dart` → 4 теста: Custom+Pro показывает
+  слайдеры, не-Custom скрывает секцию, Custom+Free показывает paywall-hint,
+  BPM Range строка отражает customMin/customMax.
+- `test/monetization/feature_flags_test.dart` → обновлены 2 счётчика (7→8 Pro,
+  7→8 allPresets).
+
+### Критерии выхода — выполнены
+
+- `cargo test --workspace` → все тесты зелёные (incl. `engine_new_with_range_*`) ✓
+- `flutter analyze` → 0 errors ✓
+- `flutter test` → 218 passed, 1 pre-existing (dsp_engine_test — нет .dylib) ✓
+- `GenrePreset.custom` Pro-gated, `allPresets.length == 8` ✓
+- `AppSettings.setCustomRange` валидирует и сохраняет в SharedPreferences ✓
+- `CaptureBridge` передаёт `maxBpm` → worker выбирает `new_with_range` ✓
+- SettingsScreen: Custom+Pro → слайдеры; Custom+Free → paywall-hint ✓
+- Нет фейкового BPM, нет хардкода диапазона, anti-fake инварианты сохранены ✓
+
+### Известные ограничения
+
+- Слайдеры — непрерывные (Slider). При каждом тике вызывается `setCustomRange`,
+  что инициирует async-запись в SharedPreferences. Для крайне активного перетаскивания
+  это создаёт лишние writes; future: throttle через `onChangeEnd`.
+- При Custom+Pro смена диапазона пересоздаёт `_CapturePipeline` (новый `ValueKey`) —
+  DSP-история сбрасывается. Это корректное поведение (новый движок с новым диапазоном),
+  но визуально на 1–2 секунды STABLE → SEARCHING.
+- Python-референс (`tempo.py`) и offline-lab не затронуты — `new_with_range` — чисто
+  Flutter-сторона; DSP-алгоритм не изменился.

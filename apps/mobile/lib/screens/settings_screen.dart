@@ -73,7 +73,9 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   _InfoRow(
                     label: 'BPM Range',
-                    value: '${flags.minBpm.toInt()}–${flags.maxBpm.toInt()}',
+                    value: s.selectedGenre == GenrePreset.custom
+                        ? '${s.customMin.round()}–${s.customMax.round()}'
+                        : '${flags.minBpm.toInt()}–${flags.maxBpm.toInt()}',
                     badge: (!flags.isPro &&
                             s.selectedGenre == GenrePreset.hitechPsy)
                         ? 'PRO'
@@ -97,6 +99,47 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
+
+              // ── 1b. CUSTOM RANGE (Pro-only, visible when custom preset selected) ──
+              if (s.selectedGenre == GenrePreset.custom) ...[
+                const _SectionHeader('CUSTOM RANGE'),
+                if (flags.isPro)
+                  _SettingsGroup(
+                    children: [
+                      _SliderRow(
+                        label: 'Min BPM',
+                        displayText: '${s.customMin.round()} BPM',
+                        value: s.customMin,
+                        min: 80,
+                        max: s.customMax - 10,
+                        onChanged: (v) =>
+                            s.setCustomRange(v.roundToDouble(), s.customMax),
+                        showDivider: true,
+                      ),
+                      _SliderRow(
+                        label: 'Max BPM',
+                        displayText: '${s.customMax.round()} BPM',
+                        value: s.customMax,
+                        min: s.customMin + 10,
+                        max: 300,
+                        onChanged: (v) =>
+                            s.setCustomRange(s.customMin, v.roundToDouble()),
+                        showDivider: false,
+                      ),
+                    ],
+                  )
+                else
+                  _SettingsGroup(
+                    children: [
+                      _InfoRow(
+                        label: 'Custom Range',
+                        value: 'Требуется PRO',
+                        badge: 'PRO',
+                        showDivider: false,
+                      ),
+                    ],
+                  ),
+              ],
 
               // ── 2. ВИЗУАЛИЗАЦИЯ ───────────────────────────────────────
               const _SectionHeader('ВИЗУАЛИЗАЦИЯ'),
@@ -629,7 +672,10 @@ class _GenrePickerRow extends StatelessWidget {
             ...GenrePreset.allPresets.map((preset) {
               final isSelected = preset == selected;
               final requiresPro = preset.isProRequired && !flags.isPro;
-              final (minB, maxB) = preset.bpmRange;
+              // Custom preset shows live AppSettings values, not bpmRange placeholder.
+              final (minB, maxB) = preset == GenrePreset.custom
+                  ? (AppSettings.instance.customMin, AppSettings.instance.customMax)
+                  : preset.bpmRange;
               return InkWell(
                 onTap: () {
                   Navigator.pop(context);
@@ -659,7 +705,7 @@ class _GenrePickerRow extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '${minB.toInt()}–${maxB.toInt()} BPM',
+                              '${minB.round()}–${maxB.round()} BPM',
                               style: AppTextStyles.mono(
                                   10, FontWeight.w400, AppColors.textMuted),
                             ),
@@ -695,7 +741,9 @@ class _GenrePickerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (minB, maxB) = selected.bpmRange;
+    final (minB, maxB) = selected == GenrePreset.custom
+        ? (AppSettings.instance.customMin, AppSettings.instance.customMax)
+        : selected.bpmRange;
     return Column(
       children: [
         InkWell(
@@ -712,7 +760,7 @@ class _GenrePickerRow extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${selected.label}  ${minB.toInt()}–${maxB.toInt()}',
+                  '${selected.label}  ${minB.round()}–${maxB.round()}',
                   style: AppTextStyles.mono(
                       11, FontWeight.w400, AppColors.textMuted),
                 ),

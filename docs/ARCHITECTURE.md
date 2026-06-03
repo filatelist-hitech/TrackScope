@@ -111,6 +111,25 @@ FFI-слой предоставляет `hitech_bpm_engine_new_with_min_bpm(floa
 алгоритме нет. `CaptureBridge` пересоздаётся при смене tier (новый minBpm)
 через `ListenableBuilder` на `ProStatusService.instance`.
 
+### FFI `new_with_range` + Custom preset (Phase 2.5)
+
+FFI-слой предоставляет `hitech_bpm_engine_new_with_range(float min_bpm, float max_bpm)` —
+третий конструктор для полного управления диапазоном. `min` зажимается в [80, 260],
+`max` в [min+10, 300]; не-finite → дефолт (155, 230).
+
+`GenrePreset.custom` — Pro-only пресет в Dart (8-й вариант). `AppSettings.customMin`/
+`customMax` (default 155/230) сохраняются в SharedPreferences. `AppSettings.setCustomRange`
+валидирует: min < max, min ≥ 80, max ≤ 300 — иначе no-op. `effectiveBpmRange` возвращает
+`(customMin, customMax)` при custom, иначе — `preset.bpmRange`.
+
+`FeatureFlags.maxBpm` добавлен: при Custom+Pro → `customMax`; иначе — дефолт пресета.
+`CaptureBridge` принимает `maxBpm?`; `WorkerInit` передаёт его в worker; `DspEngine.open`
+выбирает конструктор: `new_with_range` если `maxBpm != null`, иначе `new_with_min_bpm`.
+
+SettingsScreen: при `selectedGenre == custom && isPro` показывает секцию «CUSTOM RANGE»
+с двумя слайдерами (Min BPM 80–max-10, Max BPM min+10–300). При Custom+Free —
+paywall-подсказка.
+
 ### v2 компоненты (Phase 1 scaffolding, 2026-06-01)
 
 - `core/dsp/src/genre_preset.rs` — `GenrePreset` enum: 7 жанровых пресетов с BPM-диапазонами и нормализационными порогами. Free: HitechPsy + Psytrance + Darkpsy; Pro: всё + Custom.

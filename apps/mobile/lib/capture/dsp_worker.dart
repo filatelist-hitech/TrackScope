@@ -33,6 +33,7 @@ void dspWorkerEntry(WorkerInit init) {
       // движка отключаем длинным интервалом — мы на него не подписываемся.
       pollInterval: const Duration(hours: 1),
       minBpm: init.minBpm,
+      maxBpm: init.maxBpm,
     );
   } catch (e, st) {
     reply.send(WorkerError('не удалось открыть нативный DSP: $e', st));

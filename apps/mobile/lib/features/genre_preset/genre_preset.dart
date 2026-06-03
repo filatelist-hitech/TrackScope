@@ -12,9 +12,13 @@ enum GenrePreset {
   drumAndBass,
   techno,
   hardstyle,
-  hardcore;
+  hardcore,
+  // custom must be last — preserves SharedPreferences indices 0–6 for existing users.
+  custom;
 
   /// (minBpm, maxBpm) for this genre.
+  /// For [custom], returns placeholder (155.0, 230.0); actual values come from
+  /// AppSettings.customMin / customMax via AppSettings.effectiveBpmRange.
   (double, double) get bpmRange => switch (this) {
     hitechPsy   => (155.0, 230.0),
     psytrance   => (130.0, 160.0),
@@ -23,6 +27,7 @@ enum GenrePreset {
     techno      => (125.0, 145.0),
     hardstyle   => (138.0, 160.0),
     hardcore    => (155.0, 185.0),
+    custom      => (155.0, 230.0),
   };
 
   String get label => switch (this) {
@@ -33,6 +38,7 @@ enum GenrePreset {
     techno      => 'Techno',
     hardstyle   => 'Hardstyle',
     hardcore    => 'Hardcore',
+    custom      => 'Custom',
   };
 
   bool get isProRequired => switch (this) {

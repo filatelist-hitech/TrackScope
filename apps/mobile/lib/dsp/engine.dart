@@ -64,15 +64,18 @@ class DspEngine {
   /// через [ffi.DynamicLibrary.process]).
   ///
   /// [minBpm] — минимальный BPM для hitech-диапазона (Free tier: 170, Pro: 155).
-  /// Если не передан, используется дефолт Rust (155).
+  /// [maxBpm] — максимальный BPM; если указан вместе с minBpm, используется
+  /// new_with_range (Custom preset). Если только minBpm — new_with_min_bpm.
+  /// Если ничего — new (дефолты Rust 155/230).
   factory DspEngine.open({
     String? libraryPath,
     Duration pollInterval = const Duration(milliseconds: 50),
     double? minBpm,
+    double? maxBpm,
   }) {
     final dylib = _openLibrary(libraryPath);
     return DspEngine.fromBindings(HitechBpmFfi(dylib),
-        pollInterval: pollInterval, minBpm: minBpm);
+        pollInterval: pollInterval, minBpm: minBpm, maxBpm: maxBpm);
   }
 
   /// Создание из уже разрешённых привязок. Полезно для тестов, которые
@@ -81,10 +84,16 @@ class DspEngine {
     HitechBpmFfi bindings, {
     Duration pollInterval = const Duration(milliseconds: 50),
     double? minBpm,
+    double? maxBpm,
   }) {
-    final handle = minBpm != null
-        ? bindings.engineNewWithMinBpm(minBpm)
-        : bindings.engineNew();
+    final ffi.Pointer<HitechBpmEngine> handle;
+    if (minBpm != null && maxBpm != null) {
+      handle = bindings.engineNewWithRange(minBpm, maxBpm);
+    } else if (minBpm != null) {
+      handle = bindings.engineNewWithMinBpm(minBpm);
+    } else {
+      handle = bindings.engineNew();
+    }
     if (handle == ffi.nullptr) {
       throw StateError('hitech_bpm_engine_new вернул null');
     }

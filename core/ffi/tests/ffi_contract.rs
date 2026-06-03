@@ -7,8 +7,8 @@ use std::ffi::CStr;
 
 use hitech_bpm_ffi::{
     hitech_bpm_engine_analyze_json, hitech_bpm_engine_free, hitech_bpm_engine_new,
-    hitech_bpm_engine_new_with_min_bpm, hitech_bpm_engine_push_samples,
-    hitech_bpm_string_free,
+    hitech_bpm_engine_new_with_min_bpm, hitech_bpm_engine_new_with_range,
+    hitech_bpm_engine_push_samples, hitech_bpm_string_free,
 };
 
 const SAMPLE_RATE: u32 = 48_000;
@@ -362,6 +362,68 @@ fn ffi_min_bpm_170_downgrades_160_confidence() {
             confidence_pro - confidence_free >= 0.05,
             "Pro tier confidence ({confidence_pro:.3}) must be ≥0.05 higher than Free tier ({confidence_free:.3}) for 160 BPM"
         );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom preset — new_with_range knob (Phase 2.4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// hitech_bpm_engine_new_with_range возвращает ненулевой handle для валидного,
+/// зажатого и NaN-входа.
+#[test]
+fn engine_new_with_range_ctor_returns_non_null() {
+    unsafe {
+        // Валидный диапазон
+        let e = hitech_bpm_engine_new_with_range(160.0, 200.0);
+        assert!(!e.is_null(), "valid range: handle must be non-null");
+        hitech_bpm_engine_free(e);
+
+        // Экстремальные значения: min=10→80, max=500→300
+        let e2 = hitech_bpm_engine_new_with_range(10.0, 500.0);
+        assert!(!e2.is_null(), "clamped range: handle must be non-null");
+        hitech_bpm_engine_free(e2);
+
+        // NaN → дефолты (155.0, 230.0)
+        let e3 = hitech_bpm_engine_new_with_range(f32::NAN, f32::NAN);
+        assert!(!e3.is_null(), "NaN inputs: handle must be non-null with defaults");
+        hitech_bpm_engine_free(e3);
+    }
+}
+
+/// Движок, созданный new_with_range(155, 230), достигает STABLE для 200 BPM.
+#[test]
+fn engine_new_with_range_detects_in_band_tempo() {
+    unsafe {
+        let engine = hitech_bpm_engine_new_with_range(155.0, 230.0);
+        assert!(!engine.is_null());
+
+        let pcm = pulse_200_bpm(13.0);
+        let chunk_len = (SAMPLE_RATE as f32 * 0.1) as usize;
+        for chunk in pcm.chunks(chunk_len) {
+            hitech_bpm_engine_push_samples(engine, chunk.as_ptr(), chunk.len(), SAMPLE_RATE);
+        }
+
+        let ptr = hitech_bpm_engine_analyze_json(engine);
+        let json = CStr::from_ptr(ptr).to_str().unwrap().to_owned();
+        hitech_bpm_string_free(ptr);
+        hitech_bpm_engine_free(engine);
+
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            parsed["lock_state"].as_str().unwrap(),
+            "STABLE",
+            "new_with_range(155,230) on 200 BPM must reach STABLE"
+        );
+        let bpm = parsed["primary_bpm"].as_f64().expect("primary_bpm set in STABLE");
+        assert!((bpm - 200.0).abs() <= 2.0, "bpm={bpm}, want 200±2");
+
+        // half-time кандидат должен оставаться видимым (anti-fake)
+        let candidates = parsed["candidates"].as_array().expect("candidates array");
+        let has_half = candidates.iter().any(|c| {
+            c.get("bpm").and_then(|v| v.as_f64()).is_some_and(|b| (b - 100.0).abs() < 5.0)
+        });
+        assert!(has_half, "half-time candidate must remain visible through new_with_range");
     }
 }
 
