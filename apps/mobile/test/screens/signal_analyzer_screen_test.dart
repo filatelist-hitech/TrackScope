@@ -193,5 +193,99 @@ void main() {
       ));
       expect(find.byType(AppBar), findsOneWidget);
     });
+
+    // ── Тональность / Camelot Wheel section ──────────────────────────────────
+
+    DspResult makeResultWithKey(KeyResult key) => DspResult(
+          primaryBpm: 195.0,
+          confidence: 0.88,
+          lockState: LockState.stable,
+          signalQuality: const SignalQuality(
+            inputLevelDbfs: -12.0,
+            peakDbfs: -8.0,
+            clipping: false,
+            clippedFrameRatio: 0.0,
+            noiseLevel: 'low',
+            snrEstimateDb: 22.0,
+            silence: false,
+            breakdownLikely: false,
+          ),
+          candidates: const [
+            TempoCandidate(
+              bpm: 195.0,
+              relation: 'main',
+              score: 0.88,
+              rawScore: 0.91,
+              stabilityScore: 0.85,
+              rangeScore: 1.0,
+              sourceBpm: null,
+            ),
+          ],
+          timing: const DspTiming(
+            analysisTimeSec: 0.012,
+            windowTimeSec: 12.0,
+            hopTimeSec: 0.0025,
+            firstLockTimeSec: 4.8,
+          ),
+          debug: const DspDebug(
+            onsetRateHz: 3.25,
+            onsetStrength: 0.72,
+            tempoPeakProminence: 0.68,
+            harmonicAmbiguity: 0.08,
+            stabilityScore: 0.85,
+            warnings: [],
+          ),
+          keyResult: key,
+        );
+
+    testWidgets('ТОНАЛЬНОСТЬ section NOT shown when keyResult is null', (tester) async {
+      final ctrl = StreamController<DspResult>.broadcast();
+      addTearDown(ctrl.close);
+
+      await tester.pumpWidget(MaterialApp(
+        home: SignalAnalyzerScreen(results: ctrl.stream),
+      ));
+      ctrl.add(makeResult()); // makeResult has no keyResult
+      await tester.pump();
+
+      expect(find.text('ТОНАЛЬНОСТЬ'), findsNothing);
+    });
+
+    testWidgets('ТОНАЛЬНОСТЬ section shown when keyResult present', (tester) async {
+      final ctrl = StreamController<DspResult>.broadcast();
+      addTearDown(ctrl.close);
+
+      const key = KeyResult(
+        key: 'A', mode: 'Minor', camelot: '8A', confidence: 0.62,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: SignalAnalyzerScreen(results: ctrl.stream),
+      ));
+      ctrl.add(makeResultWithKey(key));
+      await tester.pump();
+
+      expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
+    });
+
+    testWidgets('key summary line shows camelot, mode and confidence', (tester) async {
+      final ctrl = StreamController<DspResult>.broadcast();
+      addTearDown(ctrl.close);
+
+      const key = KeyResult(
+        key: 'A', mode: 'Minor', camelot: '8A', confidence: 0.62,
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        home: SignalAnalyzerScreen(results: ctrl.stream),
+      ));
+      ctrl.add(makeResultWithKey(key));
+      await tester.pump();
+
+      // Summary format: "A Minor · 8A · 62%"
+      expect(find.textContaining('A Minor'), findsOneWidget);
+      expect(find.textContaining('8A'), findsOneWidget);
+      expect(find.textContaining('62%'), findsOneWidget);
+    });
   });
 }

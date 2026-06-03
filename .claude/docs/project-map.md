@@ -2,7 +2,7 @@
 
 _Track architecture changes, important files, build system changes, DSP pipeline changes and FFI integrations._
 
-_Last updated: 2026-06-03 (Phase 2.5: FFI new_with_range + GenrePreset.custom + AppSettings.customMin/customMax/setCustomRange/effectiveBpmRange + CaptureBridge.maxBpm + SettingsScreen CUSTOM RANGE UI). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
+_Last updated: 2026-06-04 (Phase 2.5: CamelotWheelPainter + CamelotWheelWidget + ТОНАЛЬНОСТЬ section in SignalAnalyzerScreen). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
 
 ---
 
@@ -65,13 +65,18 @@ lib/
 │   ├── confidence_bar.dart     7px, red<30%/yellow30–70%/teal>70%, 400ms animation
 │   ├── break_button.dart
 │   ├── listening_indicator.dart
-│   └── app_tab_bar.dart        7px tab labels
+│   ├── app_tab_bar.dart        7px tab labels
+│   └── camelot_wheel_widget.dart  CamelotWheelWidget(keyResult?, size) — RepaintBoundary + CamelotWheelPainter (Phase 2.5)
 ├── navigation/
 │   └── app_navigator.dart      IndexedStack 3 tabs: Radar/History/Settings. CaptureBridge not recreated on tab switch
 ├── ui/
 │   └── main_screen.dart        Waveform + Live Spectrum + InfoCard + ½/×2 cell + ListeningIndicator
+│                                 Phase 14: _GlassmorphismCard compact mode (< 420dp → BPM 52dp, spacing 1dp;
+│                                 < 380dp → chips hidden). _AnimatedBpmDisplay.fontSize/subtitleHeight.
+│                                 _BreakButtonInline.compactPadding. _InfoTableContent.compact.
 ├── screens/
 │   ├── signal_analyzer_screen.dart  Pro-only, DspDebug metrics, top-4 candidates, 4px score bars
+│   │                                  Phase 2.5: _KeyGroup section (ТОНАЛЬНОСТЬ) — CamelotWheelWidget + summary "A Minor · 8A · 62%"
 │   ├── settings_screen.dart    5 sections, SharedPreferences, WakelockPlus, BpmSmoothing picker
 │   └── permission_denied_screen.dart
 ├── settings/
@@ -94,7 +99,8 @@ lib/
 │   ├── viz_controller.dart     ChangeNotifier: PCM ring buffer ~4s, Dart FFT via compute()
 │   ├── waveform_painter.dart   Oscilloscope PCM, ambient glow + beat-reactive, red on clipping
 │   ├── live_spectrum_painter.dart  Real-time FFT curve, gradient fill, peak-hold, log X 20–20kHz
-│   └── spectrogram_painter.dart  Scrolling FFT map 200×128 bins (kept but not primary)
+│   ├── spectrogram_painter.dart  Scrolling FFT map 200×128 bins (kept but not primary)
+│   └── camelot_wheel_painter.dart  CamelotWheelPainter: 24 annular segments, camelotNeighbors() pure fn (Phase 2.5)
 ├── mock/
 │   └── mock_dsp_stream.dart    Test-only mock stream
 └── features/                   Feature flag helpers
@@ -201,9 +207,12 @@ core/tests/
   helpers/synthetic_fixtures.py  Python fixture generators
 
 apps/mobile/test/
-  widget_test.dart               MainScreen + InfoCard + badge states + energy/key always-visible (196 tests)
+  widget_test.dart               MainScreen + InfoCard + badge states + energy/key always-visible +
+                                   compact layout chip-hiding (221 tests; 6 chip-tests use 800×1200 view)
   dsp_debug_test.dart            DspDebug.fromJson parsing
-  screens/signal_analyzer_screen_test.dart
+  screens/signal_analyzer_screen_test.dart  +3 new: ТОНАЛЬНОСТЬ section shown/hidden, key summary format
+  viz/camelot_wheel_painter_test.dart        4 unit tests: camelotNeighbors() incl. wrap-around (Phase 2.5)
+  widgets/camelot_wheel_widget_test.dart     4 smoke tests: null/valid key, size, RepaintBoundary (Phase 2.5)
 
 tools/offline-lab/
   offline_lab.py   QA report generator (non-zero exit on regression)
