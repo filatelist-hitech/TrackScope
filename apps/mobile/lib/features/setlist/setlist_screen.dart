@@ -230,7 +230,9 @@ class _EntriesTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
-      padding: const EdgeInsets.only(top: 4, bottom: 32),
+      padding: EdgeInsets.only(
+          top: 4,
+          bottom: 32 + MediaQuery.paddingOf(context).bottom),
       itemCount: entries.length,
       itemBuilder: (_, i) {
         final e = entries[entries.length - 1 - i]; // newest first

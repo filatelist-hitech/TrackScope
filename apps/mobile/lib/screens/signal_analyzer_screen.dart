@@ -124,7 +124,8 @@ class _SignalAnalyzerScreenState extends State<SignalAnalyzerScreen> {
                   );
                 }
                 return ListView(
-                  padding: EdgeInsets.zero,
+                  padding: EdgeInsets.only(
+                      bottom: MediaQuery.paddingOf(context).bottom),
                   children: [
                     // ── BPM Кандидаты ─────────────────────────────────
                     const _SectionHeader('КАНДИДАТЫ BPM'),

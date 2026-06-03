@@ -688,3 +688,36 @@ Custom-пресет с произвольными min/max; расширить FF
   но визуально на 1–2 секунды STABLE → SEARCHING.
 - Python-референс (`tempo.py`) и offline-lab не затронуты — `new_with_range` — чисто
   Flutter-сторона; DSP-алгоритм не изменился.
+
+---
+
+## Phase 13: Android System Insets Fix — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: устранить перекрытие таб-бара системными кнопками Android (RuStore rejection, версия 1.1.0+2).
+
+Артефакты:
+
+- **`AppTabBar`** (`apps/mobile/lib/widgets/app_tab_bar.dart`): `padding.bottom` изменён с хардкодного
+  `20` на `20 + MediaQuery.paddingOf(context).bottom`. Таб-бар теперь автоматически добавляет высоту
+  системной навигационной полосы (жестовая / 3-кнопочная) к нижнему отступу — содержимое вкладок
+  всегда видимо над системной полосой на любом Android-устройстве.
+- **`SignalAnalyzerScreen`** (`apps/mobile/lib/screens/signal_analyzer_screen.dart`): `ListView`
+  изменён с `padding: EdgeInsets.zero` на `EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom)` —
+  исключён bottom clipping последнего элемента при отсутствии `bottomNavigationBar`.
+- **`SetlistScreen._EntriesTable`** (`apps/mobile/lib/features/setlist/setlist_screen.dart`): `ListView.builder`
+  изменён с `padding: EdgeInsets.only(bottom: 32)` на `EdgeInsets.only(bottom: 32 + MediaQuery.paddingOf(context).bottom)` —
+  та же защита для pushed-экрана сетлиста.
+- **Version bump**: `pubspec.yaml` `1.1.0+3` → `1.1.1+4` для повторной подачи в RuStore.
+
+Критерии выхода — выполнены:
+
+- `flutter analyze` → 0 errors ✓
+- `flutter test` → 218 passed, 1 pre-existing (dsp_engine_test — нет .dylib) ✓
+- `cargo test --workspace` → все зелёные (124 Rust) ✓
+- `AppTabBar` использует `MediaQuery.paddingOf(context).bottom` ✓
+- `apps/mobile/pubspec.yaml` version `1.1.1+4` ✓
+- Anti-fake инварианты не нарушены: нет хардкода BPM, нет демо-значений, нет STABLE без evidence ✓
+
+Известное ограничение: ручная верификация на физическом Android-устройстве с 3-кнопочной
+навигацией необходима перед финальным релизом. AVD-эмулятор не воспроизводит высоту системной
+полосы достоверно.
