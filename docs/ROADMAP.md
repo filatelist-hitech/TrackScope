@@ -721,3 +721,37 @@ Custom-пресет с произвольными min/max; расширить FF
 Известное ограничение: ручная верификация на физическом Android-устройстве с 3-кнопочной
 навигацией необходима перед финальным релизом. AVD-эмулятор не воспроизводит высоту системной
 полосы достоверно.
+
+---
+
+## Phase 2.6: Share Set Energy Card — **ЗАВЕРШЕНО** (2026-06-04)
+
+Цель: позволить Pro-пользователям поделиться визуальной карточкой сета (BPM-кривая + тональность + энергия) одним нажатием.
+
+Артефакты:
+
+- **`SetEnergyCardPainter`** (`apps/mobile/lib/features/share_card/set_energy_card_painter.dart`): `CustomPainter` 1080×1080 px. Рендерит:
+  - BPM-кривую по временной оси (polyline + gradient fill под кривой);
+  - Camelot-пиллы в точках смены тональности (акцентный фон + тёмный текст);
+  - Полярный energy arc (10 равных сегментов, цвет: red ≤3 / yellow 4–7 / teal ≥8) с цифрой и лейблом в центре;
+  - Watermark «TrackScope» внизу справа.
+- **`SetEnergyCard`** (`apps/mobile/lib/features/share_card/set_energy_card.dart`): `StatefulWidget` + `RepaintBoundary`. Метод `captureAndShare()`: `toImage(pixelRatio: 1.0)` → PNG → `getTemporaryDirectory()` → `Share.shareXFiles`.
+- **`FeatureFlags.canShareCard`** (`apps/mobile/lib/monetization/feature_flags.dart`): `bool get canShareCard => isPro`.
+- **`SetlistScreen`** (`apps/mobile/lib/features/setlist/setlist_screen.dart`): `_SetlistView` преобразован из `StatelessWidget` в `StatefulWidget`; добавлен `Offstage(child: SetEnergyCard(...))` для off-screen рендеринга; кнопка `Icons.share_outlined` в AppBar (гейт: `entries.isNotEmpty`). Pro: запускает `captureAndShare()`. Free: переход на `PaywallScreen(feature: 'share_card')`.
+- **Тесты** (`apps/mobile/test/features/share_card/set_energy_card_test.dart`): 11 тестов — `canShareCard` Pro/Free, painter smoke (пусто/одна/несколько/одинаковый BPM/нет энергии), данные из реального `SetlistEntry`, кнопка видима при Pro+entries, скрыта при пустых entries, Free → PaywallScreen.
+- **Execution plan** (`docs/plans/phase-2-6-share-set-energy-card.md`).
+
+Критерии выхода — выполнены:
+
+- `flutter analyze` → 0 errors ✓
+- `flutter test` → 229 passed, 1 pre-existing (dsp_engine_test — нет .dylib) ✓
+- `FeatureFlags.canShareCard` Pro-gated ✓
+- Кнопка в SetlistScreen: Pro+entries → share, Free → PaywallScreen ✓
+- Нет хардкодного BPM; все данные из `SetlistEntry.bpm` (реальный DSP-вывод) ✓
+- Anti-fake инварианты сохранены ✓
+
+Известные ограничения:
+
+- `captureAndShare()` не тестируется в unit-среде (требует реальной render-surface); покрыт дымовым тестом `CustomPainter.paint()` через `PictureRecorder`.
+- Шрифт «IBM Plex Mono» в painter использует Dart `TextStyle(fontFamily: ...)` — рендеринг зависит от наличия шрифта в bundle; на устройствах без него используется системный fallback.
+- Нет изменений в Rust DSP / FFI / DspResult — Phase 2.6 чисто Flutter-сторона.

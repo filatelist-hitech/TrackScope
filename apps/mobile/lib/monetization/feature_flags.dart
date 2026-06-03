@@ -45,6 +45,7 @@ class FeatureFlags {
   bool get canExport             => isPro;
   bool get canAccessWidget       => isPro;
   bool get canAccessSetlist      => isPro;
+  bool get canShareCard          => isPro;
   bool get canAccessGenrePicker  => true;  // picker visible to all; Pro presets gated in UI
 
   // Genre presets available to this tier

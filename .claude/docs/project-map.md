@@ -2,7 +2,7 @@
 
 _Track architecture changes, important files, build system changes, DSP pipeline changes and FFI integrations._
 
-_Last updated: 2026-06-03 (Phase 2.5: FFI new_with_range + GenrePreset.custom + AppSettings.customMin/customMax/setCustomRange/effectiveBpmRange + CaptureBridge.maxBpm + SettingsScreen CUSTOM RANGE UI). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
+_Last updated: 2026-06-04 (Phase 2.6: SetEnergyCardPainter + SetEnergyCard + FeatureFlags.canShareCard + share button in SetlistScreen). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
 
 ---
 
@@ -97,7 +97,13 @@ lib/
 │   └── spectrogram_painter.dart  Scrolling FFT map 200×128 bins (kept but not primary)
 ├── mock/
 │   └── mock_dsp_stream.dart    Test-only mock stream
-└── features/                   Feature flag helpers
+└── features/
+    ├── genre_preset/           GenrePreset enum, 8 presets (3 Free + 5 Pro incl. Custom)
+    ├── setlist/                SetlistService, SetlistEntry, SetlistScreen (Pro-only)
+    ├── share_card/             Phase 2.6: SetEnergyCardPainter (CustomPainter 1080×1080)
+    │   ├── set_energy_card_painter.dart  BPM curve + Camelot pills + polar energy arc + watermark
+    │   └── set_energy_card.dart          StatefulWidget: RepaintBoundary + captureAndShare()
+    └── ...                     Feature flag helpers
 ```
 
 **State management:** `ChangeNotifier` / `ListenableBuilder` / `Provider` (via `ChangeNotifierProvider`). No Riverpod/BLoC.
@@ -201,9 +207,10 @@ core/tests/
   helpers/synthetic_fixtures.py  Python fixture generators
 
 apps/mobile/test/
-  widget_test.dart               MainScreen + InfoCard + badge states + energy/key always-visible (196 tests)
+  widget_test.dart               MainScreen + InfoCard + badge states + energy/key always-visible
   dsp_debug_test.dart            DspDebug.fromJson parsing
   screens/signal_analyzer_screen_test.dart
+  features/share_card/set_energy_card_test.dart  Phase 2.6: canShareCard, painter smoke, share button (11 tests)
 
 tools/offline-lab/
   offline_lab.py   QA report generator (non-zero exit on regression)
