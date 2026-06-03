@@ -43,6 +43,8 @@ class AppSettings extends ChangeNotifier {
   static const _kInputSensitivity = 'inputSensitivity';
   static const _kBpmSmoothing     = 'bpmSmoothing';
   static const _kSelectedGenre    = 'selectedGenre';
+  static const _kCustomMinBpm     = 'custom_min_bpm';
+  static const _kCustomMaxBpm     = 'custom_max_bpm';
 
   bool showWaveform    = true;
   bool showSpectrum    = true;
@@ -50,6 +52,16 @@ class AppSettings extends ChangeNotifier {
   double inputSensitivity = 0.0;          // dB, range –6..+6
   BpmSmoothing bpmSmoothing = BpmSmoothing.moderate;
   GenrePreset selectedGenre = GenrePreset.hitechPsy;
+  double customMin = 155.0;
+  double customMax = 230.0;
+
+  /// Effective BPM range accounting for Custom preset.
+  /// For Custom: returns (customMin, customMax).
+  /// For any other preset: returns preset.bpmRange.
+  (double, double) get effectiveBpmRange {
+    if (selectedGenre == GenrePreset.custom) return (customMin, customMax);
+    return selectedGenre.bpmRange;
+  }
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -61,6 +73,8 @@ class AppSettings extends ChangeNotifier {
     bpmSmoothing       = BpmSmoothing.values[si.clamp(0, BpmSmoothing.values.length - 1)];
     final gi           = prefs.getInt(_kSelectedGenre) ?? 0;
     selectedGenre      = GenrePreset.values[gi.clamp(0, GenrePreset.values.length - 1)];
+    customMin          = prefs.getDouble(_kCustomMinBpm) ?? 155.0;
+    customMax          = prefs.getDouble(_kCustomMaxBpm) ?? 230.0;
     notifyListeners();
   }
 
@@ -100,6 +114,17 @@ class AppSettings extends ChangeNotifier {
     await prefs.setInt(_kSelectedGenre, v.index);
   }
 
+  /// Set custom BPM range. Ignored if min >= max, min < 80, or max > 300.
+  Future<void> setCustomRange(double min, double max) async {
+    if (min < 80 || max > 300 || min >= max) return;
+    customMin = min;
+    customMax = max;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kCustomMinBpm, min);
+    await prefs.setDouble(_kCustomMaxBpm, max);
+  }
+
   Future<void> resetAll() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -109,6 +134,8 @@ class AppSettings extends ChangeNotifier {
     inputSensitivity = 0.0;
     bpmSmoothing     = BpmSmoothing.moderate;
     selectedGenre    = GenrePreset.hitechPsy;
+    customMin        = 155.0;
+    customMax        = 230.0;
     notifyListeners();
   }
 }

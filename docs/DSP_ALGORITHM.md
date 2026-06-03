@@ -185,9 +185,11 @@ interface DspDebug {
 
 ### Граница FFI (Phase 2)
 
-Крейт `core/ffi` экспонирует потоковый движок не-Rust-вызывающим (Flutter, нативные iOS/Android аудио-мосты). Границу пересекают всего шесть символов; ни один из них не позволяет вызывающему считать BPM самостоятельно:
+Крейт `core/ffi` экспонирует потоковый движок не-Rust-вызывающим (Flutter, нативные iOS/Android аудио-мосты). Границу пересекают семь символов; ни один из них не позволяет вызывающему считать BPM самостоятельно:
 
 - `hitech_bpm_engine_new` / `hitech_bpm_engine_free` — время жизни хэндла.
+- `hitech_bpm_engine_new_with_min_bpm(min_bpm: f32)` — конструктор с кастомным минимальным BPM (Phase 10: Free=170, Pro=155). `min_bpm` зажимается в [80, 230].
+- `hitech_bpm_engine_new_with_range(min_bpm: f32, max_bpm: f32)` — конструктор с полным диапазоном (Phase 2.5: Custom preset). `min` зажимается в [80, 260], `max` в [min+10, 300].
 - `hitech_bpm_engine_reset` — сбросить скользящее состояние на месте.
 - `hitech_bpm_engine_push_samples(samples, len, sample_rate) -> bool` — вход с аудио-потока; легковесно по аллокациям.
 - `hitech_bpm_engine_analyze_json(engine) -> *mut c_char` — опрос на UI-частоте. Сериализует текущий `DspResult` в UTF-8 JSON, владелец — вызывающий. JSON-ключи соответствуют контракту выше. Рекомендуемая частота опроса ~10–30 Гц; не вызывать с аудио-потока.
@@ -464,7 +466,7 @@ Double-time-нормализация (>260 → ÷2) не затронута ра
 
 1. **RMS dBFS** (40%) — скользящий PCM-буфер 3 сек; вычисляется независимо в `EnergyAnalyzer.push_samples()`.
 2. **Spectral flux** (35%) — среднее по `flux_history`, получаемой через `push_flux(flux)` из `DspEngine` (уже вычисленный flux, без дублирования CPU).
-3. **Onset density** (25%) — `count_flux_peaks() / (flux_history.len() × HOP_SEC)`. Считаются локальные максимумы `flux_history` выше порога `max(mean+2σ, 0.01)` с минимальным зазором 100 мс между пиками.
+3. **Onset density** (25%) — `count_flux_peaks() / (flux_history.len() × hop_sec)`. Считаются локальные максимумы `flux_history` выше порога `max(mean+2σ, 0.01)` с минимальным зазором 100 мс между пиками. `hop_sec` передаётся из `DspEngine` (Phase 2.2.3: динамический, не константа).
 
 Нормализация: каждая компонента линейно масштабируется в [0, 1] по калибровочным константам, затем взвешивается. Результат → `ceil(sum × 10).clamp(1, 10)`.
 
@@ -476,12 +478,16 @@ Double-time-нормализация (>260 → ÷2) не затронута ра
 
 ### Константы (калибровка для hitech 155–230 BPM)
 
+Phase 2.2.4: `FLUX_MAX` обновлён по данным 4 реальных hitech-треков (210–212 BPM,
+[treки 22–25](../datasets/fixture_manifest.json)). Измеренный диапазон
+`spectral_flux = 0.013–0.023`; P95 ≈ 0.023, +30% margin → `FLUX_MAX = 0.030`.
+
 | Константа | Значение | Назначение |
 |---|---|---|
 | `RMS_DBFS_MIN` | -50.0 dBFS | Нижняя граница RMS |
-| `RMS_DBFS_MAX` | -6.0 dBFS | Верхняя граница RMS |
+| `RMS_DBFS_MAX` | -6.0 dBFS | Верхняя граница RMS (реальные треки: до -6.1 dBFS) |
 | `FLUX_MIN` | 0.0 | Нижняя граница flux |
-| `FLUX_MAX` | 0.15 | Верхняя граница flux (hitech пульс) |
+| `FLUX_MAX` | **0.030** | Верхняя граница flux — **обновлено в Phase 2.2.4** (было 0.15 по синтетике; P95 реальных треков ≈ 0.023 + 30% margin) |
 | `DENSITY_MIN` | 0.5 /s | Редкий пульс |
 | `DENSITY_MAX` | 8.0 /s | Плотный hitech kick (Phase 2.2.2: ~3–8 Hz реальных пиков) |
 | `FLUX_ABSOLUTE_FLOOR` | 0.01 | Минимальный flux для пика: отсекает шум (max noise ≈ 0.008) |
@@ -491,7 +497,30 @@ Double-time-нормализация (>260 → ÷2) не затронута ра
 
 ### Известные ограничения
 
-- Константы подобраны на синтетических фикстурах; требуют fine-tuning на реальных записях (Phase 2.2.1).
-- `FLUX_ABSOLUTE_FLOOR = 0.01` калиброван под `pulse_track(amplitude=0.7)`; для очень тихих треков (amplitude << 0.3) onset_density может недосчитывать удары.
+- `FLUX_ABSOLUTE_FLOOR = 0.01` калиброван под `pulse_track(amplitude=0.7)`; для очень тихих треков (amplitude << 0.3) onset_density может недосчитывать удары. Верификация в `flux_floor_does_not_silence_quiet_pulse_amplitude_0_1` показала: при amplitude=0.1 (~-20 dBFS) пики flux всё ещё детектируются в STABLE.
+- Калибровка Phase 2.2.4 основана на 4 треках (22–25); для более широкого охвата требуется ≥ 10 треков из разных жанровых поддиапазонов.
 - `energy_result` не вычисляется в batch-пути `analyze_pcm` — только в потоковом `DspEngine`.
 - Python-референс (`tempo.py`) не реализует `energy_result` — всегда `None` в Python-пути.
+
+### Phase 2.2.3: динамический hop_sec (2026-06-03)
+
+`EnergyAnalyzer::new(sample_rate, hop_sec)` — сигнатура расширена. Реальный `hop_sec` передаётся из `DspEngine` (вычислен как `hop_size / sample_rate`). Константа `HOP_SEC = 0.0025` удалена. `flux_capacity` и `onset_density_hz` теперь корректны для любого sample rate, не только 48 kHz. `min_peak_gap` вычисляется динамически: `(0.1 / hop_sec).round()` (100 мс зазор).
+
+### Phase 2.2.4: калибровка FLUX_MAX по реальным трекам (2026-06-03)
+
+**Проблема:** `FLUX_MAX = 0.15` был подобран на синтетике (`clean_200` onset_strength ≈ 0.10–0.14). На реальных hitech-треках (Phase 2.2.1) `spectral_flux = 0.013–0.023` — в 6–10× ниже потолка. Flux-компонент нормализовался в 0.09–0.15, и весь диапазон [1–10] сжимался в зону [7–8] без дискриминации.
+
+**Решение:** `FLUX_MAX` снижен с 0.15 до **0.030** на основе эмпирических данных 4 реальных треков (22–25):
+
+| Трек | rms_dbfs | spectral_flux | flux_norm (было) | flux_norm (стало) |
+|---|---|---|---|---|
+| hitech_real_22 | -7.8 | 0.0218 | 0.145 | **0.727** |
+| hitech_real_23 | -6.1 | 0.0231 | 0.154 | **0.770** |
+| hitech_real_24 | -11.0 | 0.0130 | 0.087 | **0.433** |
+| hitech_real_25 | -8.0 | 0.0169 | 0.113 | **0.563** |
+
+Теперь flux-компонент осмысленно дискриминирует активные треки в диапазоне 0.43–0.77, а не у нижней границы. Синтетика `clean_200` (flux ≈ 0.10) насыщает flux_norm до 1.0 — уровень остаётся в [4, 8] благодаря умеренному RMS синтетического пульса.
+
+**Тесты:**
+- `calibration_real_hitech_proxy_level_at_least_5` — синтетический прокси с rms ≈ -8 dBFS, flux ≈ 0.020 → level ≥ 5.
+- `calibration_weak_signal_level_at_most_4` — слабый сигнал rms ≈ -30 dBFS, flux ≈ 0.003 → level ≤ 4.

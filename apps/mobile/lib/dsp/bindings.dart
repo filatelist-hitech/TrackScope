@@ -19,6 +19,9 @@ typedef HitechBpmEngineNew = ffi.Pointer<HitechBpmEngine> Function();
 typedef _engine_new_with_min_bpm_c = ffi.Pointer<HitechBpmEngine> Function(ffi.Float);
 typedef HitechBpmEngineNewWithMinBpm = ffi.Pointer<HitechBpmEngine> Function(double);
 
+typedef _engine_new_with_range_c = ffi.Pointer<HitechBpmEngine> Function(ffi.Float, ffi.Float);
+typedef HitechBpmEngineNewWithRange = ffi.Pointer<HitechBpmEngine> Function(double, double);
+
 typedef _engine_free_c = ffi.Void Function(ffi.Pointer<HitechBpmEngine>);
 typedef HitechBpmEngineFree = void Function(ffi.Pointer<HitechBpmEngine>);
 
@@ -64,6 +67,10 @@ final class HitechBpmFfi {
             .lookup<ffi.NativeFunction<_engine_new_with_min_bpm_c>>(
                 'hitech_bpm_engine_new_with_min_bpm')
             .asFunction<HitechBpmEngineNewWithMinBpm>(),
+        engineNewWithRange = dylib
+            .lookup<ffi.NativeFunction<_engine_new_with_range_c>>(
+                'hitech_bpm_engine_new_with_range')
+            .asFunction<HitechBpmEngineNewWithRange>(),
         engineFree = dylib
             .lookup<ffi.NativeFunction<_engine_free_c>>('hitech_bpm_engine_free')
             .asFunction<HitechBpmEngineFree>(),
@@ -84,6 +91,7 @@ final class HitechBpmFfi {
 
   final HitechBpmEngineNew engineNew;
   final HitechBpmEngineNewWithMinBpm engineNewWithMinBpm;
+  final HitechBpmEngineNewWithRange engineNewWithRange;
   final HitechBpmEngineFree engineFree;
   final HitechBpmEngineReset engineReset;
   final HitechBpmEnginePushSamples enginePushSamples;

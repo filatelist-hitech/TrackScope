@@ -322,7 +322,7 @@ impl DspEngine {
             onset_capacity,
             hop_sec,
             key_analyzer: KeyAnalyzer::new(config.sample_rate as f32),
-            energy_analyzer: EnergyAnalyzer::new(config.sample_rate as f32),
+            energy_analyzer: EnergyAnalyzer::new(config.sample_rate as f32, hop_sec),
         }
     }
 

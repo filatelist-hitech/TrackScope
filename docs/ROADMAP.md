@@ -446,6 +446,51 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - Калибровочные константы (`FLUX_MAX = 0.15`, `DENSITY_MAX = 6.0`) подобраны на синтетике; требуют fine-tuning на реальных записях (Phase 2.2.1).
 - Python-референс (`tempo.py`) не реализует `energy_result` — всегда `None` в Python-пути.
 
+### Phase 2.2.3: динамический hop_sec (2026-06-03)
+
+`EnergyAnalyzer::new(sample_rate, hop_sec)` — сигнатура расширена. Реальный `hop_sec` передаётся из `DspEngine` (вычислен как `hop_size / sample_rate`). Константа `HOP_SEC = 0.0025` удалена. `flux_capacity` и `onset_density_hz` теперь корректны для любого sample rate, не только 48 kHz. `min_peak_gap` вычисляется динамически: `(0.1 / hop_sec).round()` (100 мс зазор).
+
+Артефакты:
+- `core/dsp/src/energy_analyzer.rs` — удалена `const HOP_SEC`, добавлено поле `hop_sec: f32`, сигнатура `new(sample_rate, hop_sec)`, динамический `min_peak_gap`.
+- `core/dsp/src/lib.rs` — call site обновлён: `EnergyAnalyzer::new(config.sample_rate as f32, hop_sec)`.
+- `core/dsp/tests/energy.rs` — +2 документальных теста: `flux_floor_does_not_silence_quiet_pulse_amplitude_0_1`, `flux_floor_boundary_very_quiet_pulse_amplitude_0_02`.
+
+Критерии выхода — выполнены:
+- `cargo test --workspace` → 122/122 Rust-тестов ✓
+- `flutter test` → 218/218 (1 pre-existing dsp_engine_test) ✓
+- `FLUX_ABSOLUTE_FLOOR` верифицирован: при amplitude=0.1 (~-20 dBFS) пики flux детектируются в STABLE ✓
+- Нет изменений в `DspResult` / FFI / Dart-контракте ✓
+
+---
+
+### Phase 2.2.4: калибровка FLUX_MAX по реальным hitech-трекам — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: устранить сжатие диапазона energy_level в зону [7–8] на активных треках из-за завышенного `FLUX_MAX`.
+
+**Проблема:** `FLUX_MAX = 0.15` (по синтетике). Реальные треки: `spectral_flux = 0.013–0.023` → flux_norm 0.09–0.15 → весь диапазон [1–10] «сжат» у потолка.
+
+Артефакты:
+- `core/dsp/src/energy_analyzer.rs` — `FLUX_MAX`: 0.15 → **0.030** (P95 реальных треков ≈ 0.023 + 30% margin). Обновлён комментарий с empirical-обоснованием.
+- `core/dsp/tests/energy.rs` — +2 теста: `calibration_real_hitech_proxy_level_at_least_5` (rms ≈ -8 dBFS, flux ≈ 0.020 → level ≥ 5), `calibration_weak_signal_level_at_most_4` (rms ≈ -30 dBFS, flux ≈ 0.003 → level ≤ 4).
+- `docs/DSP_ALGORITHM.md` — таблица констант обновлена, добавлен подраздел Phase 2.2.4 с таблицей сравнения flux_norm.
+- `docs/QA_MATRIX.md` — добавлена секция Phase 2.2.4 с данными 4 реальных треков.
+
+Критерии выхода — выполнены:
+- `FLUX_MAX = 0.030` откалиброван по эмпирическим данным (4 трека) ✓
+- Активные hitech-треки (rms ≈ -8 dBFS, flux ≈ 0.020) дают level ≥ 5 ✓
+- Слабый сигнал (rms ≈ -30 dBFS, flux ≈ 0.003) даёт level ≤ 4 ✓
+- Синтетика `clean_200` сохраняет level ∈ [4, 8] (без регрессий) ✓
+- `cargo test --workspace` → 124/124 Rust-тестов ✓
+- `flutter test` → 218 pass (1 pre-existing) ✓
+- `offline_lab.py report` → exit code 0 ✓
+- Тишина → `energy_result == None` ✓
+- CLIPPED_MIC → `energy_result == None` ✓
+- Нет изменений в `DspResult` / FFI / Dart-контракте / публичном API ✓
+
+Известные ограничения:
+- Калибровка по 4 трекам; для устойчивости нужно ≥ 10 треков из разных жанровых поддиапазонов.
+- Аудиофайлы треков 01–21 отсутствуют в репозитории (авторское право) — замер только по трекам 22–25.
+
 ---
 
 ## Phase 2.3: Energy / Key Display на Radar Tab — **ЗАВЕРШЕНО** (2026-06-03)
@@ -494,3 +539,152 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 - `flutter analyze` → 0 errors ✓
 - ЭНЕРГИЯ и ТОНАЛЬНОСТЬ видимы при любом DSP-состоянии ✓
 - Скролл недоступен ✓
+
+---
+
+## Phase 2.4: Setlist — Camelot Key + Energy Level — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: дополнить каркас `SetlistService` / `SetlistEntry` / `SetlistScreen`, реализованный
+в Phase 10, реальными данными KeyAnalyzer и EnergyAnalyzer (Phase 2.1 + 2.2).
+
+### Что изменилось
+
+- **`SetlistEntry`** (`apps/mobile/lib/features/setlist/setlist_entry.dart`):
+  - Раскомментированы поля `camelotKey: String?` и `energyLevel: int?`.
+  - `toJson()` включает поля только если не null (JSON-backward-compatible).
+  - `toCsvRow()` добавляет два столбца; `setlistCsvHeader` обновлён:
+    `timestamp,bpm,lock_state,confidence,input_level_dbfs,camelot_key,energy_level`.
+
+- **`SetlistService`** (`apps/mobile/lib/features/setlist/setlist_service.dart`):
+  - `onDspResult` передаёт `result.keyResult?.camelot` и `result.energyResult?.level`
+    в конструктор `SetlistEntry`.
+  - `exportJson()` содержит `has_key_data` и `has_energy_data` в summary-объекте.
+
+- **`SetlistScreen._EntryRow`** (`apps/mobile/lib/features/setlist/setlist_screen.dart`):
+  - Если `entry.camelotKey != null` — отображается акцентным цветом справа от confidence.
+  - Если `entry.energyLevel != null` — отображается `E{N}` muted-цветом.
+
+**Anti-fake инвариант сохранён:** запись в сетлист происходит **только** при
+`lockState == STABLE` и `primaryBpm != null`. Поля key/energy берутся из реального
+DSP-результата; fallback-значений нет.
+
+### Тесты
+
+- `test/features/setlist/setlist_service_test.dart` — +6 новых тестов:
+  `onDspResult with key_result stores camelotKey`, `without key_result stores null`,
+  `with energy_result stores energyLevel`, `exportJson contains camelot_key`,
+  `exportJson contains has_key_data field`, `exportCsv header/row columns`.
+- `test/features/setlist/setlist_screen_test.dart` — +3 новых теста:
+  `shows camelot key`, `shows energy level`, `renders without camelot/energy (null)`.
+
+Критерии выхода — выполнены:
+
+- `flutter test` → 203 passed (1 pre-existing dsp_engine_test — нет .dylib) ✓
+- `flutter analyze` → 0 errors, 17 pre-existing infos ✓
+- `SetlistEntry` хранит `camelotKey`/`energyLevel` ✓
+- `_EntryRow` отображает `8A` и `E7` при наличии данных ✓
+- CSV-заголовок обновлён, JSON-summary содержит `has_key_data`/`has_energy_data` ✓
+- Anti-fake: запись только при STABLE + primaryBpm != null ✓
+
+---
+
+## Phase 2.5: FFI `new_with_range` + Custom(min, max) пресет — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: дать Pro-пользователю полный контроль над BPM-диапазоном детектора через
+Custom-пресет с произвольными min/max; расширить FFI-границу обратно-совместимым
+третьим конструктором.
+
+### Что изменилось
+
+**Rust FFI** (`core/ffi/src/lib.rs`):
+
+- `hitech_bpm_engine_new_with_range(min_bpm: f32, max_bpm: f32)` — новый
+  конструктор. `min` зажимается в [80, 260], `max` в [min+10, 300]; не-finite →
+  дефолт (155, 230). Создаёт `DspConfig { target_bpm_min: min, target_bpm_max: max }`.
+- Тесты (`core/ffi/tests/ffi_contract.rs`):
+  - `engine_new_with_range_ctor_returns_non_null` — указатель ненулевой.
+  - `engine_new_with_range_detects_in_band_tempo` — детектирует 180 BPM в диапазоне
+    (160, 200), STABLE ≤ 13 с.
+
+**Dart bindings** (`apps/mobile/lib/dsp/bindings.dart`):
+
+- `typedef _EngineNewWithRangeC` / `HitechBpmEngineNewWithRange` добавлены.
+- `HitechBpmFfi.engineNewWithRange` — lookup `hitech_bpm_engine_new_with_range`.
+
+**DspEngine + CaptureBridge + dsp_worker**:
+
+- `DspEngine.fromBindings(…, maxBpm?)`: выбор конструктора — `new_with_range`
+  если `maxBpm != null`, `new_with_min_bpm` если только `minBpm != null`, иначе `new`.
+- `CaptureBridge` принимает `maxBpm?`; `WorkerInit` несёт поле `maxBpm?`;
+  worker выбирает конструктор по логике выше.
+
+**GenrePreset** (`apps/mobile/lib/features/genre_preset/genre_preset.dart`):
+
+- `custom` добавлен как 8-й вариант (в конец — индексы 0–7 стабильны для
+  SharedPreferences).
+- `isProRequired`: `custom → true`.
+- `bpmRange`: placeholder `(155.0, 230.0)` — реальные значения берутся из
+  `AppSettings.customMin/customMax` по `effectiveBpmRange`.
+- `allPresets`: теперь 8 вариантов; `freePresets` остаётся 3.
+
+**AppSettings** (`apps/mobile/lib/settings/app_settings.dart`):
+
+- Поля `customMin = 155.0` / `customMax = 230.0`.
+- SharedPreferences-ключи `'custom_min_bpm'` / `'custom_max_bpm'`.
+- `setCustomRange(min, max)`: валидация `min < max && min >= 80 && max <= 300` —
+  иначе no-op.
+- `effectiveBpmRange`: при `selectedGenre == custom` → `(customMin, customMax)`,
+  иначе → `selectedGenre.bpmRange`.
+- `resetAll()` сбрасывает `customMin/customMax` в дефолты.
+
+**FeatureFlags** (`apps/mobile/lib/monetization/feature_flags.dart`):
+
+- Новые поля `customMin`, `customMax` (defaults 155/230).
+- `maxBpm` добавлен: при `isPro && genre == custom` → `customMax`; иначе →
+  `preset.bpmRange.$2`.
+
+**main.dart**: `CaptureBridge` получает `maxBpm: flags.maxBpm` при создании;
+`ListenableBuilder` на `Listenable.merge([ProStatusService, AppSettings])` триггерит
+пересоздание при смене диапазона — новый `DspEngine` с обновлёнными min/max.
+
+**SettingsScreen** (`apps/mobile/lib/screens/settings_screen.dart`):
+
+- Секция «CUSTOM RANGE» появляется только при `selectedGenre == custom`.
+- Pro: два `_SliderRow` (Min BPM 80–max-10, Max BPM min+10–300).
+- Free: `_InfoRow` «Требуется PRO» с PRO-бейджем.
+- `_GenrePickerRow` и `_InfoRow BPM Range` отображают live-значения
+  `AppSettings.customMin/customMax`, а не placeholder `bpmRange`.
+
+### Тесты
+
+- `core/ffi/tests/ffi_contract.rs` → `engine_new_with_range_ctor_returns_non_null`,
+  `engine_new_with_range_detects_in_band_tempo` (+2 Rust).
+- `test/settings/custom_range_test.dart` → 11 тестов: defaults, validation
+  (valid, min==max, min>max, min<80, max>300, boundary), effectiveBpmRange.
+- `test/screens/settings_screen_custom_test.dart` → 4 теста: Custom+Pro показывает
+  слайдеры, не-Custom скрывает секцию, Custom+Free показывает paywall-hint,
+  BPM Range строка отражает customMin/customMax.
+- `test/monetization/feature_flags_test.dart` → обновлены 2 счётчика (7→8 Pro,
+  7→8 allPresets).
+
+### Критерии выхода — выполнены
+
+- `cargo test --workspace` → все тесты зелёные (incl. `engine_new_with_range_*`) ✓
+- `flutter analyze` → 0 errors ✓
+- `flutter test` → 218 passed, 1 pre-existing (dsp_engine_test — нет .dylib) ✓
+- `GenrePreset.custom` Pro-gated, `allPresets.length == 8` ✓
+- `AppSettings.setCustomRange` валидирует и сохраняет в SharedPreferences ✓
+- `CaptureBridge` передаёт `maxBpm` → worker выбирает `new_with_range` ✓
+- SettingsScreen: Custom+Pro → слайдеры; Custom+Free → paywall-hint ✓
+- Нет фейкового BPM, нет хардкода диапазона, anti-fake инварианты сохранены ✓
+
+### Известные ограничения
+
+- Слайдеры — непрерывные (Slider). При каждом тике вызывается `setCustomRange`,
+  что инициирует async-запись в SharedPreferences. Для крайне активного перетаскивания
+  это создаёт лишние writes; future: throttle через `onChangeEnd`.
+- При Custom+Pro смена диапазона пересоздаёт `_CapturePipeline` (новый `ValueKey`) —
+  DSP-история сбрасывается. Это корректное поведение (новый движок с новым диапазоном),
+  но визуально на 1–2 секунды STABLE → SEARCHING.
+- Python-референс (`tempo.py`) и offline-lab не затронуты — `new_with_range` — чисто
+  Flutter-сторона; DSP-алгоритм не изменился.

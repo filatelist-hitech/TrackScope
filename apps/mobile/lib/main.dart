@@ -108,6 +108,8 @@ class _LiveCaptureScaffold extends StatelessWidget {
         final flags = FeatureFlags(
           isPro: _forceProTier || ProStatusService.instance.isPro,
           selectedGenre: AppSettings.instance.selectedGenre,
+          customMin: AppSettings.instance.customMin,
+          customMax: AppSettings.instance.customMax,
         );
         return _CapturePipeline(
           key: ValueKey('${flags.minBpm}-${flags.maxBpm}'),
@@ -138,7 +140,10 @@ class _CapturePipelineState extends State<_CapturePipeline> {
   @override
   void initState() {
     super.initState();
-    _bridge = CaptureBridge(minBpm: widget.flags.minBpm);
+    _bridge = CaptureBridge(
+      minBpm: widget.flags.minBpm,
+      maxBpm: widget.flags.maxBpm,
+    );
     _mic = MicrophoneSource();
     _history = SessionHistoryController(
       flags: widget.flags,

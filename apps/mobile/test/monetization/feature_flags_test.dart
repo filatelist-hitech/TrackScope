@@ -119,9 +119,9 @@ void main() {
       expect(const FeatureFlags(isPro: true).canAccessGenrePicker, isTrue);
     });
 
-    test('availablePresets: Free has 3 presets, Pro has 7', () {
+    test('availablePresets: Free has 3 presets, Pro has 8 (includes custom)', () {
       expect(const FeatureFlags(isPro: false).availablePresets.length, 3);
-      expect(const FeatureFlags(isPro: true).availablePresets.length, 7);
+      expect(const FeatureFlags(isPro: true).availablePresets.length, 8);
     });
   });
 
@@ -148,8 +148,8 @@ void main() {
       expect(GenrePreset.freePresets.length, 3);
     });
 
-    test('allPresets count is 7', () {
-      expect(GenrePreset.allPresets.length, 7);
+    test('allPresets count is 8 (includes custom)', () {
+      expect(GenrePreset.allPresets.length, 8);
     });
   });
 }
