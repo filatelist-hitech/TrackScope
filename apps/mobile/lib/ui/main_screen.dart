@@ -372,18 +372,17 @@ class _GlassmorphismCard extends StatelessWidget {
                 color: Colors.white.withAlpha(8),
               ),
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-              child: ScrollConfiguration(
-                behavior: const _NoGlowScrollBehavior(),
-                child: SingleChildScrollView(
-                  physics: const ClampingScrollPhysics(),
-                  child: _InfoTableContent(
-                    result: result,
-                    viz: viz,
-                    displayBpm: displayBpm,
-                    isLockingDisplay: isLockingDisplay,
-                    onBestCandidateTap: onBestCandidateTap,
-                    onBreak: onBreak,
-                  ),
+              clipBehavior: Clip.hardEdge,
+              child: OverflowBox(
+                alignment: Alignment.topCenter,
+                maxHeight: double.infinity,
+                child: _InfoTableContent(
+                  result: result,
+                  viz: viz,
+                  displayBpm: displayBpm,
+                  isLockingDisplay: isLockingDisplay,
+                  onBestCandidateTap: onBestCandidateTap,
+                  onBreak: onBreak,
                 ),
               ),
             ),
@@ -1145,21 +1144,4 @@ class _ErrorBanner extends StatelessWidget {
       ),
     );
   }
-}
-
-// ── Scroll behavior — removes both scrollbar and overscroll glow ─────────────
-// Used in _GlassmorphismCard so the info-card column can silently overflow
-// on very small screens without any visible scroll UI artifacts.
-class _NoGlowScrollBehavior extends ScrollBehavior {
-  const _NoGlowScrollBehavior();
-
-  @override
-  Widget buildOverscrollIndicator(
-          BuildContext context, Widget child, ScrollableDetails details) =>
-      child;
-
-  @override
-  Widget buildScrollbar(
-          BuildContext context, Widget child, ScrollableDetails details) =>
-      child;
 }
