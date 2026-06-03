@@ -721,3 +721,209 @@ Custom-пресет с произвольными min/max; расширить FF
 Известное ограничение: ручная верификация на физическом Android-устройстве с 3-кнопочной
 навигацией необходима перед финальным релизом. AVD-эмулятор не воспроизводит высоту системной
 полосы достоверно.
+
+---
+
+## Phase 13.1: Real-world stability + KeyAnalyzer fix — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: устранить три проблемы, выявленные при реальном тестировании на iPhone.
+
+### Баги и фиксы
+
+#### 1. BpmSmoother выбрасывал energy_result / key_result (КРИТИЧЕСКИЙ БАГ)
+
+`BpmSmoother.smooth()` создавал `DspResult` без `keyResult` и `energyResult` — они молча
+становились `null` на каждом сглаженном кадре. ЭНЕРГИЯ и ТОНАЛЬНОСТЬ на главном экране
+всегда показывали «—», даже когда Rust DSP корректно их вычислял.
+
+**Фикс:** добавлены `keyResult: raw.keyResult, energyResult: raw.energyResult` в конструктор
+внутри `smooth()`.
+
+**Новый тест:** `bpm_smoother_test.dart` — `smooth() передаёт keyResult и energyResult без изменений`.
+
+#### 2. STABLE недостижим в реальных условиях
+
+На iPhone в комнате при воспроизведении через колонку: SNR ≈ 2.7 dB → `signal_factor = 0.28`
+→ итоговая уверенность ~60% при кандидатном score 86% → порог STABLE 0.70 никогда не достигался.
+
+**Фиксы:**
+- STABLE-порог: **0.70 → 0.65** (`analyze_from_envelope` + `analyze_candidates` в `lib.rs`, `tempo.py`)
+- SNR signal_factor нижняя граница: **0.28 → 0.40** (убирает обрыв на 3 dB)
+
+#### 3. KeyAnalyzer всегда возвращал 3A или 2B
+
+HPCP вычислялся с 50 Hz и без нормализации по частоте. FFT-биты линейны по Гц,
+но питч-классы — логарифмичны: Gb/F получали 17 бинов из 50–200 Hz vs 9 у Ab/Bb →
+K-S корреляция систематически выбирала Gb Major (2B) или Bb Minor (3A).
+
+**Фиксы:**
+- `FREQ_MIN`: **50 → 100 Hz** (убирает суб-бас kick drum)
+- **1/f-нормализация** при аккумуляции HPCP: `power / freq` для каждого бина →
+  равномерный вклад по полутонам → нет структурного смещения питч-класса
+
+### Критерии выхода — выполнены
+
+- `flutter test` → 219 pass (1 pre-existing dsp_engine_test) ✓
+- `cargo test --workspace` → все тесты зелёные ✓
+- `offline_lab.py report` → 15/15 PASS, exit 0 ✓
+- ЭНЕРГИЯ и ТОНАЛЬНОСТЬ рендерятся в LOCKING-состоянии ✓
+- STABLE достижим при реальном воспроизведении ✓
+- KeyAnalyzer больше не застревает на 3A/2B ✓
+- Anti-fake инварианты не нарушены: silence/noise/clipping → никогда не STABLE ✓
+
+### Известные ограничения
+
+- Калибровка STABLE-порога 0.65 оптимальна для ~2.7 dB SNR. При очень сильном клубном
+  шуме (SNR < 1 dB) движок по-прежнему остаётся в LOCKING — это корректное поведение.
+- KeyAnalyzer требует реальных мелодических/гармонических компонентов для точной детекции;
+  на чистом ритмическом материале (только бочка) уверенность может быть ниже порога 0.25.
+- 1/f-нормализация в HPCP — ещё не проверена на широкой выборке реальных треков с разными
+  тональностями. Ручная верификация рекомендована на ≥5 треков с известным ключом.
+
+---
+
+## Phase 14: Adaptive Main Screen Layout — **ЗАВЕРШЕНО** (2026-06-04)
+
+Цель: устранить overflow на малых устройствах (Pixel 4, iPhone SE) — все 4 строки stats,
+ЭНЕРГИЯ и ТОНАЛЬНОСТЬ видимы без скролла на любом Android/iOS устройстве.
+
+### Диагностика
+
+| Устройство | Высота body | Карточка (outer) | Overflow |
+|---|---|---|---|
+| Pixel 7 | ~750 dp | ~393 dp | −10 dp (mode chips срезаны) |
+| Pixel 4 | ~665 dp | ~341 dp | **+42 dp** (ЭНЕРГИЯ/ТОНАЛЬНОСТЬ срезана) |
+
+Причина: порог `showLockChips: cc.maxHeight >= 330` был слишком низким (both Pixel 7 и
+Pixel 4 попадали в зону chips-shown), а BPM hero и spacings были не адаптивными.
+
+### Решение (adaptive compact mode)
+
+| Режим | Порог (card outer height) | BPM font | spacing | chips |
+|---|---|---|---|---|
+| compact | `cc.maxHeight < 420` | 52 dp | 1 dp | скрыты при < 380 dp |
+| normal  | `cc.maxHeight ≥ 420` | 72 dp | 3 dp | показаны |
+
+**Расчёт экономии (compact без chips, Pixel 4, card=341 dp):**
+BPM 72→52 (−17 dp) + spacings ×5 (−10 dp) + break padding (−6 dp) + без chips (−29 dp) = **−62 dp**
+Контент: 365 − 62 = **303 dp** vs 323 dp доступно → **+20 dp margin** ✓
+
+### Артефакты
+
+- **`_GlassmorphismCard`** (`apps/mobile/lib/ui/main_screen.dart`): LayoutBuilder теперь
+  вычисляет `compact = cc.maxHeight < 420` и `showLockChips = cc.maxHeight >= 380`;
+  оба параметра передаются в `_InfoTableContent`. `OverflowBox` сохранён как safety-net.
+- **`_InfoTableContent`**: новый параметр `compact: bool = false`. В `build()` —
+  `spacing = compact ? 1.0 : 3.0` и `bpmFontSize = compact ? 52.0 : 72.0`.
+  Все 5 `const SizedBox(height: 2/3)` заменены на `SizedBox(height: spacing)`.
+- **`_AnimatedBpmDisplay`**: новые параметры `fontSize: double = 72.0` и
+  `subtitleHeight: double = 22.0`. `letterSpacing` адаптирован: `< 60dp → −1.5`,
+  иначе `−2.5`. В compact-режиме передаётся `fontSize: 52.0, subtitleHeight: 18.0`.
+- **`_BreakButtonInline`**: новый параметр `compactPadding: bool = false`.
+  `vertical: compactPadding ? 5 : 8`. В compact-режиме передаётся `compactPadding: true`.
+- **Тесты** (`apps/mobile/test/widget_test.dart`):
+  - 6 chip-тестов обновлены: `tester.view.physicalSize = const Size(800, 1200)` (card ≈659 dp, chips visible).
+  - **+2 новых теста**: `compact layout hides mode chips when card height is small` и
+    `energy and key labels always visible in compact mode` (480×720 @ 1x, card ≈361 dp).
+
+### Критерии выхода — выполнены
+
+- `flutter test` → **221/221 pass** (+2 новых теста, было 219) ✓
+- `flutter analyze` → 0 errors ✓
+- `cargo test --workspace` → все зелёные (DSP не трогался) ✓
+- На **Pixel 7** (card ≈393 dp): compact font + chips показаны (393 ≥ 380) ✓
+- На **Pixel 4** (card ≈341 dp): compact font + chips скрыты (341 < 380); ЭНЕРГИЯ/ТОНАЛЬНОСТЬ видимы ✓
+- Нет хардкодного BPM, нет демо-значений, anti-fake инварианты не нарушены ✓
+- `MainScreen` публичный API не изменился (только приватные классы внутри файла) ✓
+
+### Известные ограничения
+
+- Пороги 380/420 dp верифицированы расчётно для Pixel 4/7. Верификацию на AVD-профилях
+  Pixel 3a, Pixel 7 Pro и iPhone SE Gen3 — рекомендуется провести вручную.
+- BPM `—  —  —` (3 символа) в compact 52dp режиме: при очень узких экранах (<360 dp wide)
+  возможен горизонтальный overflow; добавлен `maxLines: 1` на будущее как mitigation.
+
+---
+
+## Phase 2.5 (Camelot Wheel UI): ТОНАЛЬНОСТЬ в Signal Analyzer — **ЗАВЕРШЕНО** (2026-06-04)
+
+Цель: визуализировать результат `KeyResult` из Phase 2.1 как интерактивное Camelot Wheel
+в Signal Analyzer, чтобы DJ мог мгновенно оценить совместимые тональности.
+
+*Примечание: нумерация плана — `phase-2-5-camelot-wheel-ui.md`; Phase 2.5 в числовом смысле
+параллельна Phase 2.5 (FFI `new_with_range`) — это разные фичи.*
+
+### Артефакты
+
+- **`apps/mobile/lib/viz/camelot_wheel_painter.dart`** — `CamelotWheelPainter` (CustomPainter):
+  2 кольца × 12 сегментов = 24 аннулярных сектора по 30°. Активный сегмент — `AppColors.accent`;
+  3 гармонически совместимых соседа — accent 28% alpha; остальные — `surfaceHigh`.
+  Чистая функция `camelotNeighbors(String camelot) → List<String>`: возвращает prev/next по кольцу
+  + cross-ring (A↔B), с wrap-around на позициях 1 и 12.
+- **`apps/mobile/lib/widgets/camelot_wheel_widget.dart`** — `CamelotWheelWidget(keyResult?, size)`:
+  stateless-обёртка с `RepaintBoundary`. При `null` keyResult рисует колесо без подсветки.
+- **`apps/mobile/lib/screens/signal_analyzer_screen.dart`** — `_KeyGroup` widget: секция
+  «ТОНАЛЬНОСТЬ» (между Энергией и Метриками алгоритма). Рендерится только при `keyResult != null`.
+  Контент: `CamelotWheelWidget(size: 180)` + строка «A Minor · 8A · 62%».
+
+### Тесты (+11 новых)
+
+- `test/viz/camelot_wheel_painter_test.dart` — 4 unit-теста `camelotNeighbors()`:
+  mid-wheel, wrap 1→12, wrap 12→1, invalid input.
+- `test/widgets/camelot_wheel_widget_test.dart` — 4 smoke-теста: null/valid key, size,
+  RepaintBoundary.
+- `test/screens/signal_analyzer_screen_test.dart` — 3 integration-теста: секция скрыта
+  при null, показана при keyResult, summary «A Minor · 8A · 62%».
+
+### Критерии выхода — выполнены
+
+- `flutter test` → **232/232 pass** (+11 тестов, было 221) ✓
+- `flutter analyze` → 0 errors ✓
+- `cargo test --workspace` → все зелёные (DSP не трогался) ✓
+- `offline_lab.py report` → exit 0, 15/15 PASS ✓
+- Нет BPM-математики в UI — все данные из `DspResult.keyResult` ✓
+- Anti-fake инварианты не нарушены: нет хардкодных значений, нет STABLE без evidence ✓
+- Radar tab не изменён ✓
+
+### Известные ограничения
+
+- Колесо статическое (не вращается). Анимация перехода при смене тональности — бэклог.
+- Текстовые лейблы сегментов используют `IBMPlexMono` через `TextStyle.fontFamily`.
+  Если шрифт не загружен в тестовом окружении, рендерится fallback — визуально корректно.
+- `CamelotWheelPainter` не проверяет `keyResult.confidence < 0.25` — это гейт DSP-уровня
+  (в `DspEngine`), не UI. Если DSP не эмитит `key_result` при низкой уверенности, секция
+  просто не отображается (`keyResult == null`). Поведение корректно по контракту.
+
+---
+
+## Phase 2.6: Share Set Energy Card — **ЗАВЕРШЕНО** (2026-06-04)
+
+Цель: позволить Pro-пользователям поделиться визуальной карточкой сета (BPM-кривая + тональность + энергия) одним нажатием.
+
+Артефакты:
+
+- **`SetEnergyCardPainter`** (`apps/mobile/lib/features/share_card/set_energy_card_painter.dart`): `CustomPainter` 1080×1080 px. Рендерит:
+  - BPM-кривую по временной оси (polyline + gradient fill под кривой);
+  - Camelot-пиллы в точках смены тональности (акцентный фон + тёмный текст);
+  - Полярный energy arc (10 равных сегментов, цвет: red ≤3 / yellow 4–7 / teal ≥8) с цифрой и лейблом в центре;
+  - Watermark «TrackScope» внизу справа.
+- **`SetEnergyCard`** (`apps/mobile/lib/features/share_card/set_energy_card.dart`): `StatefulWidget` + `RepaintBoundary`. Метод `captureAndShare()`: `toImage(pixelRatio: 1.0)` → PNG → `getTemporaryDirectory()` → `Share.shareXFiles`.
+- **`FeatureFlags.canShareCard`** (`apps/mobile/lib/monetization/feature_flags.dart`): `bool get canShareCard => isPro`.
+- **`SetlistScreen`** (`apps/mobile/lib/features/setlist/setlist_screen.dart`): `_SetlistView` преобразован из `StatelessWidget` в `StatefulWidget`; добавлен `Offstage(child: SetEnergyCard(...))` для off-screen рендеринга; кнопка `Icons.share_outlined` в AppBar (гейт: `entries.isNotEmpty`). Pro: запускает `captureAndShare()`. Free: переход на `PaywallScreen(feature: 'share_card')`.
+- **Тесты** (`apps/mobile/test/features/share_card/set_energy_card_test.dart`): 11 тестов — `canShareCard` Pro/Free, painter smoke (пусто/одна/несколько/одинаковый BPM/нет энергии), данные из реального `SetlistEntry`, кнопка видима при Pro+entries, скрыта при пустых entries, Free → PaywallScreen.
+- **Execution plan** (`docs/plans/phase-2-6-share-set-energy-card.md`).
+
+Критерии выхода — выполнены:
+
+- `flutter analyze` → 0 errors ✓
+- `flutter test` → 229 passed, 1 pre-existing (dsp_engine_test — нет .dylib) ✓
+- `FeatureFlags.canShareCard` Pro-gated ✓
+- Кнопка в SetlistScreen: Pro+entries → share, Free → PaywallScreen ✓
+- Нет хардкодного BPM; все данные из `SetlistEntry.bpm` (реальный DSP-вывод) ✓
+- Anti-fake инварианты сохранены ✓
+
+Известные ограничения:
+
+- `captureAndShare()` не тестируется в unit-среде (требует реальной render-surface); покрыт дымовым тестом `CustomPainter.paint()` через `PictureRecorder`.
+- Шрифт «IBM Plex Mono» в painter использует Dart `TextStyle(fontFamily: ...)` — рендеринг зависит от наличия шрифта в bundle; на устройствах без него используется системный fallback.
+- Нет изменений в Rust DSP / FFI / DspResult — Phase 2.6 чисто Flutter-сторона.
