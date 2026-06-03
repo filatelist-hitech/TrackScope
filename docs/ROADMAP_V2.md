@@ -1,4 +1,4 @@
-# Hitech BPM Radar — v2 Roadmap
+# TrackScope — v2 Roadmap
 
 ## Vision
 
@@ -8,13 +8,13 @@
 
 ## Competitive Positioning
 
-| Функция | **Hitech BPM Radar** | liveBPM | Mixed In Key | Tunebat | KeyMatch |
+| Функция | **TrackScope** | liveBPM | Mixed In Key | Tunebat | KeyMatch |
 |---|---|---|---|---|---|
 | Realtime BPM (микрофон) | ✅ | ✅ | ❌ (файлы) | ❌ (файлы) | ❌ |
 | Psy-optimized (155–230) | ✅ | Частично | ❌ | ❌ | ❌ |
-| Key detection | 🔜 v2 | ❌ | ✅ (офлайн) | ✅ (офлайн) | ✅ |
-| Realtime key (live mic) | 🔜 v2 | ❌ | ❌ | ❌ | ❌ |
-| Energy level | 🔜 v2 | ❌ | ✅ (офлайн) | ❌ | ❌ |
+| Key detection | ✅ realtime | ❌ | ✅ (офлайн) | ✅ (офлайн) | ✅ |
+| Realtime key (live mic) | ✅ realtime | ❌ | ❌ | ❌ | ❌ |
+| Energy level | ✅ realtime | ❌ | ✅ (офлайн) | ❌ | ❌ |
 | Setlist tracker | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 100% offline / on-device | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Mobile (iOS + Android) | ✅ | ✅ | ❌ (desktop) | ❌ (web) | iOS только |
@@ -83,29 +83,30 @@
 
 ## Phase 2 — Harmonic Analysis (v2.0, ~2 месяца)
 
-### P2.1 Real-time Key Detection (HPCP + Krumhansl-Schmuckler)
+### P2.1 Real-time Key Detection (HPCP + Krumhansl-Schmuckler) — **✅ ЗАВЕРШЕНО** (Phase 2.1, 2026-06-02)
 
-**Rust DSP: `core/dsp/src/key_analyzer.rs` (Phase 2 skeleton готов)**
+**`core/dsp/src/key_analyzer.rs`** — полная реализация в Rust DSP-движке.
 
 Алгоритм:
-1. STFT-фреймы → 12-bin хроматический профиль (HPCP).
-2. Скользящий HPCP-аккумулятор ~8 сек.
-3. Correlate с Krumhansl-Schmuckler мажор/минор профилями (24 варианта).
-4. Tональность с макс. корреляцией → `KeyResult { key, camelot, confidence }`.
+1. STFT-фреймы (4096 / hop 2048) → 12-bin HPCP (50–5000 Hz, C4 = 261.63 Hz).
+2. Скользящий HPCP-аккумулятор `KEY_WINDOW_SECS = 8.0 с`.
+3. Корреляция Пирсона с 24 Krumhansl-Schmuckler профилями (12 мажор + 12 минор).
+4. `KeyResult { key, camelot, confidence }` → Dart-слой, Signal Analyzer + Radar info-карта.
 
-Ожидаемая точность: ~70–80% на hitech-материале (высокий BPM и плотный бас-паттерн ухудшают HPCP). Latency: ~4–8 сек (зависит от размера аккумулятора).
-
-**Tier:** Pro.
+Гейты: тишина / CLIPPED_MIC / confidence < 0.25 / batch-путь → `key_result = None`.
+Camelot: A minor = "8A", C major = "8B". 12 Rust-тестов PASS. **Tier:** Pro.
 
 ### P2.2 Camelot Wheel UI
 
-Визуализация Camelot колеса (`CamelotKey { number, letter }`). Соседние ключи для гармонического микса подсвечиваются. Pro.
+Визуализация Camelot-колеса — **запланировано** (v2.1).
 
-### P2.3 Energy Level 1–10
+### P2.3 Energy Level 1–10 — **✅ ЗАВЕРШЕНО** (Phase 2.2, 2026-06-02)
 
-**Rust DSP: `core/dsp/src/energy_analyzer.rs` (Phase 2 skeleton готов)**
+**`core/dsp/src/energy_analyzer.rs`** — полная реализация в Rust DSP-движке.
 
-RMS + spectral flux + onset density → нормализованный уровень 1–10 (Mixed In Key стиль). Pro.
+RMS (40%) + spectral flux (35%) + onset density (25%) → `ceil(sum × 10).clamp(1, 10)`.
+Гейты: CLIPPED_MIC / тишина → `energy_result = None`.
+Signal Analyzer: секция «ЭНЕРГИЯ N / 10» + прогресс-бар. Radar tab: строка «ЭНЕРГИЯ / ТОНАЛЬНОСТЬ». 5 Rust-тестов PASS. **Tier:** Pro.
 
 ### P2.4 Setlist Tracker Full
 

@@ -3,7 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/monetization/paywall_screen.dart';
+import 'package:TrackScope/monetization/paywall_screen.dart';
 
 void main() {
   testWidgets('PaywallScreen renders comparison table (Design v2)',

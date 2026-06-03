@@ -4,8 +4,8 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/monetization/purchases_gateway.dart';
-import 'package:hitech_bpm_radar/monetization/pro_status_service.dart';
+import 'package:TrackScope/monetization/purchases_gateway.dart';
+import 'package:TrackScope/monetization/pro_status_service.dart';
 
 /// Fake gateway for testing — controllable isPro state.
 class _FakeGateway implements PurchasesGateway {

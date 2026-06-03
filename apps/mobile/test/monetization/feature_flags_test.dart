@@ -1,8 +1,8 @@
 // FeatureFlags unit tests — Free vs Pro gates + genre preset wiring.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/features/genre_preset/genre_preset.dart';
-import 'package:hitech_bpm_radar/monetization/feature_flags.dart';
+import 'package:TrackScope/features/genre_preset/genre_preset.dart';
+import 'package:TrackScope/monetization/feature_flags.dart';
 
 void main() {
   group('Free tier (isPro: false)', () {

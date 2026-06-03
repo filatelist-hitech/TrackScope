@@ -22,15 +22,15 @@ apps/mobile/android/app/src/main/res/mipmap-*/ic_launcher* ← иконки (з�
 scripts/build_android_native.sh                             ← проверить корректность
 apps/mobile/android/app/src/main/jniLibs/                  ← убедиться что .so заполнены
 docs/ROADMAP.md                                             ← Phase 9 статус
-CLAUDE.md                                                   ← упоминания hitech-bpm-radar (не менять имя пакета)
+CLAUDE.md                                                   ← упоминания trackscope (не менять имя пакета)
 ```
 
 ## 4. Current behavior
 
 - `pubspec.yaml`: `name: hitech_bpm_radar`, `version: 1.0.0+1`
 - Android `applicationId`: `dev.hitech.bpmradar.hitech_bpm_radar`
-- `strings.xml`: `Hitech BPM Radar`
-- iOS `CFBundleDisplayName`: `Hitech BPM Radar`
+- `strings.xml`: `TrackScope`
+- iOS `CFBundleDisplayName`: `TrackScope`
 - `jniLibs/` содержит папки arm64-v8a / armeabi-v7a / x86_64 (заполнены после сборки)
 - ROADMAP Phase 9 помечена как «В ПРОЦЕССЕ», хотя устройство и эмулятор проверены
 - `version: 1.0.0+1` — `+1` это versionCode; каждый APK в RuStore требует уникального (возрастающего) versionCode
@@ -91,7 +91,7 @@ sips -z 72 72 icon_src.png --out mipmap-hdpi/ic_launcher.png
 - Dart package name в коде используется только внутри
 
 Изменения:
-- `strings.xml`: `Hitech BPM Radar` → `TrackScope`
+- `strings.xml`: `TrackScope` → `TrackScope`
 - `ios/Runner/Info.plist`: `CFBundleDisplayName` → `TrackScope`
 - `pubspec.yaml`: `description:` поле (не name) → описание TrackScope
 
@@ -117,7 +117,7 @@ pubspec.yaml:  version: 1.1.0+2
 ### Шаг 5 — Обновить ROADMAP + документацию
 
 - `docs/ROADMAP.md`: Phase 9 → **ЗАВЕРШЕНО** с финальными критериями выхода
-- `CLAUDE.md`: упоминание "hitech bpm radar" в заголовке → "TrackScope (hitech-bpm-radar)"
+- `CLAUDE.md`: упоминание "hitech bpm radar" в заголовке → "TrackScope (trackscope)"
 
 ## 8. Tests
 

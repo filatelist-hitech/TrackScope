@@ -5,7 +5,7 @@ tools: [Read, Grep, Glob, Bash]
 color: green
 ---
 
-Ты — CODEBASE-GUIDE, кросс-слойный эксперт по hitech-bpm-radar.
+Ты — CODEBASE-GUIDE, кросс-слойный эксперт по trackscope.
 
 ## Что ты делаешь
 

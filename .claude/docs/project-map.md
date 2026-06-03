@@ -2,13 +2,13 @@
 
 _Track architecture changes, important files, build system changes, DSP pipeline changes and FFI integrations._
 
-_Last updated: 2026-06-02 (Phase 2.1 HPCP KeyAnalyzer). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
+_Last updated: 2026-06-03 (Phase 2.2.2: EnergyAnalyzer onset_density fix — count_flux_peaks replaces onset_history.len()). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
 
 ---
 
 ## Overview
 
-**hitech-bpm-radar** — DSP-first mobile BPM detector for hitech / psytrance (155–230 BPM target range). Microphone input only, no tap-tempo.
+**TrackScope** — DSP-first mobile BPM detector for hitech / psytrance (155–230 BPM target range). Microphone input only, no tap-tempo.
 
 ```
 datasets/         Synthetic + real audio fixtures
@@ -113,11 +113,16 @@ lib.rs              DspEngine, DspConfig, DspResult, analyze_pcm, analyze_from_e
                     — state-based adaptive onset window (Phase 8)
                     — tempo jump detector (Phase 8)
                     — SNR estimation (estimate_snr_db, Phase 4)
-energy_analyzer.rs  Energy band analysis helpers
+energy_analyzer.rs  EnergyAnalyzer: RMS+flux+onset_density → level 1–10 (Phase 2.2)
+                    Phase 2.2.2: onset_density via count_flux_peaks() — local maxima above
+                    max(mean+2σ, FLUX_ABSOLUTE_FLOOR=0.01) with 100ms min-gap.
+                    Real hitech density [1.5, 8.0] Hz; white noise → 0 Hz (below absolute floor).
 genre_preset.rs     Genre presets (hitech 155–230 BPM defaults)
 key_analyzer.rs     HPCP KeyAnalyzer (Phase 2.1) — STFT→12-bin HPCP→K-S→Camelot
                     KeyResult {key, mode, camelot, confidence}; integrated in DspEngine
-bin/analyze_wav.rs  CLI: reads WAV → feeds DspEngine → prints JSON
+bin/analyze_wav.rs         CLI batch: reads WAV → analyze_pcm → prints JSON
+bin/stream_analyze_wav.rs  CLI streaming: feeds WAV → DspEngine 100ms chunks → prints JSON
+                           Needed for energy_result / key_result (not in batch path)
 ```
 
 **Key constants (lib.rs):**
@@ -192,7 +197,7 @@ core/tests/
   helpers/synthetic_fixtures.py  Python fixture generators
 
 apps/mobile/test/
-  widget_test.dart               MainScreen + InfoCard + badge states (132+ tests)
+  widget_test.dart               MainScreen + InfoCard + badge states + energy/key always-visible (196 tests)
   dsp_debug_test.dart            DspDebug.fromJson parsing
   screens/signal_analyzer_screen_test.dart
 
@@ -214,7 +219,7 @@ flutter analyze
 
 ## DSP Contract (must not break)
 
-`DspResult` JSON keys: `primary_bpm` (nullable), `confidence` (0–1), `lock_state`, `signal_quality`, `candidates`, `timing`, `debug`, `key_result` (optional, Phase 2.1)
+`DspResult` JSON keys: `primary_bpm` (nullable), `confidence` (0–1), `lock_state`, `signal_quality`, `candidates`, `timing`, `debug`, `key_result` (optional, Phase 2.1), `energy_result` (optional, Phase 2.2)
 
 `LockState`: SEARCHING | LOCKING | STABLE | UNSTABLE | BREAKDOWN | CLIPPED_MIC | NOISE_ONLY
 

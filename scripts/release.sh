@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unified release-скрипт для hitech-bpm-radar
+# Unified release-скрипт для trackscope
 #
 # Использование:
 #   bash scripts/release.sh android          # Android: Free APK + PRO APK
@@ -302,7 +302,7 @@ cmd_clean_all() {
 cmd_help() {
   cat <<'EOF'
 
-hitech-bpm-radar release script
+trackscope release script
 
 ИСПОЛЬЗОВАНИЕ:
   bash scripts/release.sh <команда> [опции]

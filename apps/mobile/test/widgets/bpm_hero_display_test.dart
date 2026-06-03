@@ -6,7 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hitech_bpm_radar/widgets/bpm_hero_display.dart';
+import 'package:TrackScope/widgets/bpm_hero_display.dart';
 
 void main() {
   Widget wrap(Widget child) => MaterialApp(

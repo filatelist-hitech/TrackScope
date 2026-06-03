@@ -5,8 +5,8 @@
 // корректность сглаживания, а не детекцию BPM.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/capture/bpm_smoother.dart';
-import 'package:hitech_bpm_radar/dsp/dsp_result.dart';
+import 'package:TrackScope/capture/bpm_smoother.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
 
 // ── Фабричные хелперы ────────────────────────────────────────────────────────
 

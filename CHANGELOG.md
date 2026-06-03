@@ -4,6 +4,111 @@
 
 Формат основан на [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), а проект придерживается семантического версионирования после старта релизов.
 
+## [1.1.0] — 2026-06-03
+
+### Rebrand
+
+- **Проект переименован: Hitech BPM Radar → TrackScope.**
+  - Display name обновлён в `strings.xml`, `Info.plist`, `AGENTS.md`, `CLAUDE.md`, `README.md`, всех `docs/`.
+  - Dart-пакет: `hitech_bpm_radar` → `TrackScope` (`pubspec.yaml`, все тест-импорты).
+  - Rust/FFI внутренности (`libhitech_bpm_ffi`, `hitech_bpm_engine_*`) не переименованы — внутренний ABI.
+  - `applicationId` не изменён.
+  - Версия: `1.0.0+1` → `1.1.0+2`.
+
+### Added — Phase 9: Android APK (2026-06-02/03)
+
+- `scripts/build_android_native.sh` — кросс-компиляция Rust → `.so` (arm64-v8a / armeabi-v7a / x86_64) через Android NDK.
+- `jniLibs/<abi>/libhitech_bpm_ffi.so` для всех трёх ABI.
+- `android-release.jks` + `key.properties` — release-подпись.
+- `flutter build apk --release` → `app-release.apk` **54.7 MB** ✓ (подтверждено 2026-06-03).
+- `docs/ANDROID_TEST_PLAN.md`, `key.properties.template`.
+
+### Added — Phase 10: Freemium (Free / Pro)
+
+- `lib/monetization/`: `PurchasesGateway`, `RevenueCatGateway`, `ProStatusService` (ChangeNotifier), `FeatureFlags`, `PaywallScreen`.
+- `lib/history/`: `BpmHistory`, `SessionHistoryController` (~1 Hz), `HistoryScreen`.
+- `lib/export/`: `buildCsv`/`buildJson` + `exportCsv`/`exportJson` (share_plus).
+- FFI: `hitech_bpm_engine_new_with_min_bpm(float)` — Free = 170, Pro = 155.
+- Free tier: BPM range 170–230, History 30 сек. Pro: 155–230, History 24 ч, Debug, Export, Setlist.
+
+### Added — Phase 11: Design System v2
+
+- Tab Bar (`AppNavigator`, `IndexedStack`): Радар / История / Настройки. CaptureBridge не пересоздаётся.
+- `BpmHeroDisplay` (72 px IBM Plex Mono), `ConfidenceBar` (7 px red/yellow/teal), `BreakButton`, `ListeningIndicator`, `AppTabBar`.
+- `SignalAnalyzerScreen` (Pro): BPM-кандидаты, качество сигнала, тайминги, DspDebug-метрики.
+- `SettingsScreen` (5 секций, SharedPreferences, WakelockPlus).
+- Design tokens v2: `app_colors.dart` (#050807, #00DFB0), `app_text_styles.dart` (IBM Plex Mono).
+- `PaywallScreen` v2: column headers FREE/PRO, CTA-иерархия, Roadmap card.
+- **DspDebug** в Rust `DspResult`: `onset_rate_hz`, `onset_strength`, `tempo_peak_prominence`, `harmonic_ambiguity`, `stability_score`, `warnings[]`. Populated без доп. CPU.
+
+### Added — Phase 12: UI Polish (2026-06-02)
+
+- Type scale +2 px по всем ролям (micro 9→11, caption 10→12, body 12→14, value 15→18).
+- Waveform ambient glow (alpha=38, blur=4.0) поверх beat-reactive pulse.
+- `AppTheme` → thin-proxy на `AppColors`/`AppTextStyles`. JetBrains Mono → IBM Plex Mono.
+- FFT Spectrum в Signal Analyzer: `StatefulWidget` + `VizController` + `LiveSpectrumPainter` (90 px).
+- Break button → `CaptureBridge.resetEngine()`: сброс DSP + smoother без остановки захвата.
+
+### Added — v1.1 Monetization Phase 1 (2026-06-01)
+
+- Multi-Genre Presets: 7 пресетов (HitechPsy 155–230, Psytrance 130–160, Darkpsy 145–180, DnB 160–185, Techno 125–145, Hardstyle 138–160, Hardcore 155–185, Custom [Pro]).
+  - `core/dsp/src/genre_preset.rs` — Rust enum.
+- Setlist Tracker MVP: `lib/features/setlist/` — `SetlistService` + `SetlistEntry`, CSV/JSON экспорт.
+- 14-Day Pro Trial badge в PaywallScreen (Annual).
+- Paywall 2.0: расширенная таблица с v2 фичами (Key, Energy, Apple Watch, Widget).
+
+### Added — Phase 2.1: HPCP KeyAnalyzer (2026-06-02)
+
+- `core/dsp/src/key_analyzer.rs` — STFT → 12-bin HPCP → Krumhansl-Schmuckler → Camelot.
+  - `KEY_WINDOW_SECS = 8.0 с`, `KEY_CONFIDENCE_THRESHOLD = 0.25`, диапазон 50–5000 Hz.
+  - Гейты: тишина / CLIPPED_MIC / confidence < 0.25 → `key_result = None`.
+  - Camelot: A minor = "8A", C major = "8B".
+- `rustfft = "6"` в `core/dsp/Cargo.toml`.
+- `DspResult` расширен: `key_result: Option<KeyResult>`.
+- Dart: `KeyResult` класс + парсинг вложенного JSON `camelot: {number, letter}`.
+- 12 Rust-тестов (`core/dsp/tests/key_detection.rs`).
+
+### Added — Phase 2.2: EnergyAnalyzer (2026-06-02)
+
+- `core/dsp/src/energy_analyzer.rs` — RMS (40%) + spectral flux (35%) + onset density (25%) → level 1–10.
+  - Гейты: CLIPPED_MIC / тишина → `energy_result = None`.
+  - `FLUX_MAX = 0.15`, `DENSITY_MAX = 6.0`.
+- `DspResult` расширен: `energy_result: Option<EnergyResult>`.
+- Dart: `EnergyResult` класс + парсинг.
+- Signal Analyzer: секция «ЭНЕРГИЯ N / 10» + прогресс-бар.
+- 5 Rust-тестов (`core/dsp/tests/energy.rs`).
+
+### Added — Phase 2.3: Energy/Key на Radar tab (2026-06-03)
+
+- `_EnergyCell` widget: строка «ЭНЕРГИЯ N/10» + `LinearProgressIndicator` 4 px.
+- Radar info-карта: строка энергия (слева) + тональность (справа). Гейты по `null`.
+- `MockDspStream.stable()` эмитит `energyResult` + `keyResult`.
+- Radar tab: нет скролла, `ЭНЕРГИЯ`/`ТОНАЛЬНОСТЬ` видимы при любом состоянии.
+- 5 новых Flutter-тестов.
+
+### Added — Phase 2.2.1: EnergyAnalyzer calibration + ground truth (2026-06-03)
+
+- 4 новые фикстуры: `hitech_real_22–25` (210/212 BPM, Camelot размечен).
+- `expected_key` (Camelot) добавлен для всех 25 фикстур в `fixture_manifest.json`.
+- `core/dsp/src/bin/stream_analyze_wav.rs` — потоковый анализатор через `DspEngine` (для `energy_result`/`key_result`).
+- Замер на реальных треках: energy 7–8 на активном hitech-материале ✓.
+
+### Fixed
+
+- **Flutter-тесты** (pre-existing regression из коммита `c75ea5e`): восстановлен `name: TrackScope` в `pubspec.yaml` + обновление всех `package:hitech_bpm_radar/` → `package:TrackScope/` в 20 тест-файлах. **193/194 тестов PASS** (1 pre-existing `dsp_engine_test` — нет `.dylib`).
+
+### Changed
+
+- `DspConfig::target_bpm_min`: `170.0` → `155.0` (Phase 8.2).
+- `ADAPTIVE_WINDOW_LOCKING_SECS`: `4.0` → `6.0` (Phase 8).
+- `has_ever_been_stable: bool` в `DspEngine` (Phase 8.1).
+
+### Testing
+
+- **116 Rust-тестов** — все PASS (`cargo test --workspace`).
+- **193 Flutter-тестов** — PASS (1 pre-existing skip: `dsp_engine_test`, нет `.dylib`).
+- 25 реальных hitech-фикстур (180–212 BPM), parity Python↔Rust delta = 0.00.
+
 ## [Unreleased]
 
 ### Added — Design System v2 (Phase 11)
@@ -132,8 +237,8 @@
 ### Changed
 
 - **Version bump:** `apps/mobile/pubspec.yaml` → `1.0.0+1`
-- **Android app label:** now uses `@string/app_name` ("Hitech BPM Radar") from `strings.xml`
-- **iOS CFBundleDisplayName:** corrected capitalization to "Hitech BPM Radar"
+- **Android app label:** now uses `@string/app_name` ("TrackScope") from `strings.xml`
+- **iOS CFBundleDisplayName:** corrected capitalization to "TrackScope"
 - **README.md:** added "Current Status — v1.0.0" section with completed phases and key features
 
 ### Fixed
@@ -344,7 +449,7 @@ iPhone 11, iOS 26.3.1, 2026-05-26. Треки hitech-psytrance 192/200/207 BPM, 
 - Phase 3 мобильный мост (шаг 2 — платформенные файлы, захват микрофона, живой UI):
   - `apps/mobile/android/` + `apps/mobile/ios/` сгенерированы через `flutter create --platforms=android,ios .` с org `dev.hitech.bpmradar`. Существующий Dart-код сохранён.
   - `AndroidManifest.xml` объявляет `<uses-permission android:name="android.permission.RECORD_AUDIO" />`.
-  - `ios/Runner/Info.plist` объявляет `NSMicrophoneUsageDescription` с человекочитаемым текстом для пользователя («Hitech BPM Radar слушает через микрофон, чтобы определить BPM окружающей музыки. Аудио остаётся на вашем устройстве и нигде не записывается и не отправляется.»).
+  - `ios/Runner/Info.plist` объявляет `NSMicrophoneUsageDescription` с человекочитаемым текстом для пользователя («TrackScope слушает через микрофон, чтобы определить BPM окружающей музыки. Аудио остаётся на вашем устройстве и нигде не записывается и не отправляется.»).
   - `apps/mobile/lib/capture/`:
     - `microphone_source.dart` — тонкая оболочка над `package:record` 5.x, открывает PCM16 моно 48 кГц через `startStream()`.
     - `dsp_worker.dart` — точка входа изолята, владеет FFI-хэндлом, декодирует PCM16 → Float32 через `s / 32768.0`, вызывает `DspEngine.pushSamples`, опрашивает `engine.analyzeJson()` на UI-частоте (по умолчанию 20 Гц), форвардит raw JSON в основной изолят.
@@ -436,7 +541,7 @@ iPhone 11, iOS 26.3.1, 2026-05-26. Треки hitech-psytrance 192/200/207 BPM, 
 - Никакого хардкода BPM в продакшен-путях; тишина, шум-без-сигнала и сильно клиппированные входы возвращают `primary_bpm: null`.
 - Half-time- и double-time-кандидаты никогда не скрываются — они остаются в списке кандидатов с relation/source-метаданными.
 
-[Unreleased]: https://github.com/filatelist-hitech/hitech-bpm-radar/compare/main...HEAD
+[Unreleased]: https://github.com/filatelist-hitech/trackscope/compare/main...HEAD
 
 ### Added
 

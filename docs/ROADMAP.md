@@ -252,9 +252,11 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 
 Ребрендинг (2026-06-02):
 
-- Display name: `Hitech BPM Radar` → `TrackScope` (strings.xml + Info.plist). ✓
+- Display name: `Hitech BPM Radar` → **`TrackScope`** (strings.xml + Info.plist). ✓
+- Dart-пакет: `hitech_bpm_radar` → `TrackScope` (pubspec.yaml, все тест-импорты). ✓
 - `applicationId` сохранён без изменений (смена = новое приложение в RuStore). ✓
 - Версия: `1.0.0+1` → `1.1.0+2` в `pubspec.yaml`. ✓
+- `flutter build apk --release` → `app-release.apk` **54.7 MB** подтверждён 2026-06-03. ✓
 
 Критерии выхода — выполнены:
 
@@ -443,3 +445,52 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 
 - Калибровочные константы (`FLUX_MAX = 0.15`, `DENSITY_MAX = 6.0`) подобраны на синтетике; требуют fine-tuning на реальных записях (Phase 2.2.1).
 - Python-референс (`tempo.py`) не реализует `energy_result` — всегда `None` в Python-пути.
+
+---
+
+## Phase 2.3: Energy / Key Display на Radar Tab — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: показать `EnergyResult.level` и `KeyResult.camelot` на главном экране (Radar tab) в info-таблице — данные уже жили в `DspResult` после Phase 2.1–2.2, требовался только UI-слой.
+
+Артефакты:
+
+- `_EnergyCell` widget (`apps/mobile/lib/ui/main_screen.dart`): строка «ЭНЕРГИЯ» с `N/10` значением и `LinearProgressIndicator` 4 px (red ≤3 / yellow 4–7 / teal ≥8).
+- `_InfoTableContent` расширен двумя условными строками (Row 4): энергия слева, тональность справа.
+- **Гейты:** `energyResult != null` и `keyResult != null && confidence >= 0.25`.
+- `MockDspStream.stable()` обновлён: эмитит `energyResult` в locked-состояниях и `keyResult` ("8A", conf=0.62) в STABLE-состоянии.
+- `apps/mobile/test/widget_test.dart` — +5 тестов: показ energy (7/10), показ camelot (8B), скрытие при null-energy, скрытие при null-key, скрытие при confidence < 0.25.
+
+Критерии выхода — выполнены:
+
+- `flutter analyze` → 0 errors (17 pre-existing infos/warnings не изменились) ✓
+- `flutter test` → 195/195 (было 190, +5 новых тестов) ✓
+- Energy row не рендерится при `energyResult == null` ✓
+- Key row не рендерится при `keyResult == null` или `confidence < 0.25` ✓
+- Layout согласуется с Design System v2 (AppTextStyles, AppColors) ✓
+- `MockDspStream` показывает energy/key в ACTIVE → STABLE режиме превью ✓
+
+Известные ограничения:
+
+- ~~На малых экранах (высота < 700 px) нижняя часть info-карты обрезается `NeverScrollableScrollPhysics`~~ — устранено в Radar UI refactor (2026-06-03).
+- Colorful gradient в energy bar (teal → yellow → red) не поддерживается `LinearProgressIndicator`; используется однотонный цвет по диапазону уровня. Полный gradient требует `CustomPainter`.
+
+---
+
+## Radar UI: no-scroll + energy/key always visible — **ЗАВЕРШЕНО** (2026-06-03)
+
+Цель: убрать скролл в info-карте Radar tab; энергия и тональность всегда отображаются.
+
+Артефакты:
+
+- `SingleChildScrollView` удалён из `_GlassmorphismCard`; заменён на `OverflowBox(maxHeight: infinity)` — подавляет layout assertion без скролла, клиппинг через `Clip.hardEdge` на контейнере.
+- Строка «ЭНЕРГИЯ / ТОНАЛЬНОСТЬ» рендерится безусловно: при `null` показывается заглушка `—` той же высоты.
+- Оригинальный визуальный масштаб восстановлен: 72px BPM hero, 120px waveform, flex 22/43.
+- Единственное отличие от Phase 2.3: зазор между цифрой BPM и строкой «BPM 155–230 · Hitech» уменьшен (SizedBox 5→0, высота строки 28→22px).
+- Тесты: 3 обновлены (`findsNothing` → `findsOneWidget` для лейблов), +1 новый (`energy_always_visible_even_when_null`). Итого 196 Flutter тестов.
+
+Критерии выхода — выполнены:
+
+- `flutter test` → 196/196 ✓
+- `flutter analyze` → 0 errors ✓
+- ЭНЕРГИЯ и ТОНАЛЬНОСТЬ видимы при любом DSP-состоянии ✓
+- Скролл недоступен ✓

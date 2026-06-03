@@ -9,8 +9,8 @@ import 'dart:async';
 import 'package:flutter/material.dart' hide LockState;
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hitech_bpm_radar/screens/signal_analyzer_screen.dart';
-import 'package:hitech_bpm_radar/dsp/dsp_result.dart';
+import 'package:TrackScope/screens/signal_analyzer_screen.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
 
 void main() {
   DspResult makeResult() => const DspResult(

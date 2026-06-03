@@ -1,9 +1,9 @@
 // BpmHistory unit tests — add/cap (Free 30s vs Pro), isAtLimit.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/dsp/dsp_result.dart';
-import 'package:hitech_bpm_radar/history/bpm_history.dart';
-import 'package:hitech_bpm_radar/monetization/feature_flags.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
+import 'package:TrackScope/history/bpm_history.dart';
+import 'package:TrackScope/monetization/feature_flags.dart';
 
 void main() {
   group('BpmHistory', () {

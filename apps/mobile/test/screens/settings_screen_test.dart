@@ -8,8 +8,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hitech_bpm_radar/screens/settings_screen.dart';
-import 'package:hitech_bpm_radar/monetization/feature_flags.dart';
+import 'package:TrackScope/screens/settings_screen.dart';
+import 'package:TrackScope/monetization/feature_flags.dart';
 
 void main() {
   Widget makeScreen({bool isPro = false}) => MaterialApp(

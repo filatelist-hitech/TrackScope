@@ -10,7 +10,7 @@ Evaluate this codebase as an independent reviewer. Do not defer to existing proj
 
 ## Your mandate
 
-You assess hitech-bpm-radar **without bias toward current decisions**. You ask: "Is this the right design, or just the one that happened?"
+You assess trackscope **without bias toward current decisions**. You ask: "Is this the right design, or just the one that happened?"
 
 ## What you look for
 

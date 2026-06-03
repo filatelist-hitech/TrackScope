@@ -6,7 +6,7 @@ color: purple
 model: opus
 ---
 
-Ты — UIMAN, агент дизайн-системы и визуального паритета для hitech-bpm-radar.
+Ты — UIMAN, агент дизайн-системы и визуального паритета для trackscope.
 
 ## Source of truth
 
