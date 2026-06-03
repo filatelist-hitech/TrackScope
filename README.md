@@ -1,4 +1,4 @@
-# hitech-bpm-radar
+# TrackScope
 
 DSP-first определение BPM для hitech / psytrance — автоматический темп с микрофона в диапазоне **155–230 BPM**. Без tap-tempo, без хардкоженых значений.
 
@@ -49,15 +49,18 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 | Phase 8 | DSP fast re-lock v2: адаптивное окно по состоянию, детектор прыжка темпа, re-lock ≤3 с |
 | Phase 8.1 | Fix first-lock: `has_ever_been_stable` — полная история при первом захвате |
 | Phase 8.2 | Расширение диапазона 170→**155 BPM**, абсолютный гейт точности в `parity.py` |
-| Phase 9 | Android APK: `build_android_native.sh` готов, ожидает установки Android Studio + NDK |
+| Phase 9 | **Android APK**: `build_android_native.sh`, `.so` для arm64/armeabi/x86_64, release `app-release.apk` ✓ |
 | Phase 10 | Freemium: RevenueCat IAP, Free/Pro tier, PaywallScreen, экспорт, история 24 ч |
 | Phase 11 | **Design System v2**: Tab Bar, BPM Hero 72 px, ConfidenceBar 7 px, Signal Analyzer, Settings |
 | Phase 12 | **UI polish**: type scale +2 px, waveform ambient glow, AppTheme → AppColors/AppTextStyles, FFT в Signal Analyzer, Break button |
-| v1.1 | **Monetization Phase 1**: SetlistScreen (Pro), 14-Day Trial badge, Paywall 2.0 Coming-Soon, Multi-Genre Presets (7 жанров, Free/Pro) |
+| v1.1 | **Rebrand → TrackScope** + Monetization Phase 1: SetlistScreen (Pro), 14-Day Trial, Paywall 2.0, Multi-Genre Presets |
+| Phase 2.1 | **Key Detection**: HPCP + Krumhansl-Schmuckler → Camelot (realtime, streaming engine) |
+| Phase 2.2 | **Energy Level 1–10**: RMS + spectral flux + onset density, Signal Analyzer UI |
+| Phase 2.3 | **Energy/Key на Radar tab**: info-карта показывает уровень энергии и тональность |
 
-### В процессе
+### Текущее состояние
 
-В процессе: финализация Android APK (Phase 9).
+**Все фазы 1–12 + Phase 2.1/2.2/2.3 завершены.** Проект готов к публикации в App Store / Google Play.
 
 ### Ключевые характеристики
 
@@ -68,7 +71,8 @@ docs/              Архитектура, DSP-алгоритм, QA-матриц
 - Half-time / double-time кандидаты всегда видны; никогда не скрываются
 - Anti-fake: нет хардкоженых BPM, нет фейкового пульса по таймеру
 - SNR-оценка и гейтинг качества сигнала
-- 75 Rust-тестов + 21 Python-тест + 186 Flutter-тестов, 21 реальная hitech-фикстура (180–210 BPM)
+- Realtime детекция тональности (HPCP → Camelot) и уровня энергии 1–10
+- **116 Rust-тестов + 21 Python-тест + 193 Flutter-теста**, 25 реальных hitech-фикстур (180–212 BPM)
 
 ## Design v2
 
@@ -84,10 +88,10 @@ Design System v2 (Phase 11) обновляет весь Flutter UI:
 
 ## Текущая фаза
 
-**Phases 1–11 завершены.** Проект готовится к первому production-APK.
+**Все фазы завершены.** `app-release.apk` собран (54.7 MB, 2026-06-03). iOS — статическая `.a` для iPhone.
 
-Последний подтверждённый запуск на реальном устройстве — iPhone 11, iOS 26.3.1, 2026-05-26.
-Целевой диапазон расширен до **155–230 BPM** (Phase 8.2: поддержка раннего hitech от 155 BPM).
+Последний подтверждённый запуск на устройстве — iPhone 11, iOS 26.3.1, 2026-05-26.
+Целевой диапазон: **155–230 BPM** (hitech / psytrance + 6 жанровых пресетов в Pro-тире).
 
 Rust-крейт в `core/dsp/` — продакшен-источник истины: извлечение онсетов, оценка темпа
 автокорреляцией, hitech-нормализация кандидатов, скоринг уверенности и классификация

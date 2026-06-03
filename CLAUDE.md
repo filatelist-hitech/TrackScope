@@ -1,4 +1,4 @@
-# CLAUDE.md — hitech-bpm-radar
+# CLAUDE.md — TrackScope
 
 DSP-first мобильный детектор BPM для hitech / psytrance (целевой диапазон 155–230 BPM). Вход — микрофон, без tap-tempo.
 

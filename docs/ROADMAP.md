@@ -252,9 +252,11 @@ Known limitation: `hitech_real_10` детектируется на ~147 BPM (hal
 
 Ребрендинг (2026-06-02):
 
-- Display name: `Hitech BPM Radar` → `TrackScope` (strings.xml + Info.plist). ✓
+- Display name: `Hitech BPM Radar` → **`TrackScope`** (strings.xml + Info.plist). ✓
+- Dart-пакет: `hitech_bpm_radar` → `TrackScope` (pubspec.yaml, все тест-импорты). ✓
 - `applicationId` сохранён без изменений (смена = новое приложение в RuStore). ✓
 - Версия: `1.0.0+1` → `1.1.0+2` в `pubspec.yaml`. ✓
+- `flutter build apk --release` → `app-release.apk` **54.7 MB** подтверждён 2026-06-03. ✓
 
 Критерии выхода — выполнены:
 

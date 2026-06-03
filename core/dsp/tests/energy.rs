@@ -111,3 +111,41 @@ fn energy_result_absent_on_clipped_mic() {
     }
     // Если CLIPPED_MIC не достигнут — фикстура недостаточно клипирована; пропустить.
 }
+
+/// Phase 2.2.2: onset_density_hz на clean_200 — реальные пики, не ~400 Hz.
+/// Ожидаем [1.5, 8.0] Hz (diapason: 200 BPM kick ≈ 3.3 Hz).
+#[test]
+fn onset_density_hz_in_range_for_clean_200() {
+    let pulse = common::pulse_track(200.0, 14.0, 0.7);
+    let results = run_stream_full(&pulse);
+    let stable_energies: Vec<_> = results
+        .iter()
+        .filter(|r| r.lock_state == LockState::Stable)
+        .filter_map(|r| r.energy_result.as_ref())
+        .collect();
+    assert!(!stable_energies.is_empty(), "should have STABLE frames");
+    for er in &stable_energies {
+        assert!(
+            er.onset_density_hz >= 1.5 && er.onset_density_hz <= 8.0,
+            "expected onset_density_hz in [1.5, 8.0], got {}",
+            er.onset_density_hz
+        );
+    }
+}
+
+/// Phase 2.2.2: onset_density_hz на белом шуме — нет периодических пиков.
+/// Ожидаем < 3.0 Hz (шум не порождает регулярных пиков выше среднего).
+#[test]
+fn onset_density_hz_low_on_white_noise() {
+    let noise = common::white_noise(42, 0.28, 14.0);
+    let results = run_stream_full(&noise);
+    for r in &results {
+        if let Some(ref er) = r.energy_result {
+            assert!(
+                er.onset_density_hz < 3.0,
+                "white noise should have onset_density_hz < 3.0, got {}",
+                er.onset_density_hz
+            );
+        }
+    }
+}

@@ -2,13 +2,13 @@
 
 _Track architecture changes, important files, build system changes, DSP pipeline changes and FFI integrations._
 
-_Last updated: 2026-06-03 (Radar no-scroll + energy/key always visible). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
+_Last updated: 2026-06-03 (Phase 2.2.2: EnergyAnalyzer onset_density fix — count_flux_peaks replaces onset_history.len()). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
 
 ---
 
 ## Overview
 
-**hitech-bpm-radar** — DSP-first mobile BPM detector for hitech / psytrance (155–230 BPM target range). Microphone input only, no tap-tempo.
+**TrackScope** — DSP-first mobile BPM detector for hitech / psytrance (155–230 BPM target range). Microphone input only, no tap-tempo.
 
 ```
 datasets/         Synthetic + real audio fixtures
@@ -114,8 +114,9 @@ lib.rs              DspEngine, DspConfig, DspResult, analyze_pcm, analyze_from_e
                     — tempo jump detector (Phase 8)
                     — SNR estimation (estimate_snr_db, Phase 4)
 energy_analyzer.rs  EnergyAnalyzer: RMS+flux+onset_density → level 1–10 (Phase 2.2)
-                    Known: onset_density always maxed (passes flux-frame-count, not peak-count);
-                    effective level range 3–10. Fix planned Phase 2.2.2.
+                    Phase 2.2.2: onset_density via count_flux_peaks() — local maxima above
+                    max(mean+2σ, FLUX_ABSOLUTE_FLOOR=0.01) with 100ms min-gap.
+                    Real hitech density [1.5, 8.0] Hz; white noise → 0 Hz (below absolute floor).
 genre_preset.rs     Genre presets (hitech 155–230 BPM defaults)
 key_analyzer.rs     HPCP KeyAnalyzer (Phase 2.1) — STFT→12-bin HPCP→K-S→Camelot
                     KeyResult {key, mode, camelot, confidence}; integrated in DspEngine

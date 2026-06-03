@@ -464,7 +464,7 @@ Double-time-нормализация (>260 → ÷2) не затронута ра
 
 1. **RMS dBFS** (40%) — скользящий PCM-буфер 3 сек; вычисляется независимо в `EnergyAnalyzer.push_samples()`.
 2. **Spectral flux** (35%) — среднее по `flux_history`, получаемой через `push_flux(flux)` из `DspEngine` (уже вычисленный flux, без дублирования CPU).
-3. **Onset density** (25%) — `onset_history.len() / analysis_window_seconds`.
+3. **Onset density** (25%) — `count_flux_peaks() / (flux_history.len() × HOP_SEC)`. Считаются локальные максимумы `flux_history` выше порога `max(mean+2σ, 0.01)` с минимальным зазором 100 мс между пиками.
 
 Нормализация: каждая компонента линейно масштабируется в [0, 1] по калибровочным константам, затем взвешивается. Результат → `ceil(sum × 10).clamp(1, 10)`.
 
@@ -483,7 +483,8 @@ Double-time-нормализация (>260 → ÷2) не затронута ра
 | `FLUX_MIN` | 0.0 | Нижняя граница flux |
 | `FLUX_MAX` | 0.15 | Верхняя граница flux (hitech пульс) |
 | `DENSITY_MIN` | 0.5 /s | Редкий пульс |
-| `DENSITY_MAX` | 6.0 /s | Плотный kick + суб-онсеты |
+| `DENSITY_MAX` | 8.0 /s | Плотный hitech kick (Phase 2.2.2: ~3–8 Hz реальных пиков) |
+| `FLUX_ABSOLUTE_FLOOR` | 0.01 | Минимальный flux для пика: отсекает шум (max noise ≈ 0.008) |
 | `WEIGHT_RMS` | 0.40 | Вес RMS |
 | `WEIGHT_FLUX` | 0.35 | Вес flux |
 | `WEIGHT_DENSITY` | 0.25 | Вес density |
@@ -491,5 +492,6 @@ Double-time-нормализация (>260 → ÷2) не затронута ра
 ### Известные ограничения
 
 - Константы подобраны на синтетических фикстурах; требуют fine-tuning на реальных записях (Phase 2.2.1).
+- `FLUX_ABSOLUTE_FLOOR = 0.01` калиброван под `pulse_track(amplitude=0.7)`; для очень тихих треков (amplitude << 0.3) onset_density может недосчитывать удары.
 - `energy_result` не вычисляется в batch-пути `analyze_pcm` — только в потоковом `DspEngine`.
 - Python-референс (`tempo.py`) не реализует `energy_result` — всегда `None` в Python-пути.

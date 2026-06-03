@@ -14,11 +14,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/capture/capture_bridge.dart';
-import 'package:hitech_bpm_radar/dsp/dsp_result.dart';
-import 'package:hitech_bpm_radar/ui/debug_screen.dart';
-import 'package:hitech_bpm_radar/ui/main_screen.dart';
-import 'package:hitech_bpm_radar/ui/permission_denied_screen.dart';
+import 'package:TrackScope/capture/capture_bridge.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
+import 'package:TrackScope/ui/debug_screen.dart';
+import 'package:TrackScope/ui/main_screen.dart';
+import 'package:TrackScope/ui/permission_denied_screen.dart';
 
 DspResult _stableSnapshot({double bpm = 200.0, double confidence = 0.87}) {
   return DspResult.fromJson({

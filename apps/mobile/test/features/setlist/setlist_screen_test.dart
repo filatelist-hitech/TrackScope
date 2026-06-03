@@ -4,10 +4,10 @@
 
 import 'package:flutter/material.dart' hide LockState;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/features/setlist/setlist_screen.dart';
-import 'package:hitech_bpm_radar/features/setlist/setlist_service.dart';
-import 'package:hitech_bpm_radar/monetization/feature_flags.dart';
-import 'package:hitech_bpm_radar/monetization/paywall_screen.dart';
+import 'package:TrackScope/features/setlist/setlist_screen.dart';
+import 'package:TrackScope/features/setlist/setlist_service.dart';
+import 'package:TrackScope/monetization/feature_flags.dart';
+import 'package:TrackScope/monetization/paywall_screen.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: child);
 

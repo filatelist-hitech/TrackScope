@@ -1,4 +1,4 @@
-# Build Guide — hitech-bpm-radar
+# Build Guide — trackscope
 
 Полное руководство по сборке, тестированию и деплою приложения.
 

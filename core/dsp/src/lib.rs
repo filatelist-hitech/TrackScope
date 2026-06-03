@@ -632,9 +632,7 @@ impl DspEngine {
         if !matches!(result.lock_state, LockState::ClippedMic)
             && !result.signal_quality.silence
         {
-            let window_secs = self.config.analysis_window_seconds;
-            let onset_count = self.onset_history.len();
-            let er = self.energy_analyzer.current_energy(onset_count, window_secs);
+            let er = self.energy_analyzer.current_energy();
             if er.level > 0 {
                 result.energy_result = Some(er);
             }

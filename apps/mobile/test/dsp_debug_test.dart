@@ -6,7 +6,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hitech_bpm_radar/dsp/dsp_result.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
 
 void main() {
   group('DspDebug.fromJson', () {

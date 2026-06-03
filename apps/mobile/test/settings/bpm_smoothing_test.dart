@@ -1,7 +1,7 @@
 // Tests for BpmSmoothing enum: windowSize and label mappings.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/settings/app_settings.dart';
+import 'package:TrackScope/settings/app_settings.dart';
 
 void main() {
   group('BpmSmoothing.windowSize', () {

@@ -56,7 +56,7 @@
 
 **Clippy:** 0 warnings with `-D warnings`
 **Version:** 1.0.0+1
-**Android label:** "Hitech BPM Radar" from strings.xml
+**Android label:** "TrackScope" from strings.xml
 **Android signing:** release config with key.properties template
 **Icons:** documented (custom or placeholder replaced)
 **Tests:** 170/200/220 timing, 170/180/195/200/220 streak, 6+ FFI tests, breakdown-exit test
@@ -76,7 +76,7 @@
 1. Fix clippy line 403 — replace `is_none()` check with `?`
 2. Fix clippy lines 1132-1134 — merge identical if-blocks
 3. Fix clippy line 1404 — remove redundant closure
-4. Fix iOS CFBundleDisplayName → "Hitech BPM Radar"
+4. Fix iOS CFBundleDisplayName → "TrackScope"
 5. Verify: `cargo clippy --workspace -- -D warnings` → 0 errors
 
 ### Group 2 — Platform setup (@mobileman)
@@ -153,11 +153,11 @@ cd apps/mobile && flutter test
 
 **Group 1:**
 - [ ] `cargo clippy --workspace -- -D warnings` → 0 errors
-- [ ] `Info.plist` contains `CFBundleDisplayName = "Hitech BPM Radar"`
+- [ ] `Info.plist` contains `CFBundleDisplayName = "TrackScope"`
 
 **Group 2:**
 - [ ] `pubspec.yaml` → `version: 1.0.0+1`
-- [ ] `strings.xml` exists with `app_name = "Hitech BPM Radar"`
+- [ ] `strings.xml` exists with `app_name = "TrackScope"`
 - [ ] `key.properties.template` exists, `key.properties` in `.gitignore`
 - [ ] `build.gradle.kts` contains `signingConfigs.release`
 - [ ] App icons documented (custom or placeholder replaced)

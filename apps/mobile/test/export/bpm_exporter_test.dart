@@ -1,9 +1,9 @@
 // bpm_exporter unit tests — pure buildCsv and buildJson builders.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/dsp/dsp_result.dart';
-import 'package:hitech_bpm_radar/export/bpm_exporter.dart';
-import 'package:hitech_bpm_radar/history/bpm_history.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
+import 'package:TrackScope/export/bpm_exporter.dart';
+import 'package:TrackScope/history/bpm_history.dart';
 
 List<BpmSample> _mockSamples() {
   final base = DateTime(2026, 5, 31, 12, 0, 0);

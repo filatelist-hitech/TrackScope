@@ -1,89 +1,137 @@
-# apps/mobile
+# apps/mobile — TrackScope
 
-Граница Flutter-мобильного приложения.
+Flutter-оболочка мобильного приложения **TrackScope**.
 
-Это приложение владеет разрешениями микрофона, интеграцией нативного аудио-моста, рендером живого результата, отладочным выводом и историей сессий. Оно не должно считать BPM вне `core/dsp`.
+Владеет: разрешениями микрофона, нативным аудио-мостом (FFI → Rust DSP), рендером живого результата, отладочным экраном, историей сессий. **Никакой BPM-математики внутри** — только рендер DSP-контракта.
 
-## Текущее состояние (Phase 7 — UI overhaul)
+Dart-пакет: `TrackScope` (pubspec.yaml `name: TrackScope`).
 
-### Главный экран (`lib/ui/main_screen.dart`)
+## Текущее состояние (v1.1.0 — Phase 12 + Phase 2.1/2.2/2.3)
 
-Экран делится на три зоны:
+### Навигация (`lib/navigation/app_navigator.dart`)
 
-| Зона | Высота | Содержимое |
+`AppNavigator` через `IndexedStack`: три вкладки — **Радар / История / Настройки**.  
+`CaptureBridge` создаётся один раз в `_CapturePipeline` и не пересоздаётся при смене вкладок.
+
+### Radar tab — главный экран (`lib/ui/main_screen.dart`)
+
+| Зона | Flex | Содержимое |
 |---|---|---|
-| Спектрограмма | ~35 % | Скроллящаяся FFT-карта (200 колонок × 128 бинов) с метрическими осями (Hz и время), тепловая LUT, курсор «Now» акцентным цветом |
-| Live spectrum | ~22 % | Текущий FFT-кадр в виде сглаженной кривой с gradient fill и peak hold тиками, логарифмическая X-ось 20–20 000 Hz |
-| Glassmorphism-карточка | ~43 % | `DspResult`-поля: BPM (JetBrains Mono 52 sp), анимированный бейдж захвата, уверенность, уровень входа, лучший кандидат, ×½ / ×2, клиппинг, шум |
+| Waveform | 22 % | `WaveformPainter` (осциллограф, ambient glow + beat-reactive pulse, краснеет при клиппинге) |
+| Live spectrum | 35 % | `LiveSpectrumPainter` (FFT-кривая log-X, gradient fill, peak hold) |
+| Glassmorphism-карточка | 43 % | BPM Hero 72 px · ConfidenceBar 7 px · бейдж Lock State · уровень входа · лучший кандидат · ×½/×2 · клиппинг · шум · **Энергия / Тональность** |
 
-Если микрофон ещё не активен → плейсхолдер «Ожидание микрофона…» в обеих визуализационных панелях (реальный Flutter-виджет, находим тестами).
+**Zone labels** «WAVEFORM» / «LIVE SPECTRUM» — Flutter-виджеты над панелями.  
+**ListeningIndicator** «● слушаю» (accent) при активном захвате.  
+**Break button** → `CaptureBridge.resetEngine()` — сброс DSP+smoother без остановки захвата.  
+Нет скролла в info-карте; `ЭНЕРГИЯ` и `ТОНАЛЬНОСТЬ` видимы при любом состоянии.
 
-### Design system (`lib/ui/design_tokens.dart`)
+### Design System v2 (`lib/theme/`)
 
-- Фон: `#07070F`, поверхность: `#0F0F1A`, акцент: `#00E5CC`
-- Типографика: **JetBrains Mono** (через `google_fonts ^6.2.1`) для BPM-числа и числовых метрик
-- Glassmorphism-карточка: `BackdropFilter(ImageFilter.blur(12, 12))` + `ClipRRect(r=16)`
-- Бейджи: `AnimatedSwitcher` (200 мс fade) + `ValueKey<LockState>`
+| Токен | Значение |
+|---|---|
+| Background | `#050807` |
+| Accent | `#00DFB0` |
+| Font | IBM Plex Mono (через `google_fonts`) |
+| ConfidenceBar | 7 px, red < 30 %, yellow 30–70 %, teal > 70 % |
+| BPM Hero | 72 px, 3 режима: idle / detecting / unstable |
 
-### Состояния захвата (русские метки)
+Дизайн-токены: `lib/theme/app_colors.dart` + `lib/theme/app_text_styles.dart`.  
+`AppTheme` (`design_tokens.dart`) — thin-proxy на эти классы.
+
+### Type scale v2.2
+
+| Роль | px |
+|---|---|
+| micro | 11 |
+| caption | 12 |
+| title | 13 |
+| body | 14 |
+| subhead | 15 |
+| value | 18 |
+| bpmHero | 72 |
+
+### Экраны
+
+- **`MainScreen`** (`lib/ui/main_screen.dart`) — Radar tab (визуализации + info-карта).
+- **`SignalAnalyzerScreen`** (`lib/screens/signal_analyzer_screen.dart`) — Pro-only, push из Radar и Settings: BPM-кандидаты со score bar, качество сигнала, тайминги, DspDebug-метрики, **FFT Spectrum** (LiveSpectrumPainter 90 px сверху), секция **ЭНЕРГИЯ**.
+- **`HistoryScreen`** (`lib/history/`) — Pro-only (tab), группировка по дням, confidence bar.
+- **`SettingsScreen`** (`lib/screens/settings_screen.dart`) — 5 секций, SharedPreferences, WakelockPlus.
+- **`PaywallScreen`** (`lib/monetization/paywall_screen.dart`) — FREE / PRO table, CTA, Roadmap card.
+
+### Состояния захвата (метки + цвета)
 
 | `LockState` | Метка | Цвет |
 |---|---|---|
 | `STABLE` | стабильно | `#00C853` (зелёный) |
 | `LOCKING` | захват | `#FFB300` (янтарный) |
 | `UNSTABLE` | нестабильно | `#FFB300` (янтарный) |
-| `BREAKDOWN` | брейк | `#00E5CC` (акцент / teal) |
+| `BREAKDOWN` | брейк | `#00DFB0` (accent teal) |
 | `CLIPPED_MIC` | перегруз | `#FF4444` (красный) |
 | `NOISE_ONLY` | только шум | `#9B59B6` (фиолетовый) |
 | `SEARCHING` | поиск | тёмный нейтральный |
 
+### DSP-результат в UI
+
+Radar-экран подписан только на `CaptureBridge.results` (stream `DspResult`).  
+`BpmSmoother`: медиана N=5 + EMA confidence α=0.2 + гистерезис STABLE K=3.  
+`BpmDisplay`: EMA α=0.2, snap при первом STABLE-кадре. В non-STABLE → «—».
+
+**Новые поля v2:**
+- `key_result` → тональность + Camelot (напр. "8A") в Radar info-карте и Signal Analyzer.
+- `energy_result` → уровень 1–10 в Radar info-карте и Signal Analyzer.
+
 ### Визуализация (`lib/viz/`)
 
-- **`VizController`** (`ChangeNotifier`) — FFT-пайплайн: единственный вызов `compute()` за hop (~20 раз/с) питает три потребителя: `specCols`, `smoothedBars` и `latestNorms`/`peakHoldValues`. Нет двойного FFT.
-- **`SpectrogramPainter`** — 25 600 `drawRect`-вызовов + оси; `Paint`-объекты предаллоцированы в LUT (256 штук).
-- **`LiveSpectrumPainter`** — smooth-кривая через `quadraticBezierTo` (~426 bezier-сегментов), gradient fill, peak hold тики; fixed dBFS нормализация.
-- Все три компонента обёрнуты в `RepaintBoundary`.
+- **`VizController`** (`ChangeNotifier`) — единственный `compute()` за hop питает три потребителя.
+- **`WaveformPainter`** — осциллограф: ambient glow (alpha=38, blur=4.0) + beat-reactive pulse.
+- **`LiveSpectrumPainter`** — smooth-кривая `quadraticBezierTo`, gradient fill, peak hold decay ×0.90.
+- **`SpectrogramPainter`** — скроллящаяся тепловая карта 200×128 бинов (сохранён, не используется на главном экране).
+- Все компоненты в `RepaintBoundary`.
 
-### Unified FFT Pipeline
+### Монетизация (`lib/monetization/`)
 
-```
-Raw PCM → VizController._scheduleFFT()
-              ↓ compute() → mags: Float64List (512 бинов, read-only)
-              │
-   ┌──────────┼──────────────────┐
-   ▼          ▼                  ▼
-specCols  smoothedBars     latestNorms + peakHoldValues
-```
+| Фича | Free | Pro |
+|---|---|---|
+| BPM Range | 170–230 | 155–230 + 6 жанров |
+| Genre Presets | 3 | 7 + Custom |
+| Key / Energy | ✓ | ✓ |
+| Signal Analyzer | ✕ → paywall | ✓ |
+| History | 30 сек | 24 ч |
+| Export CSV/JSON | ✕ → paywall | ✓ |
+| Setlist Tracker | ✕ → paywall | ✓ |
 
-FFT вычисляется ровно один раз за hop. Подробнее: `docs/MOBILE_AUDIO.md` → «Unified FFT Pipeline (Phase 7)».
-
-### Параметры FFT
-
-| Параметр | Значение |
-|---|---|
-| Библиотека | `fftea 1.5.0+1` (pure Dart) |
-| Размер FFT (`_kFftSize`) | 1024 samples |
-| Hop | 2400 samples (~50 мс при 48 кГц) |
-| Положительных бинов | 512 |
-| Дисплей-бинов спектрограммы | 128 (0–6 кГц) |
-| Видимый диапазон LiveSpectrum | ~426 бинов (20–20 000 Hz) |
-| Окно | Hann |
-| Нормализация latestNorms | fixed dBFS, ref `_kRefMag`, floor −60 dBFS |
-| Peak hold | 30 колонок × 0.90 decay |
+RevenueCat API-ключи — через `--dart-define` или `lib/monetization/config.dart` (gitignored).  
+Локальный Pro-тест без покупки: `flutter run --dart-define=FORCE_PRO=true`.
 
 ## Сборка и тесты
 
 ```sh
-# из корня воркспейса
-/opt/homebrew/opt/rust/bin/cargo test --workspace
+# Из корня репозитория:
+/opt/homebrew/opt/rust/bin/cargo test --workspace   # 116 Rust-тестов
 python3 -m unittest discover core/tests
-/opt/homebrew/opt/nodejs/bin/node --test core/dsp/index.test.js
 python3 tools/offline-lab/offline_lab.py report
 
-# из apps/mobile/
+# Из apps/mobile/:
 flutter pub get
-flutter analyze
-flutter test
+flutter analyze          # 0 errors
+flutter test             # 193/194 pass (1 skip: dsp_engine_test — нет .dylib)
+```
+
+## Сборка нативных библиотек
+
+```sh
+# Android (.so для 3 ABI):
+bash scripts/build_android_native.sh
+# → apps/mobile/android/app/src/main/jniLibs/<abi>/libhitech_bpm_ffi.so
+
+# iOS (.a статика):
+bash scripts/build_ios_native.sh
+# → apps/mobile/ios/Frameworks/libhitech_bpm_ffi.a
+
+# Release APK:
+cd apps/mobile && flutter build apk --release
+# → build/app/outputs/flutter-apk/app-release.apk (54.7 MB)
 ```
 
 ## Регенерация FFI-биндингов
@@ -95,9 +143,10 @@ flutter test
 flutter pub run ffigen --config pubspec.yaml
 ```
 
-## Известные ограничения (Phase 7)
+## Известные ограничения
 
-- FFT запускается через `compute()` ~20 раз/с; при высокой частоте spawn'а изолятов на слабых устройствах возможна задержка — мониторить на реальных девайсах.
-- `BackdropFilter` (glassmorphism card) несёт GPU-стоимость на слабых устройствах; при необходимости заменить на сплошной фон.
+- `dsp_engine_test.dart` требует `libhitech_bpm_ffi.dylib` — пропускается на macOS без него (pre-existing).
 - `snr_estimate_db` на чистых синтетических пульсах может оставаться `null` — ожидаемое поведение.
-- iOS-симулятор не поддерживает захват микрофона — визуализации будут показывать плейсхолдер; тестировать на реальном устройстве.
+- iOS-симулятор не поддерживает захват микрофона — тестировать на реальном устройстве.
+- `BackdropFilter` (glassmorphism card) несёт GPU-стоимость на слабых устройствах.
+- `onset_density` в `EnergyAnalyzer` максируется (~400 Hz для всех не-тихих сигналов) — диапазон уровней фактически 3–10 вместо 1–10; планируется fix в Phase 2.2.2.

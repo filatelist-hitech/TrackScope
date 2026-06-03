@@ -25,12 +25,15 @@ const FLUX_MAX: f32 = 0.15;
 /// Нижняя граница плотности онсетов (онсетов/сек) — редкий пульс.
 const DENSITY_MIN: f32 = 0.5;
 /// Верхняя граница плотности онсетов — плотный hitech kick + суб-онсеты.
-/// Примечание Phase 2.2.1: DspEngine передаёт onset_history.len() / window_secs
-/// в качестве onset_count, что даёт ~400 frames/s (не реальных бит). Как следствие,
-/// density_norm всегда = 1.0 на любом не-тихом сигнале, добавляя константный 0.25
-/// к взвешенной сумме. Фактический диапазон уровней становится 3–10. Реальный
-/// pitch-peak-count планируется добавить в Phase 2.2.2.
-const DENSITY_MAX: f32 = 6.0;
+/// Phase 2.2.2: density вычисляется через count_flux_peaks() — реальные
+/// локальные максимумы flux_history выше среднего. Диапазон hitech: ~3–8 Hz.
+const DENSITY_MAX: f32 = 8.0;
+/// Предполагаемый hop-шаг (сек) для пересчёта кол-ва пиков в Hz.
+/// Должен совпадать с DspConfig::hop_seconds (дефолт 0.0025 с).
+const HOP_SEC: f32 = 0.0025;
+/// Абсолютный минимальный порог flux для пика — отсекает шумовые флуктуации.
+/// Белый шум amplitude=0.28 даёт max flux ≈ 0.008; kick-барабан >> 0.01.
+const FLUX_ABSOLUTE_FLOOR: f32 = 0.01;
 
 /// Веса трёх компонент. Сумма = 1.0.
 const WEIGHT_RMS: f32 = 0.40;
@@ -63,6 +66,7 @@ impl Default for EnergyResult {
 
 #[derive(Debug, Clone)]
 pub struct EnergyAnalyzer {
+    #[allow(dead_code)]
     sample_rate: f32,
     /// Скользящий PCM-буфер для вычисления RMS (3 сек).
     rms_window: VecDeque<f32>,
@@ -105,11 +109,46 @@ impl EnergyAnalyzer {
         self.flux_history.push_back(flux);
     }
 
-    /// Вычислить текущий уровень энергии.
+    /// Считает значимые пики flux_history — реальные удары, а не шумовые флуктуации.
     ///
-    /// `onset_count` — количество значимых онсетов в `window_secs`
-    /// (длина onset_history DspEngine).
-    pub fn current_energy(&self, onset_count: usize, window_secs: f32) -> EnergyResult {
+    /// Условия для пика:
+    /// - локальный максимум (больше соседей);
+    /// - выше порога max(mean + 2·σ, FLUX_ABSOLUTE_FLOOR=0.01) — отсекает шум;
+    /// - расстояние ≥ MIN_PEAK_GAP кадров от предыдущего пика (~100 мс).
+    fn count_flux_peaks(&self) -> usize {
+        let flux: Vec<f32> = self.flux_history.iter().copied().collect();
+        if flux.len() < 3 {
+            return 0;
+        }
+        let mean = flux.iter().sum::<f32>() / flux.len() as f32;
+        if mean <= 0.0 {
+            return 0;
+        }
+        let variance =
+            flux.iter().map(|&x| (x - mean) * (x - mean)).sum::<f32>() / flux.len() as f32;
+        let std_dev = variance.sqrt();
+        // Порог = max(mean + 2σ, абсолютный пол). Белый шум (max flux ≈ 0.008)
+        // не дотягивается до 0.01; реальные удары дают пики >> 0.01.
+        let threshold = (mean + 2.0 * std_dev).max(FLUX_ABSOLUTE_FLOOR);
+        // 40 кадров × 2.5 мс/кадр = 100 мс минимального зазора.
+        const MIN_PEAK_GAP: usize = 40;
+        let mut count = 0usize;
+        let mut last_peak_idx = 0usize;
+        for i in 1..flux.len() - 1 {
+            if flux[i] > flux[i - 1]
+                && flux[i] > flux[i + 1]
+                && flux[i] > threshold
+                && (count == 0 || i - last_peak_idx >= MIN_PEAK_GAP)
+            {
+                count += 1;
+                last_peak_idx = i;
+            }
+        }
+        count
+    }
+
+    /// Вычислить текущий уровень энергии.
+    pub fn current_energy(&self) -> EnergyResult {
         // ── RMS ──────────────────────────────────────────────────────────────
         let rms_dbfs = if self.rms_window.is_empty() {
             f32::NEG_INFINITY
@@ -135,9 +174,12 @@ impl EnergyAnalyzer {
             self.flux_history.iter().sum::<f32>() / self.flux_history.len() as f32
         };
 
-        // ── Onset density ─────────────────────────────────────────────────────
+        // ── Onset density (Phase 2.2.2) ───────────────────────────────────────
+        // Используем реальные пики flux, а не длину буфера.
+        let window_secs = self.flux_history.len() as f32 * HOP_SEC;
+        let peak_count = self.count_flux_peaks();
         let onset_density_hz = if window_secs > 0.0 {
-            onset_count as f32 / window_secs
+            peak_count as f32 / window_secs
         } else {
             0.0
         };
@@ -220,7 +262,7 @@ mod tests {
         let silence: Vec<f32> = vec![0.0; 48_000 * 3];
         ea.push_samples(&silence);
         ea.push_flux(0.0);
-        let result = ea.current_energy(0, 3.0);
+        let result = ea.current_energy();
         assert_eq!(result.level, 1, "silence should yield level=1");
     }
 
@@ -240,8 +282,8 @@ mod tests {
             ea.push_flux(0.10);
         }
 
-        // Onset density ≈ 3.5 /s (плотный kick 210 bpm / 60 = 3.5).
-        let result = ea.current_energy(105, 30.0);
+        // Onset density вычисляется через count_flux_peaks() внутри.
+        let result = ea.current_energy();
         assert!(
             result.level >= 5,
             "loud pulse should yield level >= 5, got {}",

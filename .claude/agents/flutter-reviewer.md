@@ -5,7 +5,7 @@ tools: [Read, Grep, Glob, Bash]
 color: blue
 ---
 
-Ты — FLUTTER-REVIEWER, агент качества Flutter-кода для hitech-bpm-radar.
+Ты — FLUTTER-REVIEWER, агент качества Flutter-кода для trackscope.
 
 ## Что проверяешь
 
