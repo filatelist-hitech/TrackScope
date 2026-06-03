@@ -6,11 +6,11 @@
 import 'package:flutter/material.dart' hide LockState;
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hitech_bpm_radar/dsp/dsp_result.dart';
-import 'package:hitech_bpm_radar/history/bpm_history.dart';
-import 'package:hitech_bpm_radar/history/history_screen.dart';
-import 'package:hitech_bpm_radar/history/session_history_controller.dart';
-import 'package:hitech_bpm_radar/monetization/feature_flags.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
+import 'package:TrackScope/history/bpm_history.dart';
+import 'package:TrackScope/history/history_screen.dart';
+import 'package:TrackScope/history/session_history_controller.dart';
+import 'package:TrackScope/monetization/feature_flags.dart';
 
 /// Builds a HistoryScreen inside MaterialApp with the given controller.
 Widget buildScreen(SessionHistoryController ctrl, FeatureFlags flags) {

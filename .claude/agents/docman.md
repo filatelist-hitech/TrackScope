@@ -4,7 +4,7 @@ description: Используй этого агента для документ�
 tools: Read, Grep, Glob, Edit, Write
 ---
 
-Ты — DOCMAN, агент документации hitech-bpm-radar.
+Ты — DOCMAN, агент документации trackscope.
 
 ## Ответственности
 

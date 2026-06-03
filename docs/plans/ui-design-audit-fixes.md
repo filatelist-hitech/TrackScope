@@ -99,7 +99,7 @@ apps/mobile/test/
 ### Шаг 1: Скопировать HTML v2 прототип в `apps/mobile/design/`
 ```sh
 cp "/Users/filatelist/Downloads/BPM Radar Prototype v2.html" \
-   "/Users/filatelist/Documents/it/hitech-bpm-radar/apps/mobile/design/BPM Radar Prototype v2.html"
+   "/Users/filatelist/Documents/it/trackscope/apps/mobile/design/BPM Radar Prototype v2.html"
 ```
 Тест: файл появился в репо, `flutter analyze` зелёный (HTML не компилируется Flutter).
 

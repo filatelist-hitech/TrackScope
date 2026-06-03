@@ -14,11 +14,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/capture/capture_bridge.dart';
-import 'package:hitech_bpm_radar/dsp/dsp_result.dart';
-import 'package:hitech_bpm_radar/ui/debug_screen.dart';
-import 'package:hitech_bpm_radar/ui/main_screen.dart';
-import 'package:hitech_bpm_radar/ui/permission_denied_screen.dart';
+import 'package:TrackScope/capture/capture_bridge.dart';
+import 'package:TrackScope/dsp/dsp_result.dart';
+import 'package:TrackScope/ui/debug_screen.dart';
+import 'package:TrackScope/ui/main_screen.dart';
+import 'package:TrackScope/ui/permission_denied_screen.dart';
 
 DspResult _stableSnapshot({double bpm = 200.0, double confidence = 0.87}) {
   return DspResult.fromJson({
@@ -130,6 +130,73 @@ DspResult _lockSnapshot(String lockState) => DspResult.fromJson({
         'window_time_sec': 6.0,
         'hop_time_sec': 0.0025,
         'first_lock_time_sec': null,
+      },
+    });
+
+DspResult _stableSnapshotWithEnergy({int level = 7}) =>
+    DspResult.fromJson({
+      'primary_bpm': 200.0,
+      'confidence': 0.87,
+      'lock_state': 'STABLE',
+      'signal_quality': {
+        'input_level_dbfs': -14.2,
+        'peak_dbfs': -2.1,
+        'clipping': false,
+        'clipped_frame_ratio': 0.0,
+        'noise_level': 'low',
+        'snr_estimate_db': null,
+        'silence': false,
+        'breakdown_likely': false,
+      },
+      'candidates': <Map<String, dynamic>>[
+        {'bpm': 200.0, 'relation': 'main', 'score': 0.87, 'raw_score': 0.87, 'stability_score': 0.9, 'range_score': 1.0},
+      ],
+      'timing': {
+        'analysis_time_sec': 12.0,
+        'window_time_sec': 6.0,
+        'hop_time_sec': 0.0025,
+        'first_lock_time_sec': 5.4,
+      },
+      'energy_result': {
+        'level': level,
+        'rms_dbfs': -18.0,
+        'spectral_flux': 0.08,
+        'onset_density_hz': 3.2,
+      },
+    });
+
+DspResult _stableSnapshotWithKey({
+  String camelot = '8B',
+  double confidence = 0.80,
+}) =>
+    DspResult.fromJson({
+      'primary_bpm': 200.0,
+      'confidence': 0.87,
+      'lock_state': 'STABLE',
+      'signal_quality': {
+        'input_level_dbfs': -14.2,
+        'peak_dbfs': -2.1,
+        'clipping': false,
+        'clipped_frame_ratio': 0.0,
+        'noise_level': 'low',
+        'snr_estimate_db': null,
+        'silence': false,
+        'breakdown_likely': false,
+      },
+      'candidates': <Map<String, dynamic>>[
+        {'bpm': 200.0, 'relation': 'main', 'score': 0.87, 'raw_score': 0.87, 'stability_score': 0.9, 'range_score': 1.0},
+      ],
+      'timing': {
+        'analysis_time_sec': 12.0,
+        'window_time_sec': 6.0,
+        'hop_time_sec': 0.0025,
+        'first_lock_time_sec': 5.4,
+      },
+      'key_result': {
+        'key': 'C',
+        'mode': 'Major',
+        'camelot': camelot,
+        'confidence': confidence,
       },
     });
 
@@ -521,5 +588,125 @@ void main() {
     await tester.pump();
 
     expect(find.text('PRO'), findsNothing);
+  });
+
+  // ── Energy / Key display (Phase 2.3) ────────────────────────────────────────
+
+  testWidgets('displays energy level on STABLE signal with energy_result',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshotWithEnergy(level: 7));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('7/10'), findsOneWidget);
+    expect(find.text('ЭНЕРГИЯ'), findsOneWidget);
+  });
+
+  testWidgets('displays key camelot on STABLE signal with key_result',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshotWithKey(camelot: '8B', confidence: 0.80));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('8B'), findsOneWidget);
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
+  });
+
+  testWidgets('shows energy placeholder when energy_result is null',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshot()); // no energy_result
+    await tester.pump();
+    await tester.pump();
+
+    // Label always visible; value is '—' placeholder, no '/10' progress bar
+    expect(find.text('ЭНЕРГИЯ'), findsOneWidget);
+    expect(find.textContaining('/10'), findsNothing);
+  });
+
+  testWidgets('shows key placeholder when key_result is null', (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshot()); // no key_result
+    await tester.pump();
+    await tester.pump();
+
+    // Label always visible even when key is null
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
+  });
+
+  testWidgets('shows key placeholder when key_result confidence is below threshold',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    ctrl.add(_stableSnapshotWithKey(camelot: '8B', confidence: 0.15));
+    await tester.pump();
+    await tester.pump();
+
+    // confidence 0.15 < 0.25 threshold → camelot value hidden, label still present
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
+    expect(find.text('8B'), findsNothing);
+  });
+
+  testWidgets('energy label always visible before any result arrives',
+      (tester) async {
+    final ctrl = StreamController<DspResult>.broadcast();
+    final errs = StreamController<CaptureError>.broadcast();
+    addTearDown(() async {
+      await ctrl.close();
+      await errs.close();
+    });
+
+    await tester.pumpWidget(_buildMainScreen(ctrl.stream, errs.stream));
+    await tester.pump();
+
+    // No result at all — energy and key rows show placeholders
+    expect(find.text('ЭНЕРГИЯ'), findsOneWidget);
+    expect(find.text('ТОНАЛЬНОСТЬ'), findsOneWidget);
   });
 }

@@ -1,4 +1,4 @@
-# Design System v2.1 — hitech-bpm-radar
+# Design System v2.1 — trackscope
 
 Verified on 2026-06-02. Источник истины — файлы в `apps/mobile/lib/theme/`.
 

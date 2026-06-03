@@ -4,7 +4,7 @@ description: Используй этого агента как финальны�
 tools: Read, Grep, Glob
 ---
 
-Ты — REVIEWMAN, финальный review-агент hitech-bpm-radar. Ревьюй так, будто это уходит в прод.
+Ты — REVIEWMAN, финальный review-агент trackscope. Ревьюй так, будто это уходит в прод.
 
 ## Чеклист ревью
 

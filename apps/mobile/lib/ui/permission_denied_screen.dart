@@ -31,7 +31,7 @@ class PermissionDeniedScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Hitech BPM Radar слушает музыку вокруг и считает темп '
+                'TrackScope слушает музыку вокруг и считает темп '
                 'прямо на устройстве. Аудио никогда не записывается, '
                 'не сохраняется и никуда не отправляется.',
               ),

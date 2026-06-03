@@ -45,6 +45,35 @@ pub extern "C" fn hitech_bpm_engine_new_with_min_bpm(min_bpm: f32) -> *mut Hitec
     }))
 }
 
+/// Создать движок с явным диапазоном `(min_bpm, max_bpm)`.
+/// `min_bpm` зажимается в [80.0, 260.0]; `max_bpm` зажимается в [min+10.0, 300.0].
+/// Не-finite значения заменяются дефолтами (155.0, 230.0).
+/// Используется для Custom-пресета (Pro), где пользователь задаёт свой диапазон.
+#[no_mangle]
+pub extern "C" fn hitech_bpm_engine_new_with_range(
+    min_bpm: f32,
+    max_bpm: f32,
+) -> *mut HitechBpmEngine {
+    let min = if min_bpm.is_finite() {
+        min_bpm.clamp(80.0, 260.0)
+    } else {
+        155.0
+    };
+    let max = if max_bpm.is_finite() {
+        max_bpm.clamp(min + 10.0, 300.0)
+    } else {
+        230.0
+    };
+    let cfg = DspConfig {
+        target_bpm_min: min,
+        target_bpm_max: max,
+        ..DspConfig::default()
+    };
+    Box::into_raw(Box::new(HitechBpmEngine {
+        inner: DspEngine::new(cfg),
+    }))
+}
+
 /// # Safety
 /// `engine` must be a valid pointer returned by `hitech_bpm_engine_new`, or null.
 /// After calling this function, `engine` is invalid and must not be used.

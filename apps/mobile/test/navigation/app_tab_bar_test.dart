@@ -5,9 +5,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:hitech_bpm_radar/navigation/app_navigator.dart';
-import 'package:hitech_bpm_radar/widgets/app_tab_bar.dart';
-import 'package:hitech_bpm_radar/theme/app_colors.dart';
+import 'package:TrackScope/navigation/app_navigator.dart';
+import 'package:TrackScope/widgets/app_tab_bar.dart';
+import 'package:TrackScope/theme/app_colors.dart';
 
 void main() {
   Widget wrap({

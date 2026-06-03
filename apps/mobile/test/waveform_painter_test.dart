@@ -9,8 +9,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hitech_bpm_radar/viz/waveform_column.dart';
-import 'package:hitech_bpm_radar/viz/waveform_painter.dart';
+import 'package:TrackScope/viz/waveform_column.dart';
+import 'package:TrackScope/viz/waveform_painter.dart';
 
 Widget _paint(List<WaveformColumn> columns) => MaterialApp(
       home: Scaffold(

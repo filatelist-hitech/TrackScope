@@ -189,6 +189,82 @@ class DspDebug {
       );
 }
 
+/// Детектированная тональность (Phase 2.1).
+///
+/// `key`, `mode` и `camelot` — `null` если уверенность ниже порога
+/// Уровень энергии 1–10 (Mixed In Key-стиль).
+/// `null` при тишине или CLIPPED_MIC — anti-fake: нет уровня без сигнала.
+class EnergyResult {
+  const EnergyResult({
+    required this.level,
+    required this.rmsDbfs,
+    required this.spectralFlux,
+    required this.onsetDensityHz,
+  });
+
+  /// 1 (очень тихо) — 10 (очень интенсивно).
+  final int level;
+
+  /// RMS-уровень в dBFS за скользящее окно.
+  final double rmsDbfs;
+
+  /// Средний spectral flux за скользящее окно.
+  final double spectralFlux;
+
+  /// Плотность онсетов (онсетов/сек).
+  final double onsetDensityHz;
+
+  factory EnergyResult.fromJson(Map<String, dynamic> json) => EnergyResult(
+        level: (json['level'] as num?)?.toInt() ?? 0,
+        rmsDbfs: _asDoubleOrNull(json['rms_dbfs']) ?? double.negativeInfinity,
+        spectralFlux: _asDoubleOrNull(json['spectral_flux']) ?? 0.0,
+        onsetDensityHz: _asDoubleOrNull(json['onset_density_hz']) ?? 0.0,
+      );
+}
+
+/// или DSP находится в CLIPPED_MIC / тишине. Никогда не содержит
+/// хардкодных значений — только результат Rust HPCP + K-S алгоритма.
+class KeyResult {
+  const KeyResult({
+    this.key,
+    this.mode,
+    this.camelot,
+    required this.confidence,
+  });
+
+  /// Нотное имя тональности: "C", "Db", "D", …, "B". Null если нет данных.
+  final String? key;
+
+  /// "Major" | "Minor". Null если нет данных.
+  final String? mode;
+
+  /// Camelot-нотация: "8A", "8B", …, "12A". Null если нет данных.
+  final String? camelot;
+
+  /// Уверенность 0.0–1.0 (нормализованный коэффициент Пирсона).
+  final double confidence;
+
+  factory KeyResult.fromJson(Map<String, dynamic> json) {
+    final camelotRaw = json['camelot'];
+    String? camelotStr;
+    if (camelotRaw is Map) {
+      final number = camelotRaw['number'];
+      final letter = camelotRaw['letter'];
+      if (number != null && letter != null) {
+        camelotStr = '$number$letter';
+      }
+    } else if (camelotRaw is String) {
+      camelotStr = camelotRaw;
+    }
+    return KeyResult(
+      key: json['key'] as String?,
+      mode: json['mode'] as String?,
+      camelot: camelotStr,
+      confidence: _asDoubleOrNull(json['confidence']) ?? 0.0,
+    );
+  }
+}
+
 class DspResult {
   const DspResult({
     required this.primaryBpm,
@@ -198,6 +274,8 @@ class DspResult {
     required this.candidates,
     required this.timing,
     required this.debug,
+    this.keyResult,
+    this.energyResult,
   });
 
   /// `null`, когда DSP не перешагнул порог захвата. UI ОБЯЗАН отрисовать
@@ -211,6 +289,12 @@ class DspResult {
 
   /// Диагностика алгоритма. Содержит реальные значения из Rust DSP.
   final DspDebug debug;
+
+  /// Детектированная тональность. `null` при тишине, клиппинге или низкой уверенности.
+  final KeyResult? keyResult;
+
+  /// Уровень энергии 1–10. `null` при тишине или клиппинге.
+  final EnergyResult? energyResult;
 
   factory DspResult.fromJson(Map<String, dynamic> json) => DspResult(
         primaryBpm: _asDoubleOrNull(json['primary_bpm']),
@@ -227,6 +311,14 @@ class DspResult {
             (json['timing'] as Map?)?.cast<String, dynamic>() ?? const {}),
         debug: DspDebug.fromJson(
             (json['debug'] as Map?)?.cast<String, dynamic>() ?? const {}),
+        keyResult: json['key_result'] == null
+            ? null
+            : KeyResult.fromJson(
+                (json['key_result'] as Map).cast<String, dynamic>()),
+        energyResult: json['energy_result'] == null
+            ? null
+            : EnergyResult.fromJson(
+                (json['energy_result'] as Map).cast<String, dynamic>()),
       );
 
   static DspResult parse(String json) =>
