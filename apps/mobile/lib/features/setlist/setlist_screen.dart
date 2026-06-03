@@ -16,6 +16,7 @@ import '../../monetization/feature_flags.dart';
 import '../../monetization/paywall_screen.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../share_card/set_energy_card.dart';
 import 'setlist_entry.dart';
 import 'setlist_service.dart';
 
@@ -36,14 +37,40 @@ class SetlistScreen extends StatelessWidget {
     }
     return ListenableBuilder(
       listenable: service,
-      builder: (context, _) => _SetlistView(service: service),
+      builder: (context, _) => _SetlistView(service: service, flags: flags),
     );
   }
 }
 
-class _SetlistView extends StatelessWidget {
-  const _SetlistView({required this.service});
+class _SetlistView extends StatefulWidget {
+  const _SetlistView({required this.service, required this.flags});
   final SetlistService service;
+  final FeatureFlags flags;
+
+  @override
+  State<_SetlistView> createState() => _SetlistViewState();
+}
+
+class _SetlistViewState extends State<_SetlistView> {
+  final _cardKey = GlobalKey<SetEnergyCardState>();
+
+  SetlistService get service => widget.service;
+  FeatureFlags get flags => widget.flags;
+
+  Future<void> _shareCard(BuildContext context) async {
+    if (!flags.canShareCard) {
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => const PaywallScreen(feature: 'share_card'),
+          ),
+        );
+      }
+      return;
+    }
+    await _cardKey.currentState?.captureAndShare();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +107,11 @@ class _SetlistView extends StatelessWidget {
           ),
           if (service.entries.isNotEmpty) ...[
             _ExportButton(
+              icon: Icons.share_outlined,
+              tooltip: 'Поделиться карточкой',
+              onTap: () => _shareCard(context),
+            ),
+            _ExportButton(
               icon: Icons.file_download_outlined,
               tooltip: 'Экспорт CSV',
               onTap: () => _exportCsv(context, service.entries),
@@ -92,13 +124,21 @@ class _SetlistView extends StatelessWidget {
           ],
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          _RecBar(service: service),
-          if (service.entries.isEmpty)
-            Expanded(child: _EmptyState(isRecording: service.isRecording))
-          else
-            Expanded(child: _EntriesTable(entries: service.entries)),
+          Column(
+            children: [
+              _RecBar(service: service),
+              if (service.entries.isEmpty)
+                Expanded(child: _EmptyState(isRecording: service.isRecording))
+              else
+                Expanded(child: _EntriesTable(entries: service.entries)),
+            ],
+          ),
+          // Off-screen card renderer — stays in render tree for toImage().
+          Offstage(
+            child: SetEnergyCard(key: _cardKey, entries: service.entries),
+          ),
         ],
       ),
     );
