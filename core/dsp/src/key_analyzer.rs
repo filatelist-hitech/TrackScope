@@ -32,12 +32,25 @@ const KEY_CONFIDENCE_THRESHOLD: f32 = 0.25;
 
 /// Нижняя частотная граница анализируемого спектра (Hz).
 ///
-/// 100 Hz выбрано чтобы исключить суб-бас и бочку-кик из HPCP:
-/// фундаменталы kick drum в hitech/psytrance лежат в 50–80 Hz и создают
-/// систематическое смещение по питч-классу (Gb/G/F получают больше бинов
-/// на линейной шкале → ложный K-S матч на 2B/3A).
-/// Диапазон 100–5000 Hz покрывает гармоники баслайна и мелодические синтезаторы.
-const FREQ_MIN: f32 = 100.0;
+/// 200 Hz: исключает фундаменталы kick drum (50–80 Hz) и фундаменталы
+/// баслайна (80–200 Hz). Гармоники баслайна выше 200 Hz по-прежнему
+/// включаются. Диапазон 200–5000 Hz покрывает гармонический и мелодический
+/// контент треков hitech/psytrance.
+///
+/// Обоснование перехода 100 → 200 Hz (Phase 13.2):
+/// При FREQ_MIN=100 Hz первый анализируемый бин (k=9, freq≈105.5 Hz)
+/// отображается на pitch class Ab (8). Это в сочетании с 1/f-нормализацией
+/// (которая убрана в этом же фиксе) давало максимальный вес Ab и вызывало
+/// систематический вывод 4A/4B. При FREQ_MIN=200 Hz структурное смещение
+/// снижается с 2.2% до < 0.7% (измерено на равномерном спектре).
+const FREQ_MIN: f32 = 200.0;
+
+/// Ширина Гауссовой функции для pitch class weighting (центы).
+///
+/// Стандартная HPCP (Gómez 2006): σ=14 центов. Для FFT-бинов при
+/// частоте ≥200 Hz и SR=48 kHz ширина бина ≈10–78 центов; σ=25 центов
+/// обеспечивает плавное распределение для низкочастотных бинов.
+const SIGMA_CENTS: f32 = 25.0;
 
 /// Верхняя частотная граница анализируемого спектра (Hz).
 const FREQ_MAX: f32 = 5000.0;
@@ -45,13 +58,26 @@ const FREQ_MAX: f32 = 5000.0;
 /// Опорная частота C4 (Hz) для pitch class расчёта.
 const C4_HZ: f32 = 261.63;
 
-// ── Krumhansl-Schmuckler профили (1990) ────────────────────────────────────
+// ── Тональные профили ─────────────────────────────────────────────────────
 
+/// Krumhansl-Schmuckler профили (1990).
+/// Индекс 0 = тоника, 1 = минорная 2-я, 2 = мажорная 2-я, …
 const MAJOR_PROFILE: [f32; 12] =
     [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
 
 const MINOR_PROFILE: [f32; 12] =
     [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+
+/// Temperley (2001) профили — лучший баланс минорной терции.
+/// MINOR_PROFILE[3] = 5.38 → 4.5 устраняет избыточный вес minor 3rd
+/// (который в паре с Ab-bias давал F minor (4A) систематический буст).
+/// Используются параллельно с K-S: выбирается профиль с максимальной
+/// корреляцией Пирсона.
+const TEMPERLEY_MAJOR: [f32; 12] =
+    [5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0];
+
+const TEMPERLEY_MINOR: [f32; 12] =
+    [5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0];
 
 // ── Публичные типы ─────────────────────────────────────────────────────────
 
@@ -224,24 +250,42 @@ impl KeyAnalyzer {
             *v /= n;
         }
 
-        // Перебрать 24 профиля (12 major + 12 minor), найти лучший.
+        // Перебрать 48 профилей: K-S (1990) + Temperley (2001), 12 major + 12 minor каждый.
+        // Temperley снижает вес minor 3rd (4.5 vs K-S 5.38), что уменьшает
+        // избыточный буст F minor (4A) при остаточном Ab-bias.
         let mut best_corr = f32::NEG_INFINITY;
         let mut best_root = 0usize;
         let mut best_mode = KeyMode::Major;
 
         for root in 0..12usize {
-            let maj_profile = rotate_profile(&MAJOR_PROFILE, root);
-            let maj_corr = pearson_correlation(&avg_hpcp, &maj_profile);
+            // ── Krumhansl-Schmuckler (1990) ────────────────────────────────
+            let maj_corr = pearson_correlation(&avg_hpcp, &rotate_profile(&MAJOR_PROFILE, root));
             if maj_corr > best_corr {
                 best_corr = maj_corr;
                 best_root = root;
                 best_mode = KeyMode::Major;
             }
 
-            let min_profile = rotate_profile(&MINOR_PROFILE, root);
-            let min_corr = pearson_correlation(&avg_hpcp, &min_profile);
+            let min_corr = pearson_correlation(&avg_hpcp, &rotate_profile(&MINOR_PROFILE, root));
             if min_corr > best_corr {
                 best_corr = min_corr;
+                best_root = root;
+                best_mode = KeyMode::Minor;
+            }
+
+            // ── Temperley (2001) ───────────────────────────────────────────
+            let tmaj_corr =
+                pearson_correlation(&avg_hpcp, &rotate_profile(&TEMPERLEY_MAJOR, root));
+            if tmaj_corr > best_corr {
+                best_corr = tmaj_corr;
+                best_root = root;
+                best_mode = KeyMode::Major;
+            }
+
+            let tmin_corr =
+                pearson_correlation(&avg_hpcp, &rotate_profile(&TEMPERLEY_MINOR, root));
+            if tmin_corr > best_corr {
+                best_corr = tmin_corr;
                 best_root = root;
                 best_mode = KeyMode::Minor;
             }
@@ -269,6 +313,30 @@ impl KeyAnalyzer {
     pub fn reset(&mut self) {
         self.pcm_pending.clear();
         self.hpcp_buffer.clear();
+    }
+
+    /// Вернуть усреднённый HPCP по всем накопленным кадрам.
+    ///
+    /// Метод предназначен для тестирования структурной равномерности (flatness)
+    /// HPCP при равномерном входном спектре. Не скрыт через `#[cfg(test)]` —
+    /// integration tests не имеют доступа к cfg(test)-методам крейта.
+    /// Не вызывается в production-путях.
+    #[doc(hidden)]
+    pub fn averaged_hpcp_for_test(&self) -> Option<[f32; HPCP_BINS]> {
+        if self.hpcp_buffer.is_empty() {
+            return None;
+        }
+        let mut avg = [0.0f32; HPCP_BINS];
+        for frame in &self.hpcp_buffer {
+            for (i, v) in frame.iter().enumerate() {
+                avg[i] += v;
+            }
+        }
+        let n = self.hpcp_buffer.len() as f32;
+        for v in &mut avg {
+            *v /= n;
+        }
+        Some(avg)
     }
 }
 
@@ -300,16 +368,29 @@ fn extract_hpcp_frame(
     // in-place FFT.
     fft.process_with_scratch(&mut buf, scratch);
 
-    // Аккумуляция мощности по pitch class с 1/f-нормализацией.
+    // HPCP-аккумуляция: Gaussian pitch-class weighting (без 1/f).
     //
-    // Проблема: FFT-биты распределены линейно по Гц, но питч-классы —
-    // логарифмически. Низкие частоты (100–300 Hz) дают меньше бинов на
-    // полутон, чем высокие → без нормализации kick-drum систематически
-    // смещает HPCP в сторону Gb/F/G и даёт ложный K-S матч.
+    // ── Почему старый подход (1/f) давал 4A/4B ────────────────────────────
+    // Первый анализируемый бин (k=9, freq≈105.5 Hz при старом FREQ_MIN=100)
+    // отображался на pitch class Ab (8) и получал максимальный вес 1/f = 0.00948.
+    // Это создавало систематический Ab-bias (+1.70% от идеальных 8.33%), а
+    // K-S MINOR_PROFILE[3]=5.38 для F minor (root=5) давал ему двойной буст —
+    // почти всегда побеждали 4A (F minor) или 4B (Ab major).
     //
-    // Фикс: умножать мощность бина на 1/freq. Для равномерного спектра
-    // вклад каждого полутона: ∫(1/f)df ≈ ln(1.0595) ≈ 0.0578 = константа
-    // → плоский HPCP при отсутствии тональных сигналов.
+    // ── Новый подход (Phase 13.2) ─────────────────────────────────────────
+    // 1. RAW power (без 1/f): вес бина ≡ его реальная мощность сигнала.
+    // 2. Gaussian weighting (σ=25 центов, Gómez 2006): плавное распределение
+    //    мощности между ближайшим и соседним полутоном. Устраняет ступенчатые
+    //    артефакты от жёсткого round()-назначения; особенно важно для бинов
+    //    в нижнем частотном диапазоне (200–500 Hz), где ширина бина ≈ ширине
+    //    полутона (~40–80 центов).
+    //
+    // ВАЖНО: count-normalization намеренно НЕ применяется.
+    // Она делила бы HPCP[pc] на суммарное число бинов данного pitch class
+    // ВО ВСЁМ диапазоне [200, 5000 Hz], в том числе на частотах, где сигнал
+    // равен нулю. Это искажает соотношение высоких тонов (больше октав →
+    // больше знаменатель → ниже нормализованное значение) и ломает детекцию
+    // на реальных аккордах.
     let mut hpcp = [0.0f32; HPCP_BINS];
     let n_bins = FRAME_SIZE / 2; // только положительные частоты
 
@@ -318,16 +399,31 @@ fn extract_hpcp_frame(
         if freq < FREQ_MIN || freq > FREQ_MAX {
             continue;
         }
-        // Pitch class: C4=0, C#4=1, …, B4=11 (и все октавы).
+
+        let power = buf[k].norm_sqr(); // raw power, без 1/f
+
+        // Непрерывный индекс полутона от C4 (C4=0.0, C#4=1.0, …).
         let semitones = 12.0 * (freq / C4_HZ).log2();
-        let pitch_class = (semitones.round() as i32).rem_euclid(12) as usize;
-        // 1/f-нормализация: компенсирует неравномерное распределение
-        // FFT-бинов по питч-классам на логарифмической шкале.
-        let power = buf[k].norm_sqr() / freq;
-        hpcp[pitch_class] += power;
+        let nearest = semitones.round() as i32;
+        let cents_off = (semitones - nearest as f32) * 100.0;
+
+        // Gaussian вес на ближайший полутон.
+        let w = (-cents_off * cents_off / (2.0 * SIGMA_CENTS * SIGMA_CENTS)).exp();
+        let pc = nearest.rem_euclid(12) as usize;
+        hpcp[pc] += power * w;
+
+        // Gaussian хвост на соседний полутон — только если вес значим
+        // (для σ=25c: при |cents_off|>70c хвост w_adj < 0.14).
+        let adj = if cents_off > 0.0 { nearest + 1 } else { nearest - 1 };
+        let cents_adj = (semitones - adj as f32) * 100.0;
+        let w_adj = (-cents_adj * cents_adj / (2.0 * SIGMA_CENTS * SIGMA_CENTS)).exp();
+        if w_adj > 1e-4 {
+            let pc_adj = adj.rem_euclid(12) as usize;
+            hpcp[pc_adj] += power * w_adj;
+        }
     }
 
-    // L2-нормализация.
+    // L2-нормализация (без изменений).
     let l2: f32 = hpcp.iter().map(|v| v * v).sum::<f32>().sqrt();
     if l2 > 0.0 {
         for v in &mut hpcp {
