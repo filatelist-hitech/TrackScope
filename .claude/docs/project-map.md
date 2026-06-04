@@ -2,7 +2,7 @@
 
 _Track architecture changes, important files, build system changes, DSP pipeline changes and FFI integrations._
 
-_Last updated: 2026-06-04 (Phase 2.5: CamelotWheelPainter + CamelotWheelWidget + ТОНАЛЬНОСТЬ section in SignalAnalyzerScreen; Phase 2.6: SetEnergyCardPainter + SetEnergyCard + FeatureFlags.canShareCard + share button in SetlistScreen; Phase 14: adaptive compact layout). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
+_Last updated: 2026-06-04 (Phase 15: session-based BPM history — Session/SessionSnapshot models, SessionStore persistence, 30s throttle, SessionCard UI, SessionDetailScreen BPM chart). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
 
 ---
 
@@ -89,9 +89,13 @@ lib/
 │   ├── feature_flags.dart      BPM range (incl. customMin/customMax for Custom preset), debug, history, export gating
 │   └── paywall_screen.dart     Design v2: FREE/PRO columns, CTA hierarchy, Roadmap card
 ├── history/
-│   ├── bpm_history.dart        BpmSample (bpm, confidence), capped by duration/count
-│   ├── session_history_controller.dart  ChangeNotifier, downsampler ~1 Hz
-│   └── history_screen.dart     Group by day, 20px teal BPM + 3px confidence bar
+│   ├── session.dart            Session + SessionSnapshot models; toJson/fromJson (Phase 15)
+│   ├── session_store.dart      SharedPreferences JSON persistence, cap 100 sessions (Phase 15)
+│   ├── bpm_history.dart        BpmSample model; kept for export compat (bpm_exporter.dart)
+│   ├── session_history_controller.dart  ChangeNotifier; session lifecycle (init→dispose);
+│   │                              30s throttle; flatSamples for export compat (Phase 15)
+│   ├── history_screen.dart     SessionCard list, svejie sверху; tap → SessionDetailScreen (Phase 15)
+│   └── session_detail_screen.dart  BPM polyline chart + snapshot list for one session (Phase 15)
 ├── export/
 │   ├── bpm_exporter.dart       Pure builders buildCsv/buildJson
 │   └── export_io.dart          exportCsv/exportJson via share_plus
@@ -215,6 +219,10 @@ core/tests/
 apps/mobile/test/
   widget_test.dart               MainScreen + InfoCard + badge states + energy/key always-visible +
                                    compact layout chip-hiding (232 tests; 6 chip-tests use 800×1200 view)
+  models/session_test.dart       Session/SessionSnapshot unit tests: toJson/fromJson, computed props (9 tests)
+  services/session_history_controller_test.dart  Throttle 30s, null BPM skip, lifecycle (8 tests)
+  history/history_screen_test.dart  SessionCard UI: СЕССИЙ header, BPM range, confidence, export (7 tests)
+  history/session_detail_screen_test.dart  BPM chart, snapshot list, empty state, back nav (5 tests)
   dsp_debug_test.dart            DspDebug.fromJson parsing
   screens/signal_analyzer_screen_test.dart  +3 new: ТОНАЛЬНОСТЬ section shown/hidden, key summary format
   viz/camelot_wheel_painter_test.dart        4 unit tests: camelotNeighbors() incl. wrap-around (Phase 2.5)
