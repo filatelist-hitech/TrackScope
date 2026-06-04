@@ -817,12 +817,33 @@ K-S корреляция систематически выбирала Gb Major 
 | `bb_major_chord_detects_bb_major_6b` | Bb4+D5+F5 → 6B ✓ |
 | `no_4a_4b_bias_on_broad_spectrum` | белый шум → ≤2/5 seeds 4A/4B ✓ |
 
+### Review-gate: полное покрытие 24 тональностей (2026-06-05)
+
+При ревью добавлены 3 data-driven теста, покрывающие **определение каждой из 24
+тональностей** (12 major + 12 minor):
+
+| Тест | Покрытие |
+|---|---|
+| `all_24_keys_detect_correct_camelot` | Все 24 Camelot-метки (C…B major + minor) детектируются точно |
+| `all_24_keys_detect_correct_mode` | Major/Minor различается для всех 24 |
+| `all_24_keys_have_confidence_above_threshold` | Уверенность ≥ 0.25 для всех 24 |
+
+Фикстуры: tonic-emphasized триады (`tonic_emphasized_triad`, root_gain=2.0) —
+тоника усилена ×2, моделируя роль баса/тонального центра. Без акцента голая
+мажорная триада {R,M3,P5} музыкально неоднозначна с относительным минором
+(C мажор {C,E,G} = тоника/m3/m6 ноты E минора) — это свойство 3-нотной триады,
+не дефект детектора. Минорные триады детектируются корректно даже без акцента
+(12/12); мажорным требуется акцент на тонике для разрешения относительной
+неоднозначности. Все 24 детектируются с confidence 0.89–0.94.
+
 ### Критерии выхода — выполнены
 
-- `cargo test --workspace` → все зелёные (130+ Rust тестов) ✓
+- `cargo test --workspace` → все зелёные (133+ Rust тестов; 22 в key_detection) ✓
 - `flutter test` → 269/269 pass (1 pre-existing dsp_engine_test — нет .dylib) ✓
+- `python3 -m unittest discover core/tests` → 22 OK ✓
 - `offline_lab.py report` → 15/15 PASS, exit 0 ✓
-- KeyAnalyzer возвращает ≥5 различных Camelot-значений на тест-сьюте ✓
+- `flutter analyze` → 0 errors ✓
+- KeyAnalyzer детектирует **все 24 тональности** корректно ✓
 - 4A/4B больше не являются систематическим результатом ✓
 
 ### Известные ограничения

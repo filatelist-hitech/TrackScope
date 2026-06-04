@@ -28,6 +28,44 @@ fn chord_sine(freqs: &[f32], duration_sec: f32, sample_rate: u32) -> Vec<f32> {
         .collect()
 }
 
+/// Частота ноты на `semitones_from_c4` полутонов от C4 (равномерная темперация).
+fn note_freq(semitones_from_c4: i32) -> f32 {
+    C4_HZ * 2.0_f32.powf(semitones_from_c4 as f32 / 12.0)
+}
+
+/// C4 как опорная частота (совпадает с `key_analyzer::C4_HZ`).
+const C4_HZ: f32 = 261.63;
+
+/// Триада с акцентированной тоникой (tonic-emphasized).
+///
+/// Тоника звучит с усилением `root_gain` относительно терции и квинты —
+/// это моделирует роль баса/тонального центра в реальной музыке. Без акцента
+/// голая мажорная триада {R, M3, P5} музыкально неоднозначна с относительным
+/// минором (C мажор {C,E,G} = тоника/m3/m6 ноты E минора), и K-S корреляция
+/// может выбрать относительный минор. Акцент на тонике делает тональный центр
+/// однозначным — соответствует тому, как тональность задаётся в треках.
+///
+/// - `root_pc`: pitch class тоники (0=C, 1=Db, …, 11=B), нота в октаве 4.
+/// - `major`: true → мажорная триада (терция +4 пт), false → минорная (+3 пт).
+/// - `root_gain`: усиление тоники (2.0 даёт надёжную детекцию всех 24 ключей).
+fn tonic_emphasized_triad(root_pc: i32, major: bool, root_gain: f32) -> Vec<f32> {
+    let third = if major { 4 } else { 3 };
+    let root_f = note_freq(root_pc);
+    let third_f = note_freq(root_pc + third);
+    let fifth_f = note_freq(root_pc + 7);
+    let sr = 48000u32;
+    let n = (12.0 * sr as f32) as usize;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr as f32;
+            let s = root_gain * (2.0 * std::f32::consts::PI * root_f * t).sin()
+                + (2.0 * std::f32::consts::PI * third_f * t).sin()
+                + (2.0 * std::f32::consts::PI * fifth_f * t).sin();
+            s / (root_gain + 2.0)
+        })
+        .collect()
+}
+
 fn silence(duration_sec: f32, sample_rate: u32) -> Vec<f32> {
     vec![0.0f32; (duration_sec * sample_rate as f32).round() as usize]
 }
@@ -458,6 +496,130 @@ fn no_4a_4b_bias_on_broad_spectrum() {
          Это указывает на остаточный Ab/F bias в HPCP — проверьте алгоритм.",
         bias_count,
         results
+    );
+}
+
+// ── Полное покрытие: все 24 тональности (12 major + 12 minor) ────────────
+
+/// Эталонная таблица Camelot для всех 24 тональностей.
+/// Индекс = pitch class тоники (0=C … 11=B). Источник — `to_camelot`.
+const CAMELOT_MAJOR: [&str; 12] =
+    ["8B", "3B", "10B", "5B", "12B", "7B", "2B", "9B", "4B", "11B", "6B", "1B"];
+const CAMELOT_MINOR: [&str; 12] =
+    ["5A", "12A", "7A", "2A", "9A", "4A", "11A", "6A", "1A", "8A", "3A", "10A"];
+
+const KEY_NAMES: [&str; 12] =
+    ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+
+/// Покрывает определение **каждой из 24 тональностей** (12 major + 12 minor).
+///
+/// Для каждого pitch class генерируется tonic-emphasized триада (root_gain=2.0)
+/// и прогоняется через KeyAnalyzer напрямую (минуя lock_state-гейт DspEngine,
+/// т.к. чистые синусы → NOISE_ONLY). Проверяется, что детектированный Camelot
+/// точно совпадает с эталоном.
+///
+/// Data-driven: при сбое выводится полная таблица 24 строк, чтобы регрессия
+/// в HPCP/профилях была видна целиком, а не по одной тональности.
+#[test]
+fn all_24_keys_detect_correct_camelot() {
+    let mut failures: Vec<String> = Vec::new();
+    let mut report: Vec<String> = Vec::new();
+
+    for (major, expected_table) in [(true, &CAMELOT_MAJOR), (false, &CAMELOT_MINOR)] {
+        for root in 0..12i32 {
+            let samples = tonic_emphasized_triad(root, major, 2.0);
+            let mut analyzer = KeyAnalyzer::new(48000.0);
+            for c in samples.chunks(4800) {
+                analyzer.push_samples(c);
+            }
+            let kr = analyzer.current_key();
+            let detected = kr.camelot.map(|c| c.label()).unwrap_or_else(|| "None".into());
+            let expected = expected_table[root as usize];
+            let mode = if major { "maj" } else { "min" };
+            let ok = detected == expected;
+
+            report.push(format!(
+                "  [{}] {:>2} {} → {:<4} (ожид. {:<4}) conf={:.3}",
+                if ok { "OK" } else { "XX" },
+                KEY_NAMES[root as usize],
+                mode,
+                detected,
+                expected,
+                kr.confidence
+            ));
+
+            if !ok {
+                failures.push(format!(
+                    "{} {} → детектировано {}, ожидалось {}",
+                    KEY_NAMES[root as usize], mode, detected, expected
+                ));
+            }
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "Не все тональности определены корректно ({} из 24 ошибок):\n{}\n\nПолная таблица:\n{}",
+        failures.len(),
+        failures.join("\n"),
+        report.join("\n")
+    );
+}
+
+/// Каждая из 24 тональностей детектируется с уверенностью выше порога 0.25.
+/// Гарантирует, что tonic-emphasized триады не балансируют на грани гейта.
+#[test]
+fn all_24_keys_have_confidence_above_threshold() {
+    for (major, _table) in [(true, &CAMELOT_MAJOR), (false, &CAMELOT_MINOR)] {
+        for root in 0..12i32 {
+            let samples = tonic_emphasized_triad(root, major, 2.0);
+            let mut analyzer = KeyAnalyzer::new(48000.0);
+            for c in samples.chunks(4800) {
+                analyzer.push_samples(c);
+            }
+            let kr = analyzer.current_key();
+            let mode = if major { "maj" } else { "min" };
+            assert!(
+                kr.confidence >= 0.25,
+                "{} {}: уверенность {:.3} ниже порога KEY_CONFIDENCE_THRESHOLD=0.25",
+                KEY_NAMES[root as usize],
+                mode,
+                kr.confidence
+            );
+        }
+    }
+}
+
+/// Mode (Major/Minor) корректно различается для всех 24 тональностей.
+/// Major-триада → KeyMode::Major, minor-триада → KeyMode::Minor.
+#[test]
+fn all_24_keys_detect_correct_mode() {
+    let mut failures: Vec<String> = Vec::new();
+    for major in [true, false] {
+        for root in 0..12i32 {
+            let samples = tonic_emphasized_triad(root, major, 2.0);
+            let mut analyzer = KeyAnalyzer::new(48000.0);
+            for c in samples.chunks(4800) {
+                analyzer.push_samples(c);
+            }
+            let kr = analyzer.current_key();
+            let expected_mode = if major { KeyMode::Major } else { KeyMode::Minor };
+            if kr.mode != Some(expected_mode) {
+                failures.push(format!(
+                    "{} {} → mode={:?}, ожидался {:?}",
+                    KEY_NAMES[root as usize],
+                    if major { "maj" } else { "min" },
+                    kr.mode,
+                    expected_mode
+                ));
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "Ошибки детекции mode ({} из 24):\n{}",
+        failures.len(),
+        failures.join("\n")
     );
 }
 

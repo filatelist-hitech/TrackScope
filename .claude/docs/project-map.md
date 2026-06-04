@@ -2,7 +2,7 @@
 
 _Track architecture changes, important files, build system changes, DSP pipeline changes and FFI integrations._
 
-_Last updated: 2026-06-05 (Phase 13.2: KeyAnalyzer accuracy fix — removed 1/f bias, added Gaussian σ=25¢ HPCP, FREQ_MIN 100→200 Hz, Temperley (2001) profiles. Fixes systematic 4A/4B Camelot detection). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
+_Last updated: 2026-06-05 (Phase 13.2: KeyAnalyzer accuracy fix — removed 1/f bias, added Gaussian σ=25¢ HPCP, FREQ_MIN 100→200 Hz, Temperley (2001) profiles. Fixes systematic 4A/4B Camelot detection. Review-gate: added full 24-key test coverage via tonic-emphasized triads). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
 
 ---
 
@@ -211,7 +211,9 @@ core/dsp/tests/
   streaming.rs            Streaming timing tests (first-lock ≤6s, stable ≤12s, re-lock ≤3s)
   stability.rs            Parabolic interpolation precision, BPM streak stability
   range_coverage.rs       155–230 BPM matrix (16 points, step 5)
-  key_detection.rs        HPCP KeyAnalyzer tests: Camelot mapping, JSON, silence/clip suppression (Phase 2.1)
+  key_detection.rs        HPCP KeyAnalyzer tests (22): Camelot mapping, JSON, silence/clip suppression.
+                          Phase 13.2: all_24_keys_detect_correct_camelot/mode/confidence (full 24-key
+                          coverage via tonic_emphasized_triad), hpcp flatness, no_4a_4b_bias.
   common/mod.rs           Deterministic fixture generators mirroring Python helpers
 
 core/tests/
