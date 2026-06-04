@@ -1,18 +1,14 @@
-// Smoke tests for redesigned HistoryScreen (Design System v2).
-//
-// Verifies: summary header, day grouping, BPM item styling,
-// empty state, AppColors tokens (no AppTheme).
+// Smoke tests for redesigned HistoryScreen (session-based, Design System v2).
 
 import 'package:flutter/material.dart' hide LockState;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:TrackScope/dsp/dsp_result.dart';
-import 'package:TrackScope/history/bpm_history.dart';
 import 'package:TrackScope/history/history_screen.dart';
+import 'package:TrackScope/history/session.dart';
 import 'package:TrackScope/history/session_history_controller.dart';
 import 'package:TrackScope/monetization/feature_flags.dart';
 
-/// Builds a HistoryScreen inside MaterialApp with the given controller.
 Widget buildScreen(SessionHistoryController ctrl, FeatureFlags flags) {
   return MaterialApp(
     home: HistoryScreen(
@@ -31,6 +27,16 @@ SessionHistoryController emptyController(FeatureFlags flags) {
   );
 }
 
+void _addSnapshot(SessionHistoryController ctrl, double bpm,
+    {double confidence = 0.8, LockState lockState = LockState.stable}) {
+  ctrl.currentSession.snapshots.add(SessionSnapshot(
+    timestamp: DateTime.now(),
+    bpm: bpm,
+    confidence: confidence,
+    lockState: lockState,
+  ));
+}
+
 void main() {
   final proFlags = const FeatureFlags(isPro: true);
 
@@ -42,76 +48,50 @@ void main() {
     expect(find.text('История пуста'), findsOneWidget);
   });
 
-  testWidgets('summary header shows stats cells', (tester) async {
+  testWidgets('summary header shows СЕССИЙ stat', (tester) async {
     final ctrl = emptyController(proFlags);
     addTearDown(ctrl.dispose);
-    // Add some samples manually via history
-    ctrl.history.add(BpmSample(
-      bpm: 193.0,
-      lockState: LockState.stable,
-      timestamp: DateTime.now(),
-      confidence: 0.88,
-    ));
-    ctrl.history.add(BpmSample(
-      bpm: 187.0,
-      lockState: LockState.stable,
-      timestamp: DateTime.now(),
-      confidence: 0.72,
-    ));
+    _addSnapshot(ctrl, 193.0);
 
     await tester.pumpWidget(buildScreen(ctrl, proFlags));
     await tester.pump();
 
-    // Summary labels
-    expect(find.text('СЭМПЛОВ'), findsOneWidget);
+    expect(find.text('СЕССИЙ'), findsOneWidget);
     expect(find.text('AVG BPM'), findsOneWidget);
     expect(find.text('ПЕРИОД'), findsOneWidget);
-    // Sample count displayed
-    expect(find.text('2'), findsOneWidget);
+    // 1 session (current) with data
+    expect(find.text('1'), findsWidgets);
   });
 
-  testWidgets('history item shows BPM value', (tester) async {
+  testWidgets('session card appears with BPM range', (tester) async {
     final ctrl = emptyController(proFlags);
     addTearDown(ctrl.dispose);
-    ctrl.history.add(BpmSample(
-      bpm: 196.4,
-      lockState: LockState.stable,
-      timestamp: DateTime.now(),
-      confidence: 0.85,
-    ));
+    _addSnapshot(ctrl, 180.0);
+    _addSnapshot(ctrl, 200.0);
 
     await tester.pumpWidget(buildScreen(ctrl, proFlags));
     await tester.pump();
 
-    // BPM appears in history row AND as avg in summary header
-    expect(find.text('196.4'), findsAtLeast(1));
+    // BPM range shown in session card
+    expect(find.textContaining('180'), findsWidgets);
+    expect(find.textContaining('200'), findsWidgets);
   });
 
-  testWidgets('day group label СЕГОДНЯ appears for today samples', (tester) async {
+  testWidgets('empty session not shown in list', (tester) async {
     final ctrl = emptyController(proFlags);
     addTearDown(ctrl.dispose);
-    ctrl.history.add(BpmSample(
-      bpm: 200.0,
-      lockState: LockState.stable,
-      timestamp: DateTime.now(),
-      confidence: 0.9,
-    ));
+    // No snapshots added
 
     await tester.pumpWidget(buildScreen(ctrl, proFlags));
     await tester.pump();
 
-    expect(find.text('СЕГОДНЯ'), findsOneWidget);
+    expect(find.text('История пуста'), findsOneWidget);
   });
 
   testWidgets('export button visible for Pro tier', (tester) async {
     final ctrl = emptyController(proFlags);
     addTearDown(ctrl.dispose);
-    ctrl.history.add(BpmSample(
-      bpm: 195.0,
-      lockState: LockState.stable,
-      timestamp: DateTime.now(),
-      confidence: 0.8,
-    ));
+    _addSnapshot(ctrl, 195.0);
 
     await tester.pumpWidget(buildScreen(ctrl, proFlags));
     await tester.pump();
@@ -119,24 +99,28 @@ void main() {
     expect(find.text('Экспорт'), findsOneWidget);
   });
 
-  testWidgets('Free tier limit banner shown when at limit', (tester) async {
-    final freeFlags = const FeatureFlags(isPro: false);
-    final ctrl = emptyController(freeFlags);
+  testWidgets('session card shows snapshot count', (tester) async {
+    final ctrl = emptyController(proFlags);
     addTearDown(ctrl.dispose);
+    _addSnapshot(ctrl, 190.0);
+    _addSnapshot(ctrl, 195.0);
+    _addSnapshot(ctrl, 200.0);
 
-    // Fill up to limit
-    for (int i = 0; i < freeFlags.maxHistorySamples; i++) {
-      ctrl.history.add(BpmSample(
-        bpm: 190.0 + i,
-        lockState: LockState.stable,
-        timestamp: DateTime.now().subtract(Duration(seconds: i)),
-        confidence: 0.7,
-      ));
-    }
-
-    await tester.pumpWidget(buildScreen(ctrl, freeFlags));
+    await tester.pumpWidget(buildScreen(ctrl, proFlags));
     await tester.pump();
 
-    expect(find.textContaining('Upgrade'), findsOneWidget);
+    expect(find.text('3'), findsWidgets);
+    expect(find.text('снимков'), findsOneWidget);
+  });
+
+  testWidgets('session card shows peak confidence', (tester) async {
+    final ctrl = emptyController(proFlags);
+    addTearDown(ctrl.dispose);
+    _addSnapshot(ctrl, 200.0, confidence: 0.92);
+
+    await tester.pumpWidget(buildScreen(ctrl, proFlags));
+    await tester.pump();
+
+    expect(find.textContaining('92%'), findsOneWidget);
   });
 }
