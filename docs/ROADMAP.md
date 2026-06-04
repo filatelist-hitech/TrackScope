@@ -927,3 +927,31 @@ BPM 72→52 (−17 dp) + spacings ×5 (−10 dp) + break padding (−6 dp) + б�
 - `captureAndShare()` не тестируется в unit-среде (требует реальной render-surface); покрыт дымовым тестом `CustomPainter.paint()` через `PictureRecorder`.
 - Шрифт «IBM Plex Mono» в painter использует Dart `TextStyle(fontFamily: ...)` — рендеринг зависит от наличия шрифта в bundle; на устройствах без него используется системный fallback.
 - Нет изменений в Rust DSP / FFI / DspResult — Phase 2.6 чисто Flutter-сторона.
+
+---
+
+## Phase 2.6 (Throttle Slider Writes): Custom Range `onChangeEnd` — **ЗАВЕРШЕНО** (2026-06-04)
+
+Цель: устранить избыточные `setCustomRange` / SharedPreferences-writes при быстром перетаскивании ползунков Custom Range.
+
+### Что изменилось
+
+**`apps/mobile/lib/screens/settings_screen.dart`:**
+
+- `_SliderRow` получил опциональный параметр `onChangeEnd: ValueChanged<double>?`; передаётся в `Slider.onChangeEnd`.
+- Custom Range секция вынесена в `_CustomRangeSection` (`StatefulWidget`) с локальными полями `_localMin` / `_localMax`.
+- `onChanged` обновляет только локальный стейт (`setState`) → UI отзывчив, SharedPreferences не пишутся.
+- `onChangeEnd` вызывает `widget.settings.setCustomRange(...)` → запись в SharedPreferences происходит ровно один раз, когда пользователь отпускает ползунок.
+- `didUpdateWidget` синхронизирует `_localMin`/`_localMax` при программном изменении `AppSettings` (например, `resetAll`).
+
+**`apps/mobile/test/screens/settings_screen_custom_test.dart`:**
+
+- +1 тест: `Dragging slider shows local value immediately without persisting` — проверяет отображение `160 BPM` / `210 BPM` и отсутствие мутации `AppSettings.customMin/customMax` до `onChangeEnd`.
+- +1 тест: `drag does not persist to AppSettings mid-drag but does on gesture up` — полноценный `TestGesture`-тест: `startGesture` на позиции thumb (рассчитанной из `sliderRect`), `moveBy(100, 0)` → `AppSettings.customMin == 160` (не мутирован), `gesture.up()` → `AppSettings.customMin > 160` (persisted).
+
+Критерии выхода — выполнены:
+
+- `flutter test` → 245 passed, 1 pre-existing (dsp_engine_test — нет .dylib) ✓
+- `flutter analyze` → 0 errors ✓
+- Нет изменений в DSP / FFI / Rust / AppSettings публичном API ✓
+- Anti-fake инварианты не нарушены ✓
