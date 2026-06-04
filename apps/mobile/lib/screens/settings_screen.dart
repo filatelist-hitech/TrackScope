@@ -104,30 +104,7 @@ class SettingsScreen extends StatelessWidget {
               if (s.selectedGenre == GenrePreset.custom) ...[
                 const _SectionHeader('CUSTOM RANGE'),
                 if (flags.isPro)
-                  _SettingsGroup(
-                    children: [
-                      _SliderRow(
-                        label: 'Min BPM',
-                        displayText: '${s.customMin.round()} BPM',
-                        value: s.customMin,
-                        min: 80,
-                        max: s.customMax - 10,
-                        onChanged: (v) =>
-                            s.setCustomRange(v.roundToDouble(), s.customMax),
-                        showDivider: true,
-                      ),
-                      _SliderRow(
-                        label: 'Max BPM',
-                        displayText: '${s.customMax.round()} BPM',
-                        value: s.customMax,
-                        min: s.customMin + 10,
-                        max: 300,
-                        onChanged: (v) =>
-                            s.setCustomRange(s.customMin, v.roundToDouble()),
-                        showDivider: false,
-                      ),
-                    ],
-                  )
+                  _CustomRangeSection(settings: s)
                 else
                   _SettingsGroup(
                     children: [
@@ -372,6 +349,7 @@ class _SliderRow extends StatelessWidget {
     required this.max,
     required this.displayText,
     required this.onChanged,
+    this.onChangeEnd,
     this.showDivider = false,
   });
 
@@ -381,6 +359,7 @@ class _SliderRow extends StatelessWidget {
   final double max;
   final String displayText;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChangeEnd;
   final bool showDivider;
 
   @override
@@ -419,11 +398,75 @@ class _SliderRow extends StatelessWidget {
               max: max,
               divisions: ((max - min) * 2).toInt(),
               onChanged: onChanged,
+              onChangeEnd: onChangeEnd,
             ),
           ),
         ),
         if (showDivider)
           const Divider(height: 1, thickness: 1, color: Color(0xFF080C09)),
+      ],
+    );
+  }
+}
+
+// ── Custom range section ───────────────────────────────────────────────────────
+
+class _CustomRangeSection extends StatefulWidget {
+  const _CustomRangeSection({required this.settings});
+  final AppSettings settings;
+
+  @override
+  State<_CustomRangeSection> createState() => _CustomRangeSectionState();
+}
+
+class _CustomRangeSectionState extends State<_CustomRangeSection> {
+  late double _localMin;
+  late double _localMax;
+
+  @override
+  void initState() {
+    super.initState();
+    _localMin = widget.settings.customMin;
+    _localMax = widget.settings.customMax;
+  }
+
+  @override
+  void didUpdateWidget(_CustomRangeSection old) {
+    super.didUpdateWidget(old);
+    if (old.settings.customMin != widget.settings.customMin) {
+      _localMin = widget.settings.customMin;
+    }
+    if (old.settings.customMax != widget.settings.customMax) {
+      _localMax = widget.settings.customMax;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsGroup(
+      children: [
+        _SliderRow(
+          label: 'Min BPM',
+          displayText: '${_localMin.round()} BPM',
+          value: _localMin.clamp(80, _localMax - 10),
+          min: 80,
+          max: _localMax - 10,
+          onChanged: (v) => setState(() => _localMin = v.roundToDouble()),
+          onChangeEnd: (v) => widget.settings
+              .setCustomRange(v.roundToDouble(), widget.settings.customMax),
+          showDivider: true,
+        ),
+        _SliderRow(
+          label: 'Max BPM',
+          displayText: '${_localMax.round()} BPM',
+          value: _localMax.clamp(_localMin + 10, 300),
+          min: _localMin + 10,
+          max: 300,
+          onChanged: (v) => setState(() => _localMax = v.roundToDouble()),
+          onChangeEnd: (v) => widget.settings
+              .setCustomRange(widget.settings.customMin, v.roundToDouble()),
+          showDivider: false,
+        ),
       ],
     );
   }
