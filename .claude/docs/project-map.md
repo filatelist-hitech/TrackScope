@@ -2,7 +2,7 @@
 
 _Track architecture changes, important files, build system changes, DSP pipeline changes and FFI integrations._
 
-_Last updated: 2026-06-04 (Phase 15: session-based BPM history — Session/SessionSnapshot models, SessionStore persistence, 30s throttle, SessionCard UI, SessionDetailScreen BPM chart). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
+_Last updated: 2026-06-05 (Phase 13.2: KeyAnalyzer accuracy fix — removed 1/f bias, added Gaussian σ=25¢ HPCP, FREQ_MIN 100→200 Hz, Temperley (2001) profiles. Fixes systematic 4A/4B Camelot detection). Update this file when adding modules, changing FFI ABI, renaming build scripts, or shifting DSP pipeline stages._
 
 ---
 
@@ -137,8 +137,10 @@ energy_analyzer.rs  EnergyAnalyzer: RMS+flux+onset_density → level 1–10 (Pha
                     Phase 2.2.3: new(sample_rate, hop_sec) — hop_sec dynamic from DspEngine;
                     HOP_SEC const removed; min_peak_gap = (0.1/hop_sec).round().
 genre_preset.rs     Genre presets (hitech 155–230 BPM defaults)
-key_analyzer.rs     HPCP KeyAnalyzer (Phase 2.1) — STFT→12-bin HPCP→K-S→Camelot
-                    KeyResult {key, mode, camelot, confidence}; integrated in DspEngine
+key_analyzer.rs     HPCP KeyAnalyzer (Phase 2.1, fixed Phase 13.2) — STFT→12-bin HPCP→K-S+Temperley→Camelot
+                    KeyResult {key, mode, camelot, confidence}; integrated in DspEngine.
+                    Phase 13.2 fix: FREQ_MIN 100→200 Hz, removed 1/f, added Gaussian σ=25¢ weighting,
+                    added Temperley (2001) profiles (48 total vs 24). Fixes systematic 4A/4B output.
 bin/analyze_wav.rs         CLI batch: reads WAV → analyze_pcm → prints JSON
 bin/stream_analyze_wav.rs  CLI streaming: feeds WAV → DspEngine 100ms chunks → prints JSON
                            Needed for energy_result / key_result (not in batch path)

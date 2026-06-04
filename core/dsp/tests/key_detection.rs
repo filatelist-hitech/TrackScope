@@ -259,6 +259,208 @@ fn reset_clears_key_state() {
     );
 }
 
+// ── Step 1: Диагностика — структурная равномерность HPCP ─────────────────
+
+/// Для белого шума HPCP должен быть приблизительно равномерным.
+/// Тест проверяет, что после замены 1/f → Gaussian (без count-norm)
+/// максимальное отклонение от идеальных 8.33% (1/12) не превышает ±4%.
+///
+/// Исторические значения:
+///   Старый (1/f, FREQ_MIN=100): Ab=+1.70%, Db=+2.17%, max dev = 2.2%
+///   Новый  (no-1/f, Gaussian, FREQ_MIN=200): max dev ≈ 2.7% (D/Db чуть выше)
+///
+/// Порог 4% выбран с запасом относительно измеренного 2.7%. Для реальных
+/// сигналов тональное содержимое доминирует над структурным bias (который
+/// теперь у D/Db, а не у Ab — не вызывает систематического 4A/4B).
+#[test]
+fn hpcp_is_approximately_flat_for_uniform_spectrum() {
+    // 30 секунд белого шума → достаточно для заполнения 8-секундного буфера
+    // несколькими окнами и стабилизации среднего HPCP.
+    let samples = white_noise_seeded(9999, 0.3, 30.0, 48000);
+    let mut analyzer = KeyAnalyzer::new(48000.0);
+    let chunk = 4800usize;
+    for c in samples.chunks(chunk) {
+        analyzer.push_samples(c);
+    }
+
+    let hpcp = match analyzer.averaged_hpcp_for_test() {
+        Some(h) => h,
+        None => panic!("HPCP буфер должен быть непустым после 30 с входа"),
+    };
+
+    let total: f32 = hpcp.iter().sum();
+    assert!(total > 1e-9, "HPCP не должен быть нулевым для белого шума");
+
+    let normalized: Vec<f32> = hpcp.iter().map(|v| v / total).collect();
+    let ideal = 1.0f32 / 12.0;
+    let notes = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+
+    let max_dev = normalized.iter().map(|v| (v - ideal).abs()).fold(0.0f32, f32::max);
+
+    let distribution_str = notes
+        .iter()
+        .zip(normalized.iter())
+        .map(|(n, v)| format!("  {:2}: {:5.1}%  (bias {:+.2}%)", n, v * 100.0, (v - ideal) * 100.0))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(
+        max_dev < 0.04, // ±4% — порог с запасом относительно измеренного ~2.7%
+        "Структурный bias HPCP слишком высокий: max deviation = {:.2}% от идеальных 8.33%.\n\
+         (Ожидание: < 4.0% — соответствует Gaussian без 1/f нормализации.)\n\
+         Распределение по pitch class:\n{}",
+        max_dev * 100.0,
+        distribution_str
+    );
+}
+
+// ── Step 3: Интеграционные тесты — ≥5 различных тональностей ─────────────
+
+/// D major: D4(293.7), F#4(370.0), A4(440.0) → Camelot 10B.
+/// Тест через KeyAnalyzer напрямую (без DspEngine-гейта lock_state):
+/// аккорды из чистых синусов не дают ритмических онсетов → NOISE_ONLY →
+/// key_result подавляется в DspEngine (это корректное anti-fake поведение).
+#[test]
+fn d_major_chord_detects_d_major_10b() {
+    let samples = chord_sine(&[293.7, 370.0, 440.0], 12.0, 48000);
+    let kr = analyze_key_direct(&samples, 48000);
+    assert!(
+        kr.key.is_some(),
+        "D major аккорд должен давать key_result (confidence={:.3})",
+        kr.confidence
+    );
+    assert_eq!(
+        kr.key,
+        Some(MusicalKey::D),
+        "D major → ключ D, получено {:?} (confidence={:.3})",
+        kr.key,
+        kr.confidence
+    );
+    assert_eq!(
+        kr.mode,
+        Some(KeyMode::Major),
+        "D major аккорд → режим Major, получено {:?}",
+        kr.mode
+    );
+    let camelot = kr.camelot.expect("camelot должен присутствовать");
+    assert_eq!(camelot.label(), "10B", "D major → Camelot 10B, получено {}", camelot.label());
+}
+
+/// G minor: G4(392.0), Bb4(466.2), D5(587.3) → Camelot 6A.
+/// Все частоты > FREQ_MIN (200 Hz) → входят в анализ.
+#[test]
+fn g_minor_chord_detects_g_minor_6a() {
+    let samples = chord_sine(&[392.0, 466.2, 587.3], 12.0, 48000);
+    let kr = analyze_key_direct(&samples, 48000);
+    assert!(
+        kr.key.is_some(),
+        "G minor аккорд должен давать key_result (confidence={:.3})",
+        kr.confidence
+    );
+    assert_eq!(
+        kr.key,
+        Some(MusicalKey::G),
+        "G minor → ключ G, получено {:?} (confidence={:.3})",
+        kr.key,
+        kr.confidence
+    );
+    assert_eq!(
+        kr.mode,
+        Some(KeyMode::Minor),
+        "G minor аккорд → режим Minor, получено {:?}",
+        kr.mode
+    );
+    let camelot = kr.camelot.expect("camelot должен присутствовать");
+    assert_eq!(camelot.label(), "6A", "G minor → Camelot 6A, получено {}", camelot.label());
+}
+
+/// E minor: E4(329.6), G4(392.0), B4(493.9) → Camelot 9A.
+/// Общий ключ для hitech/psytrance треков.
+#[test]
+fn e_minor_chord_detects_e_minor_9a() {
+    let samples = chord_sine(&[329.6, 392.0, 493.9], 12.0, 48000);
+    let kr = analyze_key_direct(&samples, 48000);
+    assert!(
+        kr.key.is_some(),
+        "E minor аккорд должен давать key_result (confidence={:.3})",
+        kr.confidence
+    );
+    assert_eq!(
+        kr.key,
+        Some(MusicalKey::E),
+        "E minor → ключ E, получено {:?} (confidence={:.3})",
+        kr.key,
+        kr.confidence
+    );
+    assert_eq!(
+        kr.mode,
+        Some(KeyMode::Minor),
+        "E minor аккорд → режим Minor, получено {:?}",
+        kr.mode
+    );
+    let camelot = kr.camelot.expect("camelot должен присутствовать");
+    assert_eq!(camelot.label(), "9A", "E minor → Camelot 9A, получено {}", camelot.label());
+}
+
+/// Bb major: Bb4(466.2), D5(587.3), F5(698.5) → Camelot 6B.
+/// Ещё один популярный ключ в электронной музыке.
+#[test]
+fn bb_major_chord_detects_bb_major_6b() {
+    let samples = chord_sine(&[466.2, 587.3, 698.5], 12.0, 48000);
+    let kr = analyze_key_direct(&samples, 48000);
+    assert!(
+        kr.key.is_some(),
+        "Bb major аккорд должен давать key_result (confidence={:.3})",
+        kr.confidence
+    );
+    assert_eq!(
+        kr.key,
+        Some(MusicalKey::Bb),
+        "Bb major → ключ Bb, получено {:?} (confidence={:.3})",
+        kr.key,
+        kr.confidence
+    );
+    assert_eq!(
+        kr.mode,
+        Some(KeyMode::Major),
+        "Bb major аккорд → режим Major, получено {:?}",
+        kr.mode
+    );
+    let camelot = kr.camelot.expect("camelot должен присутствовать");
+    assert_eq!(camelot.label(), "6B", "Bb major → Camelot 6B, получено {}", camelot.label());
+}
+
+/// Белый шум не должен систематически выдавать 4A (F minor) или 4B (Ab major).
+/// Тест запускает KeyAnalyzer на 5 разных seed'ах и проверяет, что 4A/4B
+/// не появляются более чем 2 раза из 5 (для равномерного шума ожидается
+/// случайный разброс, а не систематическая концентрация).
+#[test]
+fn no_4a_4b_bias_on_broad_spectrum() {
+    let mut results: Vec<String> = Vec::new();
+    for seed in [42u64, 12345, 99999, 777, 314159] {
+        let samples = white_noise_seeded(seed, 0.3, 15.0, 48000);
+        let mut analyzer = KeyAnalyzer::new(48000.0);
+        for c in samples.chunks(4800) {
+            analyzer.push_samples(c);
+        }
+        let kr = analyzer.current_key();
+        if let Some(camelot) = kr.camelot {
+            results.push(camelot.label());
+        } else {
+            results.push("None".to_string());
+        }
+    }
+
+    let bias_count = results.iter().filter(|k| k.as_str() == "4A" || k.as_str() == "4B").count();
+    assert!(
+        bias_count <= 2,
+        "Слишком много 4A/4B при белом шуме: {}/5 seeds вернули 4A или 4B (результаты={:?}).\n\
+         Это указывает на остаточный Ab/F bias в HPCP — проверьте алгоритм.",
+        bias_count,
+        results
+    );
+}
+
 // ── Интеграция с DspEngine: clipped_mic ───────────────────────────────────
 
 fn severely_clipped_pulse(bpm: f32, duration_sec: f32, sample_rate: u32) -> Vec<f32> {
