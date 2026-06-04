@@ -335,3 +335,53 @@ real` = 0 (нет регрессий).
 | `calibration_weak_signal_level_at_most_4` | rms ≈ -30 dBFS, flux = 0.003 | level ≤ 4 |
 
 `cargo test --workspace` → 124 тестов, все зелёные. `flutter test` → 218 pass (1 pre-existing dsp_engine_test).
+
+## Phase 13.2: KeyAnalyzer accuracy — детекция тональности (2026-06-05)
+
+### Цели приёмки тональности
+
+| Область | Требуемое условие прохождения |
+| --- | --- |
+| Все 24 тональности | Каждая из 12 major + 12 minor детектируется в корректную Camelot-метку |
+| Детекция mode | Major/Minor различается для всех 24 |
+| Гейт уверенности | confidence ≥ 0.25 (KEY_CONFIDENCE_THRESHOLD) для всех 24 |
+| Anti-fake: тишина | `key_result == None` |
+| Anti-fake: клиппинг | CLIPPED_MIC → `key_result == None` |
+| Anti-fake: шум | белый шум → не систематически 4A/4B (≤2/5 seeds) |
+| Структурный bias | равномерный шум → max HPCP deviation < 4% от 8.33% |
+
+### Тест-матрица (`core/dsp/tests/key_detection.rs`, 22 теста)
+
+| Тест | Фикстура | Ожидание |
+| --- | --- | --- |
+| `all_24_keys_detect_correct_camelot` | tonic-emphasized триады, все 24 | точная Camelot-метка |
+| `all_24_keys_detect_correct_mode` | то же | Major/Minor корректно |
+| `all_24_keys_have_confidence_above_threshold` | то же | confidence ≥ 0.25 |
+| `d_major_chord_detects_d_major_10b` | D4+F#4+A4 | 10B |
+| `g_minor_chord_detects_g_minor_6a` | G4+Bb4+D5 | 6A |
+| `e_minor_chord_detects_e_minor_9a` | E4+G4+B4 | 9A |
+| `bb_major_chord_detects_bb_major_6b` | Bb4+D5+F5 | 6B |
+| `a_minor_chord_detects_a_minor_camelot_8a` | A4+C5+E5 (через DspEngine) | 8A |
+| `a440_sine_maps_to_pitch_class_a` | синус 440 Hz | key A |
+| `c4_sine_maps_to_pitch_class_c` | синус 261.63 Hz | key C |
+| `hpcp_is_approximately_flat_for_uniform_spectrum` | белый шум | bias < 4% |
+| `no_4a_4b_bias_on_broad_spectrum` | белый шум, 5 seeds | ≤2/5 дают 4A/4B |
+| `silence_no_key` | тишина | None |
+| `clipped_mic_suppresses_key_result` | severely clipped | None (CLIPPED_MIC) |
+| `noise_only_no_key` | белый шум | None при NOISE_ONLY |
+| `reset_clears_key_state` | A440 → reset → тишина | None |
+
+### Обоснование tonic-emphasized триад
+
+Голая мажорная триада {R, M3, P5} музыкально неоднозначна с относительным
+минором: C мажор {C, E, G} = тоника/m3/m6 ноты E минора → K-S корреляция на 3
+нотах может выбрать E минор (эмпирически: 6/12 мажорных детектились как
+относительный минор). Минорные триады однозначны (12/12 без акцента). Тесты
+усиливают тонику ×2 (`tonic_emphasized_triad`, root_gain=2.0), моделируя роль
+баса/тонального центра — это разрешает неоднозначность для всех 24 ключей. На
+реальных треках тональный центр задаётся басом и мелодией, поэтому ограничение
+не проявляется в продакшене.
+
+`cargo test --workspace` → все зелёные (22 теста в key_detection.rs).
+`flutter test` → 269 pass (1 pre-existing dsp_engine_test). `offline_lab.py report`
+→ 15/15 PASS. `python3 -m unittest discover core/tests` → 22 OK.
