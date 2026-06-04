@@ -955,3 +955,47 @@ BPM 72→52 (−17 dp) + spacings ×5 (−10 dp) + break padding (−6 dp) + б�
 - `flutter analyze` → 0 errors ✓
 - Нет изменений в DSP / FFI / Rust / AppSettings публичном API ✓
 - Anti-fake инварианты не нарушены ✓
+
+---
+
+## Phase 15: Session-based BPM History — **ЗАВЕРШЕНО** (2026-06-04)
+
+Цель: переработать историю BPM с плоского списка сэмплов на сессионную модель — каждое открытие приложения = отдельная сессия с персистентностью и throttle 30 сек.
+
+### Проблема
+
+До Phase 15 история хранилась как in-memory плоский список `BpmSample`, даунсэмплинг ~1 Гц. Это давало тысячи записей за короткое время, замедляло UI и давало нулевую ценность для DJ-контекста (нужны сессии, диапазон BPM, пик уверенности — не per-second лог).
+
+### Артефакты
+
+- **`apps/mobile/lib/history/session.dart`** — `SessionSnapshot {timestamp, bpm, confidence, lockState}`, `Session {id, startTime, endTime?, snapshots}`, computed props `minBpm/maxBpm/peakConfidence/duration`, `toJson`/`fromJson`.
+- **`apps/mobile/lib/history/session_store.dart`** — SharedPreferences-персистентность под ключом `bpm_sessions_v1`; cap 100 сессий.
+- **`apps/mobile/lib/history/session_history_controller.dart`** — REFACTOR: session lifecycle (init → dispose), throttle 30 сек, `flatSamples` для экспортного шима, `_BpmHistoryAdapter` для обратной совместимости `app_navigator`.
+- **`apps/mobile/lib/history/history_screen.dart`** — REFACTOR: `SessionCard` с duration / BPM-range / peak confidence / snapshot count. Tap → `SessionDetailScreen`. Summary header: `СЕССИЙ` вместо `СЭМПЛОВ`.
+- **`apps/mobile/lib/history/session_detail_screen.dart`** — NEW: BPM polyline chart (`_BpmLinePainter`) + список снимков со временем и confidence bar. AppBar с датой.
+
+### Тесты (+29 новых Flutter)
+
+| Файл | Тестов |
+|---|---|
+| `test/models/session_test.dart` | 9 (toJson/fromJson, computed props) |
+| `test/services/session_history_controller_test.dart` | 8 (throttle 30s, null BPM skip, lifecycle) |
+| `test/history/history_screen_test.dart` | 7 (SessionCard UI — обновлён) |
+| `test/history/session_detail_screen_test.dart` | 5 (BPM chart, empty state, back nav) |
+
+### Критерии выхода — выполнены
+
+- `flutter test` → **266/266 pass** (1 pre-existing dsp_engine_test) ✓
+- `flutter analyze` → 0 errors ✓
+- `cargo test --workspace` → все зелёные (DSP не трогался) ✓
+- Новая сессия создаётся на init `_CapturePipeline` ✓
+- Throttle 30 сек: второй результат в том же окне не логируется ✓
+- `SessionDetailScreen` показывает BPM-линию и список снимков ✓
+- Экспорт (CSV/JSON) через `flatSamples` шим — обратная совместимость сохранена ✓
+- Нет хардкодного BPM, anti-fake инварианты не нарушены ✓
+
+### Известные ограничения
+
+- `endTime` не пишется при crash (только при `dispose()`). При следующем открытии `duration` вычисляется относительно `DateTime.now()`.
+- `SessionStore.save()` в `dispose()` — fire-and-forget Future; при force-kill процесса крайний snapshot может не персистироваться.
+- Миграция старых данных не требовалась — история была in-memory, рестарт = пустой список.
