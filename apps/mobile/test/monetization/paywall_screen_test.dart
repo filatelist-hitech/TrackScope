@@ -63,4 +63,19 @@ void main() {
     expect(find.text('3 жанра'), findsOneWidget);
     expect(find.text('7 + Custom'), findsOneWidget);
   });
+
+  testWidgets('Roadmap card shows current coming-soon items', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: PaywallScreen(feature: 'history'),
+    ));
+    await tester.pump();
+
+    expect(find.text('Lock-screen Widget · iOS 16+'), findsOneWidget);
+    expect(find.text('Cloud Setlist Backup'), findsOneWidget);
+    expect(find.text('Advanced Genre Presets'), findsOneWidget);
+
+    // Убеждаемся, что уже реализованные фичи не числятся как coming-soon.
+    expect(find.text('Key + Camelot Wheel'), findsNothing);
+    expect(find.text('Energy Level 1–10'), findsNothing);
+  });
 }

@@ -374,9 +374,9 @@ class _RoadmapCard extends StatelessWidget {
   const _RoadmapCard();
 
   static const _items = [
-    'Key + Camelot Wheel',
-    'Energy Level 1–10',
     'Lock-screen Widget · iOS 16+',
+    'Cloud Setlist Backup',
+    'Advanced Genre Presets',
   ];
 
   @override
