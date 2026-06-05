@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Hitech BPM Radar слушает через микрофон, чтобы определять BPM музыки вокруг вас. Аудио остаётся на устройстве и никогда не записывается и никуда не отправляется.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Помогает улучшать приложение. Данные используются для анонимной аналитики и не передаются третьим сторонам.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

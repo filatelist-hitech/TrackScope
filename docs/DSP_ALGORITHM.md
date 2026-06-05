@@ -591,3 +591,16 @@ Phase 2.2.4: `FLUX_MAX` обновлён по данным 4 реальных hi
 **Тесты:**
 - `calibration_real_hitech_proxy_level_at_least_5` — синтетический прокси с rms ≈ -8 dBFS, flux ≈ 0.020 → level ≥ 5.
 - `calibration_weak_signal_level_at_most_4` — слабый сигнал rms ≈ -30 dBFS, flux ≈ 0.003 → level ≤ 4.
+
+## Интеграция с аналитикой (Phase 16)
+
+`DspResult` пробрасывается в аналитику **без изменений**. Аналитический слой
+(`apps/mobile/lib/analytics/`) читает готовые поля контракта:
+
+- `primaryBpm` — передаётся в `bpm_first_stable` и `session_summary`.
+- `confidence`, `lockState` — для событий смены состояния и качества захвата.
+- `signalQuality` (inputLevelDbfs, snrEstimateDb, noiseLevel, clipping, breakdownLikely) — в `signal_quality_warning`.
+- `debug` (onsetRateHz, onsetStrength, tempoPeakProminence, harmonicAmbiguity, stabilityScore) — в `bpm_first_stable`.
+- `keyResult.camelot`, `energyResult.level` — в `bpm_first_stable` и `session_summary`.
+
+Никакого BPM-вычисления в аналитическом слое нет. Anti-fake правила не нарушены.

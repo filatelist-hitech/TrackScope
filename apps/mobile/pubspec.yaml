@@ -30,6 +30,10 @@ dependencies:
   shared_preferences: ^2.3.0
   # Keep screen on while capturing (Settings toggle).
   wakelock_plus: ^1.2.0
+  # MyTracker analytics SDK (local path, not committed).
+  # Clone: git clone https://github.com/myTrackerSDK/mytracker-flutter.git third_party/mytracker_sdk
+  mytracker_sdk:
+    path: ../../third_party/mytracker_sdk/sdk
 
 dev_dependencies:
   flutter_test:

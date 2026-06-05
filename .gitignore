@@ -88,3 +88,5 @@ apps/mobile/android/*.keystore
 
 # Downloaded rustup installer (not a project file)
 rustup-init.sh
+# MyTracker SDK (local path dependency, not tracked)
+third_party/
