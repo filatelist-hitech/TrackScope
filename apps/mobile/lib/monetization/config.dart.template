@@ -25,3 +25,10 @@ class RevenueCatConfig {
   static const String iosKey = '';
   static const String androidKey = '';
 }
+
+/// MyTracker SDK-ключи.
+/// Отдельный ключ для каждой платформы — генерируется в app.tracker.my.com.
+class MyTrackerConfig {
+  static const String androidKey = '';
+  static const String iosKey = '';
+}

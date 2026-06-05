@@ -9,10 +9,20 @@
 //
 // RevenueCat gateway инжектируется только здесь — единственный файл,
 // импортирующий `revenuecat_gateway.dart` (и, через него, `purchases_flutter`).
+//
+// MyTracker analytics: инициализируется сразу после AppSettings. Ключ
+// передаётся через --dart-define=MYTRACKER_ANDROID_KEY / MYTRACKER_IOS_KEY
+// (не коммитится). При пустом ключе Analytics остаётся в stub-режиме.
 
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import 'analytics/analytics.dart';
+import 'analytics/mytracker_analytics.dart';
 import 'capture/capture_bridge.dart';
+import 'dsp/dsp_result.dart' as dsp;
 import 'capture/microphone_source.dart';
 import 'features/setlist/setlist_service.dart';
 import 'history/session_history_controller.dart';
@@ -49,6 +59,18 @@ void main() async {
     iosKey: iosKey,
     androidKey: androidKey,
   );
+
+  // MyTracker analytics — ключ передаётся через --dart-define.
+  // При пустом ключе или на вебе Analytics остаётся в stub-режиме (no-op).
+  const myTrackerAndroidKey =
+      String.fromEnvironment('MYTRACKER_ANDROID_KEY', defaultValue: '');
+  const myTrackerIosKey =
+      String.fromEnvironment('MYTRACKER_IOS_KEY', defaultValue: '');
+  if (!kIsWeb) {
+    final myTrackerKey =
+        Platform.isIOS ? myTrackerIosKey : myTrackerAndroidKey;
+    await Analytics.configure(MyTrackerAnalytics(), myTrackerKey);
+  }
 
   runApp(const HitechBpmRadarApp());
 }
@@ -137,6 +159,18 @@ class _CapturePipelineState extends State<_CapturePipeline> {
   late final SetlistService _setlist;
   Object? _startupError;
 
+  // --- Analytics state ---
+  final Stopwatch _captureTimer = Stopwatch();
+  // Дебаунс lock_state_change — не чаще 1 раза в 3 секунды.
+  DateTime _lastStateEventTime = DateTime.fromMillisecondsSinceEpoch(0);
+  dsp.LockState _prevLockState = dsp.LockState.searching;
+  bool _firstStableTracked = false;
+  bool _clippingReported = false;
+  bool _breakdownReported = false;
+  bool _reachedStable = false;
+  // Последний STABLE-кадр — используется для session_summary.
+  dsp.DspResult? _stableResult;
+
   @override
   void initState() {
     super.initState();
@@ -151,7 +185,94 @@ class _CapturePipelineState extends State<_CapturePipeline> {
     );
     _setlist = SetlistService();
     _bridge.results.listen(_setlist.onDspResult);
+    _bridge.results.listen(_onDspResult);
     _startCapture();
+  }
+
+  /// Слушатель DSP-результатов для аналитики.
+  /// Не вычисляет BPM — только пробрасывает данные из готового [DspResult].
+  void _onDspResult(dsp.DspResult result) {
+    final elapsed = _captureTimer.elapsed.inSeconds;
+    final analytics = Analytics.instance;
+    final flags = widget.flags;
+
+    // lock_state_change (throttled ≥3 сек)
+    if (result.lockState != _prevLockState) {
+      final now = DateTime.now();
+      if (now.difference(_lastStateEventTime).inSeconds >= 3) {
+        analytics.trackEvent('lock_state_change', {
+          'from': _prevLockState.wireName,
+          'to': result.lockState.wireName,
+          'confidence': result.confidence.toStringAsFixed(2),
+          'elapsed_sec': '$elapsed',
+          'genre': flags.selectedGenre.name,
+        });
+        _lastStateEventTime = now;
+      }
+      _prevLockState = result.lockState;
+    }
+
+    // bpm_first_stable — единожды за сессию
+    if (result.lockState == dsp.LockState.stable) {
+      _reachedStable = true;
+      _stableResult = result;
+      if (!_firstStableTracked && result.primaryBpm != null) {
+        _firstStableTracked = true;
+        analytics.trackEvent('bpm_first_stable', {
+          'bpm': result.primaryBpm!.toStringAsFixed(1),
+          'confidence': result.confidence.toStringAsFixed(2),
+          'first_lock_sec':
+              result.timing.firstLockTimeSec?.toStringAsFixed(1) ?? '',
+          'analysis_sec': result.timing.analysisTimeSec.toStringAsFixed(1),
+          'input_dbfs':
+              result.signalQuality.inputLevelDbfs?.toStringAsFixed(1) ?? '',
+          'snr_db':
+              result.signalQuality.snrEstimateDb?.toStringAsFixed(1) ?? '',
+          'noise_level': result.signalQuality.noiseLevel,
+          'onset_rate_hz': result.debug.onsetRateHz.toStringAsFixed(2),
+          'onset_strength': result.debug.onsetStrength.toStringAsFixed(3),
+          'peak_prominence':
+              result.debug.tempoPeakProminence.toStringAsFixed(2),
+          'harmonic_ambiguity':
+              result.debug.harmonicAmbiguity.toStringAsFixed(2),
+          'stability_score': result.debug.stabilityScore.toStringAsFixed(2),
+          'key_camelot': result.keyResult?.camelot ?? '',
+          'key_confidence':
+              result.keyResult?.confidence.toStringAsFixed(2) ?? '',
+          'energy_level': result.energyResult?.level.toString() ?? '',
+          'top_candidate_relation': result.candidates.isNotEmpty
+              ? result.candidates.first.relation
+              : '',
+          'top_candidate_score': result.candidates.isNotEmpty
+              ? result.candidates.first.score.toStringAsFixed(2)
+              : '',
+          'genre': flags.selectedGenre.name,
+          'is_pro': flags.isPro ? '1' : '0',
+          'platform': kIsWeb ? 'web' : (Platform.isIOS ? 'ios' : 'android'),
+        });
+      }
+    }
+
+    // signal_quality_warning — по одному разу за тип за сессию
+    if (result.signalQuality.clipping && !_clippingReported) {
+      _clippingReported = true;
+      analytics.trackEvent('signal_quality_warning', {
+        'type': 'clipping',
+        'clipped_frame_ratio':
+            result.signalQuality.clippedFrameRatio.toStringAsFixed(2),
+        'input_dbfs':
+            result.signalQuality.inputLevelDbfs?.toStringAsFixed(1) ?? '',
+        'elapsed_sec': '$elapsed',
+      });
+    }
+    if (result.signalQuality.breakdownLikely && !_breakdownReported) {
+      _breakdownReported = true;
+      analytics.trackEvent('signal_quality_warning', {
+        'type': 'breakdown',
+        'elapsed_sec': '$elapsed',
+        'confidence': result.confidence.toStringAsFixed(2),
+      });
+    }
   }
 
   Future<void> _startCapture() async {
@@ -162,14 +283,61 @@ class _CapturePipelineState extends State<_CapturePipeline> {
         sampleRate: _mic.sampleRate,
         encoding: MicrophoneSource.encoding,
       );
+      _captureTimer.start();
+      final flags = widget.flags;
+      Analytics.instance.trackEvent('capture_start', {
+        'genre': flags.selectedGenre.name,
+        'bpm_min': '${flags.minBpm.round()}',
+        'bpm_max': '${flags.maxBpm.round()}',
+        'is_pro': flags.isPro ? '1' : '0',
+        'platform': kIsWeb ? 'web' : (Platform.isIOS ? 'ios' : 'android'),
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _startupError = e);
     }
   }
 
+  void _trackCaptureStop() {
+    final elapsed = _captureTimer.elapsed.inSeconds;
+    final analytics = Analytics.instance;
+    final flags = widget.flags;
+
+    analytics.trackEvent('capture_stop', {
+      'duration_sec': '$elapsed',
+      'reached_stable': _reachedStable ? '1' : '0',
+      'final_lock_state': _prevLockState.wireName,
+      'genre': flags.selectedGenre.name,
+      'is_pro': flags.isPro ? '1' : '0',
+    });
+
+    // session_summary при наличии STABLE-кадра
+    final r = _stableResult;
+    if (_reachedStable && r != null && r.primaryBpm != null) {
+      analytics.trackEvent('session_summary', {
+        'bpm': r.primaryBpm!.toStringAsFixed(1),
+        'confidence': r.confidence.toStringAsFixed(2),
+        'key_camelot': r.keyResult?.camelot ?? '',
+        'energy_level': r.energyResult?.level.toString() ?? '',
+        'duration_sec': '$elapsed',
+        'noise_level': r.signalQuality.noiseLevel,
+        'snr_db': r.signalQuality.snrEstimateDb?.toStringAsFixed(1) ?? '',
+        'onset_rate_hz': r.debug.onsetRateHz.toStringAsFixed(2),
+        'harmonic_ambiguity': r.debug.harmonicAmbiguity.toStringAsFixed(2),
+        'warnings': r.debug.warnings.join(','),
+        'genre': flags.selectedGenre.name,
+        'is_pro': flags.isPro ? '1' : '0',
+        'platform': kIsWeb ? 'web' : (Platform.isIOS ? 'ios' : 'android'),
+      });
+    }
+
+    analytics.flush();
+  }
+
   @override
   void dispose() {
+    _trackCaptureStop();
+    _captureTimer.stop();
     _bridge.dispose();
     _mic.dispose();
     _history.dispose();

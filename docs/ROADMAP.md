@@ -1071,3 +1071,65 @@ BPM 72→52 (−17 dp) + spacings ×5 (−10 dp) + break padding (−6 dp) + б�
 - `endTime` не пишется при crash (только при `dispose()`). При следующем открытии `duration` вычисляется относительно `DateTime.now()`.
 - `SessionStore.save()` в `dispose()` — fire-and-forget Future; при force-kill процесса крайний snapshot может не персистироваться.
 - Миграция старых данных не требовалась — история была in-memory, рестарт = пустой список.
+
+---
+
+## Phase 16: MyTracker Analytics — **ЗАВЕРШЕНО** (2026-06-05)
+
+Цель: подключить MyTracker SDK для сбора аналитики запусков, сессий BPM-захвата
+и качества сигнала без изменения DSP-пути и без передачи фейковых данных.
+
+### Артефакты
+
+- **`apps/mobile/lib/analytics/analytics_service.dart`** — абстракция `AnalyticsService`
+  + `StubAnalytics` (no-op для веба и тестов).
+- **`apps/mobile/lib/analytics/analytics.dart`** — синглтон `Analytics.instance`;
+  `configure(service, key)` — инициализация; `overrideForTest()` — подмена в тестах.
+- **`apps/mobile/lib/analytics/mytracker_analytics.dart`** — единственный файл,
+  импортирующий `mytracker_sdk`. Конфигурирует `forcingPeriod=86400` (немедленная
+  отправка первые сутки), отключает геолокацию, включает debug-режим при `kDebugMode`.
+- **`third_party/mytracker_sdk/`** — локальная копия SDK (gitignored); клонировать:
+  `git clone https://github.com/myTrackerSDK/mytracker-flutter.git third_party/mytracker_sdk --depth=1`.
+- **`apps/mobile/pubspec.yaml`** — `mytracker_sdk: path: ../../third_party/mytracker_sdk/sdk`.
+- **`apps/mobile/android/app/src/main/AndroidManifest.xml`** — добавлены разрешения
+  `INTERNET`, `ACCESS_NETWORK_STATE`, `AD_ID`.
+- **`apps/mobile/ios/Runner/Info.plist`** — добавлен `NSUserTrackingUsageDescription`.
+- **`apps/mobile/lib/main.dart`** — инициализация Analytics после AppSettings;
+  ключи через `--dart-define=MYTRACKER_ANDROID_KEY` / `MYTRACKER_IOS_KEY` (не в коде).
+- **`_CapturePipelineState`** (`main.dart`) — 7 событий аналитики:
+
+| Событие | Триггер |
+|---|---|
+| `capture_start` | старт захвата; genre, bpm_min/max, is_pro, platform |
+| `capture_stop` | стоп/dispose; duration_sec, reached_stable, final_lock_state |
+| `bpm_first_stable` | первый STABLE-кадр; bpm, confidence, DSP-метрики, key, energy, genre |
+| `lock_state_change` | смена LockState (дебаунс ≥3 сек) |
+| `signal_quality_warning` | клиппинг или брейкдаун (по 1 разу за сессию) |
+| `session_summary` | стоп при наличии STABLE; полный DSP-снимок |
+| flush | принудительно при capture_stop и про-покупке |
+
+- **`apps/mobile/lib/monetization/config.dart.template`** — добавлены `MyTrackerConfig.androidKey/iosKey`.
+- **`test/analytics/analytics_service_test.dart`** — 8 тестов StubAnalytics.
+- **`test/analytics/analytics_test.dart`** — 6 тестов Analytics-синглтона.
+
+### Критерии выхода — выполнены
+
+- `flutter test` → **283/283 pass** (+14 новых, 1 pre-existing dsp_engine_test) ✓
+- `flutter analyze` → 0 errors ✓
+- `cargo test --workspace` → все зелёные (DSP не трогался) ✓
+- `offline_lab.py report` → exit 0, 15/15 PASS ✓
+- SDK-ключ не в tracked-коде (только через `--dart-define` или gitignored `config.dart`) ✓
+- `NSUserTrackingUsageDescription` в Info.plist ✓
+- Три Android-разрешения добавлены ✓
+- Anti-fake инварианты не нарушены: BPM не вычисляется в UI; аналитика только
+  пробрасывает уже готовый `DspResult.primaryBpm` из DSP ✓
+- `bpm_first_stable` содержит реальный DSP-вывод (19 полей), не демо-значения ✓
+
+### Известные ограничения
+
+- iOS SDK-ключ пока пуст — требует регистрации iOS-приложения в MyTracker отдельно
+  (другой `SDK_KEY`). При пустом ключе Analytics остаётся в stub-режиме.
+- SDK локальный путь (`third_party/` gitignored) — каждый разработчик клонирует вручную.
+- MyTracker SDK v3.2.1 не поддерживает Swift Package Manager — pre-existing warning.
+- `flush()` в `dispose()` — fire-and-forget; при force-kill последние события могут
+  не успеть отправиться (стандартное поведение для мобильных SDK).
